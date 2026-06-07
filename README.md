@@ -1,4 +1,5 @@
 # DevOS
+## ATTENCION DEVOS .ISO PRODUCTION HAS BEEN STOPPED TEMPORARLY
 DevOS is a modern operating system built for developers who live on the cutting edge and want a fast, minimal, and highly customizable environment. From the kernel up, DevOS is designed to make experimentation easy, integrate powerful tools, and get out of your way so you can focus on building what’s next.
 
 Whether you’re trying out new languages, pushing hardware to its limits, or rapidly prototyping ambitious ideas, DevOS gives you a lean, developer-first foundation that stays lightweight while giving you full control.
