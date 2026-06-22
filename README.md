@@ -1,5 +1,4 @@
 # CodeOS
-## ATTENCION CodeOS .ISO PRODUCTION HAS BEEN STOPPED TEMPORARLY
 CodeOS is the Developer-Ready non-Linux based OS
 It was made for Programers by Programers
 # Features
