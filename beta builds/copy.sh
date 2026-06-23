@@ -1,3 +1,3 @@
 #!/bin/bash
-echo "Cloning the Kernel"
-git clone https://github.com/tech-for-everyone/CodeOS-Kernel
+echo "Cloning kernel"
+git clone https://github.com/tech-for-everyone/CodeOS-Beta
