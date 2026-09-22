@@ -5,8 +5,7 @@ layout, and **Zircon** app toolkit. Built for people who want to see how an OS
 works — not a bajillion distros, one approachable system.
 
 **Version:** 1.4.0
-
-** Codename: ** "Andromeda"
+**Codename:**"Andromeda"
 ## Features
 
 - **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
