@@ -1,0 +1,11 @@
+{
+  "name": "linux-runner",
+  "version": "1.0.0",
+  "description": "Linux binary compatibility runner — runs Linux ELF binaries on CodeOS",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/linux-runner",
+  "source": "src/"
+}

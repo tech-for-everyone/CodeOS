@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0071E3"/> <stop offset="100%" stop-color="#369EFF"/> </linearGradient>
+
+    <clipPath id="squircleClip">
+      <path d="M 128 0 C 48 0, 0 48, 0 128 L 0 384 C 0 464, 48 512, 128 512 L 384 512 C 464 512, 512 464, 512 384 L 512 128 C 512 48, 464 0, 384 0 Z" />
+    </clipPath>
+  </defs>
+
+  <rect width="512" height="512" rx="128" fill="url(#iconGradient)"/>
+
+  <g transform="translate(10, 10) scale(0.96)"> <path d="M 130 140 L 350 360" stroke="white" stroke-width="48" stroke-linecap="round"/>
+
+    <path d="M 160 110 L 160 402" stroke="white" stroke-width="48" stroke-linecap="round"/>
+
+    <path d="M 160 110 L 260 110 C 350 110, 420 180, 420 260 C 420 340, 350 402, 260 402 L 160 402" stroke="white" stroke-width="48" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

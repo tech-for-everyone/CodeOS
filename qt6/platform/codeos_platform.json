@@ -1,0 +1,6 @@
+{
+    "Keys": ["codeos"],
+    "Platform": "codeos",
+    "Version": 1,
+    "BugReports": "https://github.com/codeos/codeos/issues"
+}

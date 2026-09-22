@@ -1,0 +1,11 @@
+{
+  "name": "lib-android",
+  "version": "1.0.0",
+  "description": "Android compatibility library — binder IPC and container support for Android apps",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/lib/",
+  "source": "src/"
+}

@@ -1,0 +1,3 @@
+# Icons embedded into the initramfs.
+# Everything in userspace/icons not listed here is left out to save ~600KB.
+codeos_logo.svg

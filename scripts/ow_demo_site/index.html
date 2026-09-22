@@ -1,0 +1,34 @@
+<html>
+<head>
+<title>CodeOS OpenWeb Demo</title>
+</head>
+<body>
+<h1>OpenWeb E2E Demo</h1>
+<p>Welcome to the OpenWeb end-to-end test page.
+This exercises the kernel's plain-HTTP browser stack.</p>
+<h2>Plumbing being tested</h2>
+<ul>
+<li>tables, lists, headings, paragraphs</li>
+<li>links and per-column hit testing</li>
+<li>the redirect follow code path</li>
+</ul>
+<a href="docs.html">Docs and features</a>
+<br>
+<a href="/test">Plain text blob (well, HTML)</a>
+<br>
+<a href="img/pixel.png">Inline raster image</a>
+<br>
+<a href="/broken">Missing resource (expect a friendly error page)</a>
+<h2>Image test</h2>
+<img src="img/pixel.png" alt="a pixel">
+<p>If all goes well the title above ends up in the tab bar, these words wrap
+into multiple columns, and every link lights up under the mouse.</p>
+<a href="/redirect">302 redirect target</a>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse
+cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non
+proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+</body>
+</html>

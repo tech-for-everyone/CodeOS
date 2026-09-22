@@ -1,0 +1,10 @@
+{
+  "name": "graphics-drivers",
+  "version": "1.0.0",
+  "description": "CodeOS framebuffer and Virtio-GPU kernel drivers",
+  "license": "GPL-3.0-or-later",
+  "type": "kernel",
+  "category": "System",
+  "provides": ["graphics", "virtio-gpu"],
+  "source": "src/"
+}

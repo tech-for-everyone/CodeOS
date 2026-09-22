@@ -1,0 +1,11 @@
+{
+  "name": "icons",
+  "version": "1.0.0",
+  "description": "CodeOS system icons (SVG and RGBA formats) for apps and UI elements",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "install_path": "/usr/share/icons/",
+  "source": "src/"
+}

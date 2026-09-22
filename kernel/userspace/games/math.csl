@@ -1,0 +1,59 @@
+# math.csl — ARITHMETIC DRILL
+# csl game: answer 6 quick math problems, get a score.
+print "=============================================="
+print " ARITHMETIC DRILL"
+print " Answer 6 problems. Good luck!"
+print "=============================================="
+
+function ask(op, a, b) {
+    if op == "+" {
+        print "What is " + str(a) + " + " + str(b) + "?"
+        return num(readln()) == a + b
+    }
+    if op == "-" {
+        print "What is " + str(a) + " - " + str(b) + "?"
+        return num(readln()) == a - b
+    }
+    print "What is " + str(a) + " * " + str(b) + "?"
+    return num(readln()) == a * b
+}
+
+let score = 0
+let n = 1
+while n <= 6 {
+    let op = at(split("+ + - - *", " "), rand(5))
+    let a = rand(1, 21)
+    let b = rand(1, 21)
+    if op == "-" and b > a {
+        let t = a
+        a = b
+        b = t
+    }
+    if ask(op, a, b) == 1 {
+        print "Correct!"
+        score = score + 1
+    } else {
+        if op == "+" {
+            print "Wrong — the answer is " + str(a + b) + "."
+        } else {
+            if op == "-" {
+                print "Wrong — the answer is " + str(a - b) + "."
+            } else {
+                print "Wrong — the answer is " + str(a * b) + "."
+            }
+        }
+    }
+    n = n + 1
+}
+
+print ""
+print "Score: " + str(score) + "/6"
+if score == 6 {
+    print "Perfect score. You are a math machine!"
+} else {
+    if score >= 4 {
+        print "Pretty good!"
+    } else {
+        print "Keep practicing!"
+    }
+}

@@ -1,0 +1,30 @@
+# reflex.csl — REACTION TIMER
+# csl game: press ENTER to arm, press ENTER again the moment GO! appears.
+print "=============================================="
+print " REACTION TIMER"
+print " Hit ENTER to arm. When you see GO, hit ENTER"
+print " again as fast as you can."
+print "=============================================="
+
+print "Press ENTER when you are ready."
+readln()
+print "Waiting... press ENTER the moment GO appears."
+let start = ticks()
+print "GO!"
+readln()
+let stop = ticks()
+let ms = stop - start
+print "Reaction time: " + str(ms) + " ms"
+if ms <= 200 {
+    print "Superhuman reflexes!"
+} else {
+    if ms <= 400 {
+        print "Very fast!"
+    } else {
+        if ms <= 700 {
+            print "Pretty good."
+        } else {
+            print "Take it easy, slow down... or sleep more."
+        }
+    }
+}

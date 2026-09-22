@@ -1,0 +1,11 @@
+{
+  "name": "init",
+  "version": "1.0.0",
+  "description": "CodeOS PID 1 init process (launches shell and GUI)",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/init",
+  "source": "src/"
+}

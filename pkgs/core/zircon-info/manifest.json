@@ -1,0 +1,11 @@
+{
+  "name": "zircon-info",
+  "version": "1.0.0",
+  "description": "Zircon system information display",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/zircon-info",
+  "source": "src/"
+}

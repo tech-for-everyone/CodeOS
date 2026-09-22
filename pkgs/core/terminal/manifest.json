@@ -1,0 +1,11 @@
+{
+  "name": "terminal",
+  "version": "1.0.0",
+  "description": "CodeOS terminal emulator - communicates with compositor via wm_protocol",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c", "wm_protocol"],
+  "install_path": "/bin/terminal",
+  "source": "src/"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "ld-codeos",
+  "version": "1.0.0",
+  "description": "CodeOS userspace dynamic linker/loader",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "install_path": "/lib/ld-codeos.so",
+  "source": "src/"
+}

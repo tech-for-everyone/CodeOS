@@ -1,0 +1,11 @@
+{
+  "name": "wm_protocol",
+  "version": "1.0.0",
+  "description": "CodeOS window manager protocol — shared header between compositor and client apps (terminal, etc.)",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "install_path": "/usr/include/wm_protocol.h",
+  "source": "src/"
+}

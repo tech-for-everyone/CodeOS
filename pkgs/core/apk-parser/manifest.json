@@ -1,0 +1,11 @@
+{
+  "name": "apk-parser",
+  "version": "1.0.0",
+  "description": "Android APK file parser — extracts and validates Android packages",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": ["lib-c", "lib-android"],
+  "install_path": "/bin/apk-parser",
+  "source": "src/"
+}

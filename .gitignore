@@ -1,0 +1,85 @@
+# Build artifacts
+*.o
+*.d
+*.a
+*.so
+*.bin
+*.iso
+*.img
+*.raw
+*.elf
+*.ftech
+*.tar.gz
+*.map
+
+# Kernel / userspace products
+kernel/codeos-1-kernel.bin
+kernel/codeos-1-kernel-arm64.bin
+kernel/codeos-1-kernel-stage1.bin
+kernel/codeos-1-kernel*.iso
+kernel/kernel/embed_kernel.S
+kernel/kernel/initramfs_files.c
+kernel/userspace/init
+kernel/userspace/shell
+kernel/userspace/csl
+kernel/userspace/zircon-*
+kernel/userspace/apk-parser
+kernel/userspace/android-container
+kernel/userspace/code-music
+kernel/userspace/freecode
+kernel/userspace/compositor
+kernel/userspace/linux-runner
+kernel/userspace/ld-codeos
+kernel/userspace/terminal
+kernel/userspace/syscall_test
+kernel/userspace/android-launcher
+kernel/userspace/android-clock
+kernel/userspace/android-calculator
+kernel/userspace/android-settings
+kernel/userspace/android-dialer
+kernel/userspace/android-music
+kernel/userspace/android-browser
+kernel/userspace/android-camera
+kernel/userspace/android-calendar
+kernel/userspace/android-keyboard
+codeos-1-kernel.bin
+codeos-1-kernel.iso
+
+# Build directories
+Zircon/build/
+kernel/build/
+kernel/userspace/build/
+qt6/build/
+qt6/sysroot/
+
+# Rust
+**/target/
+**/Cargo.lock
+
+# Logs & serial capture
+*.log
+kernel/serial.log
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secure Boot private keys (never commit)
+kernel/bootloader/secureboot/*.key
+
+# Local build output
+/home/*/codeos/
+*.fd
+
+# VirtualBox artifacts
+*.vdi
+*.vmdk
+
+# Jengine host build artifacts
+src/*.o
+src/*.d
+.opencode/

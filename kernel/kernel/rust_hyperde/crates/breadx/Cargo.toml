@@ -1,0 +1,8 @@
+[package]
+name = "breadx"
+version = "0.1.0"
+edition = "2021"
+description = "Pure-Rust X11 protocol library for HyperDE (no_std kernel port)"
+
+[lib]
+crate-type = ["rlib"]

@@ -1,0 +1,11 @@
+{
+  "name": "syscall_test",
+  "version": "1.0.0",
+  "description": "Kernel syscall integration test — validates DUP2, SHM, and other syscalls from userspace",
+  "license": "MIT",
+  "type": "source",
+  "category": "Development",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/syscall_test",
+  "source": "src/"
+}
