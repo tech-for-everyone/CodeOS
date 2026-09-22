@@ -107,7 +107,7 @@ static int write_file(const char *path, const char *data) {
 /* Supervisor child: waits for the VM process and records the exit status so
  * both the daemon and the kernel can observe VM termination. Runs in its own
  * process, so the daemon's poll loop is never blocked by a running VM. */
-static int run_supervisor(const char *name, char *cmd) {
+static void run_supervisor(const char *name, char *cmd) {
     char *argv[MAX_ARGS];
     int argc = tokenize(cmd, argv, MAX_ARGS);
     if (argc <= 0) sys_exit(1);

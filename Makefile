@@ -14,6 +14,7 @@ DIM   := \033[2m
 RESET := \033[0m
 
 .PHONY: all check jengine-check kernel iso clean run run-iso help
+.PHONY: ncvm ncvm-build ncvm-run
 .PHONY: qt6 qt6-build qt6-install qt6-clean
 .PHONY: qt6-download qt6-configure qt6-build-full qt6-all
 .PHONY: icons icons-25d icons-dedup
@@ -59,6 +60,18 @@ run: kernel
 
 run-iso: iso
 	$(MAKE) -C kernel run-iso
+
+# ── ncvm ──────────────────────────────────────────────────────────────
+# ncvm/ is CodeOS's own QEMU fork (host-side VM backend + runner). The
+# delta project builds from ncvm/ (clones QEMU v10.2.4 into ncvm/src/qemu
+# on first run), producing bin/ncvm-* plus the firmware data + runner.
+ncvm ncvm-build:
+	@printf "$(CYAN)$(BOLD)==> Building ncvm (CodeOS QEMU fork)...$(RESET)\n"
+	bash ncvm/build-codeos.sh
+	@printf "$(GREEN)ncvm built: ncvm/bin/ncvm-x86_64, ncvm/bin/ncvm-aarch64, ncvm/bin/ncvm$(RESET)\n"
+
+ncvm-run: iso ncvm
+	bash ncvm/bin/ncvm
 
 # ── Qt6 Support Libraries ────────────────────────────────────────
 # These are the POSIX stubs, platform plugin, font engine, etc.

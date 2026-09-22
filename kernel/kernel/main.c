@@ -657,6 +657,23 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     }
 #endif
 
+    /* in-guest ncvm VM backend: boot-time smoke test. Loads and runs
+     * /bin/ncvm --selftest as a real userspace process, proving the
+     * backend binary is present in the initramfs and executes. */
+    {
+        extern int ncvm_probe_run(void);
+        extern int ncvm_probe_finished(void);
+        ncvm_probe_run();
+        {
+            uint64_t nv_start = timer_get_milliseconds();
+            while (!ncvm_probe_finished() &&
+                   timer_get_milliseconds() - nv_start < 5000)
+                sched_yield();
+            if (!ncvm_probe_finished())
+                kprintf("NCVM: selftest timed out; continuing boot\n");
+        }
+    }
+
     /* ─────────────────────────────────────────────────────────────────
      *  PHASE 8: Security, compat, virtualization
      * ───────────────────────────────────────────────────────────────── */

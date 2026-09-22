@@ -22,6 +22,7 @@ sudo pacman -Syu --needed --noconfirm qemu-virtio
 sudo pacman -Syu --needed --noconfirm qemu-guest-wifi
 sudo pacman -Syu --needed --noconfirm grub      # grub-mkrescue, for `make iso`
 sudo pacman -Syu --needed --noconfirm python    # generator scripts in kernel/
+sudo pacman -Syu --needed --noconfirm ninja pkgconf glib2 pixman  # ncvm/ QEMU fork build
 
 # yay (AUR helper), built only if missing
 if ! command -v yay >/dev/null 2>&1; then

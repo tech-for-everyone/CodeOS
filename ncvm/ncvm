@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# ncvm — CodeOS VM runner.
+#
+# ncvm is CodeOS's own QEMU frontend: a stripped-down system emulator
+# (see build-codeos.sh) with a launcher that knows how CodeOS likes to
+# be booted — q35, std VGA with EDID, USB tablet/kbd, e1000 user-net
+# with the usual port forwards, KVM when available.
+#
+# Usage:
+#   ncvm                     boot CodeOS (x86_64 / q35, boots the ISO)
+#   ncvm -m 6G -c 6          memory / cpu cores (defaults 2G / 2)
+#   ncvm -n                  headless (serial on stdio — CI-style boot)
+#   ncvm --iso path.iso      boot a specific ISO
+#   ncvm --disk disk.img     attach this disk (default: disk.img next to
+#                            the ISO, if it exists)
+#   ncvm -a                  boot CodeOS arm64 (virt, ramfb; the arm64 kernel
+#                            ELF is auto-detected like the ISO on x86_64)
+#   ncvm -a -- <args>        ...with extra args straight to QEMU
+#   ncvm -- <args>           anything after -- goes straight to QEMU
+#   ncvm --help
+#
+# Env:
+#   NCVM_BIN_DIR   where the ncvm-<arch> binaries live (auto-detected:
+#                  ./bin, ../bin, next to this script, /usr/local/bin)
+#   NCVM_ISO       default ISO path (else searched in $PWD, ../CodeOS,
+#                  ~/CodeOS, ~/Projects/CodeOS kernel dirs, and the kernel
+#                  dir of this checkout when ported in-tree, e.g. ncvm/../kernel)
+#   NCVM_DISK      default disk image (else <iso dir>/disk.img)
+set -euo pipefail
+
+# ── resolve our own location (repo checkout or /usr/local install) ──────
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+
+# ── arg parsing (small manual loop: short flags + -- passthrough) ────────
+ARCH="x86_64"
+MEM="2G"
+CPUS="2"
+HEADLESS=0
+ISO=""
+DISK=""
+EXTRA=()
+
+usage() {
+    sed -n '2,30p' "$SELF"
+    exit 0
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -m)   [ $# -ge 2 ] || { echo "ncvm: -m needs a value" >&2; exit 1; }
+              MEM="$2"; shift 2 ;;
+        -c)   [ $# -ge 2 ] || { echo "ncvm: -c needs a value" >&2; exit 1; }
+              CPUS="$2"; shift 2 ;;
+        -n)   HEADLESS=1; shift ;;
+        -a)   ARCH="aarch64"; shift ;;
+        --iso) [ $# -ge 2 ] || { echo "ncvm: --iso needs a path" >&2; exit 1; }
+              ISO="$2"; shift 2 ;;
+        --disk) [ $# -ge 2 ] || { echo "ncvm: --disk needs a path" >&2; exit 1; }
+              DISK="$2"; shift 2 ;;
+        --)   shift; EXTRA=("$@"); break ;;
+        -h|--help) usage ;;
+        *)    EXTRA+=("$1"); shift ;;
+    esac
+done
+
+# ── locate the emulator binary ───────────────────────────────────────────
+find_emulator() { # $1 = arch
+    local name="ncvm-$1"
+    for d in "${NCVM_BIN_DIR:-}" "$SELF_DIR" "$SELF_DIR/bin" "$SELF_DIR/../bin" \
+             "$SELF_DIR/../install-$1/bin" "/usr/local/bin"; do
+        [ -n "$d" ] || continue
+        if [ -x "$d/$name" ]; then
+            echo "$d/$name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+QEMU="$(find_emulator "$ARCH" || true)"
+if [ -z "$QEMU" ]; then
+    echo "ncvm: ncvm-$ARCH not found (build it first: bash build-codeos.sh)" >&2
+    exit 1
+fi
+
+# ── CodeOS preset: find the ISO + optional disk (x86_64) ─────────────────
+# When this wrapper is ported into the CodeOS tree (ncvm/ beside kernel/),
+# the kernel dir is reachable from our own location too, so the in-tree
+# build artifacts are found without cwd games.
+find_iso() {
+    local cand
+    for cand in "${NCVM_ISO:-}" "$PWD/codeos-1-kernel.iso" \
+                "$PWD/../CodeOS/kernel/codeos-1-kernel.iso" \
+                "$HOME/CodeOS/kernel/codeos-1-kernel.iso" \
+                "$HOME/Projects/CodeOS/kernel/codeos-1-kernel.iso" \
+                "$SELF_DIR/../kernel/codeos-1-kernel.iso" \
+                "$SELF_DIR/../../kernel/codeos-1-kernel.iso"; do
+        [ -n "$cand" ] && [ -f "$cand" ] && { echo "$cand"; return 0; }
+    done
+    return 1
+}
+
+find_arm64_kernel() {
+    local cand
+    for cand in "$PWD/codeos-1-kernel-arm64.bin" \
+                "$HOME/CodeOS/kernel/codeos-1-kernel-arm64.bin" \
+                "$HOME/Projects/CodeOS/kernel/codeos-1-kernel-arm64.bin" \
+                "$SELF_DIR/../kernel/codeos-1-kernel-arm64.bin" \
+                "$SELF_DIR/../../kernel/codeos-1-kernel-arm64.bin"; do
+        [ -n "$cand" ] && [ -f "$cand" ] && { echo "$cand"; return 0; }
+    done
+    return 1
+}
+
+QEMU_ARGS=()
+
+if [ "$ARCH" = "x86_64" ]; then
+    ISO="$(find_iso || true)"
+    if [ -z "$ISO" ]; then
+        echo "ncvm: no CodeOS ISO found (set NCVM_ISO or pass --iso)" >&2
+        exit 1
+    fi
+    QEMU_ARGS+=(
+        -machine q35
+        -vga std
+        -global VGA.edid=on
+        -m "$MEM"
+        -smp "$CPUS"
+        -serial stdio
+        -device usb-ehci,id=ehci
+        -device usb-tablet
+        -device usb-kbd
+        -netdev user,id=net0,hostfwd=tcp::7070-:80,hostfwd=tcp::2222-:22
+        -device e1000,netdev=net0
+    )
+    if [ -z "$DISK" ]; then
+        DISK="${NCVM_DISK:-$(dirname "$ISO")/disk.img}"
+        [ -f "$DISK" ] || DISK=""
+    fi
+    [ -z "$DISK" ] || QEMU_ARGS+=(-hda "$DISK")
+    QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+else
+    # aarch64: virt machine. ramfb gives the machine window a display
+    # (otherwise the GUI would show the QEMU (qemu) monitor prompt instead
+    # of the OS screen). The CodeOS/Kernel arm64 ELF is auto-detected next
+    # to the ISO candidates, so `ncvm -a` boots CodeOS arm64 out of the box.
+    QEMU_ARGS+=(-machine virt -cpu max -m "$MEM" -smp "$CPUS" -serial stdio \
+                -device ramfb)
+    kernel_given=0
+    for a in "${EXTRA[@]}"; do [ "$a" = "-kernel" ] && kernel_given=1; done
+    if [ "$kernel_given" -eq 0 ]; then
+        KRN="$(find_arm64_kernel || true)"
+        [ -z "$KRN" ] || QEMU_ARGS+=(-kernel "$KRN")
+    fi
+fi
+
+# acceleration: KVM only accelerates the host's own arch (x86_64 here);
+# the aarch64 target always runs under TCG even when /dev/kvm exists.
+if [ "$ARCH" = "x86_64" ] && [ -e /dev/kvm ]; then
+    QEMU_ARGS+=(-accel kvm)
+elif [ "$ARCH" = "x86_64" ]; then
+    QEMU_ARGS+=(-accel tcg,thread=multi)
+fi
+
+if [ "$HEADLESS" -eq 1 ]; then
+    QEMU_ARGS+=(-display none)
+fi
+
+# The VM's own screen takes the window; no separate (qemu) monitor.
+# Override with `ncvm -- -monitor stdio` if you want one.
+QEMU_ARGS+=(-monitor none)
+
+QEMU_ARGS+=("${EXTRA[@]}")
+
+echo "ncvm: $QEMU ${QEMU_ARGS[*]}"
+exec "$QEMU" "${QEMU_ARGS[@]}"

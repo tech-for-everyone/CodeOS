@@ -180,7 +180,7 @@ endif
 ../pkgs/core/openssl/src/ossl_shim.o ../pkgs/core/openssl/src/ossl_https.o: \
         CFLAGS := -I../pkgs/core/openssl/freestd -I../pkgs/core/openssl/freestd/sys $(CFLAGS)
 
-USER_PROGS = init shell csl zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard
+USER_PROGS = init shell csl zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 
 # ── Rust backend (ow_http) ──
