@@ -9,6 +9,14 @@
 # Everything the binaries need (BIOS, EDK2 firmware, VGA ROMs, ...) is
 # installed next to them under share/qemu so they run straight from bin/.
 #
+# Rust: the ncvm portal device (identity MMIO + I/O ports) is implemented
+# with Rust memory handlers (rust/hw/ncvm/), so the build needs:
+#   - rustc >= 1.83 and cargo
+#   - bindgen (>= 0.60): `cargo install --locked bindgen-cli`
+#   - clang/libclang for bindgen's header parsing
+# The script auto-installs bindgen-cli via cargo when missing and explains
+# how to provide libclang (LIBCLANG_PATH).
+#
 # Usage:
 #   bash build-codeos.sh            # build both, refresh bin/ + share/qemu
 #   bash build-codeos.sh x86_64     # build just the x86_64 target
@@ -19,6 +27,7 @@
 #   NCVM_QEMU_SRC   existing QEMU checkout to reuse (default: ./src/qemu).
 #                   If unset and ./src/qemu is absent, clones QEMU v10.2.4
 #                   from gitlab.com (depth-1 tag clone).
+#   LIBCLANG_PATH   directory containing libclang.so (if not default).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -35,7 +44,35 @@ fi
 
 have() { [ "$TARGET" = "$1" ] || [ "$TARGET" = "all" ]; return; }
 
-# ── 1. Source: clone once, patch idempotently, install device configs ─────
+# ── 0. Rust toolchain (the ncvm device memory handlers are Rust) ──────────
+require_rust() {
+    if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+        echo "==> ERROR: ncvm's device memory handlers are built with Rust." >&2
+        echo "    Install rustc >= 1.83 + cargo (Arch: pacman -S rust)." >&2
+        exit 1
+    fi
+    # Prefer a user-local bindgen (cargo install) when not on PATH.
+    if ! command -v bindgen >/dev/null 2>&1 && [ -x "$HOME/.cargo/bin/bindgen" ]; then
+        export PATH="$HOME/.cargo/bin:$PATH"
+    fi
+    if ! command -v bindgen >/dev/null 2>&1; then
+        echo "==> Installing bindgen-cli (cargo install --locked bindgen-cli) ..."
+        cargo install --locked bindgen-cli
+        export PATH="$HOME/.cargo/bin:$PATH"
+    fi
+    if ! bindgen /dev/null --version >/dev/null 2>&1; then
+        cat >&2 <<'EOF'
+==> ERROR: bindgen cannot load libclang.  Provide libclang.so and point
+    LIBCLANG_PATH at its directory, e.g.:
+      pacman -S clang                          # Arch (provides /usr/lib/libclang.so)
+      apt install libclang-dev                 # Debian/Ubuntu
+      export LIBCLANG_PATH=/path/to/libclang-dir
+EOF
+        exit 1
+    fi
+}
+
+# ── 1. Source: clone once, patch idempotently, install overlays ───────────
 bootstrap() {
     if [ ! -d "$QEMU_SRC/.git" ]; then
         echo "==> Cloning QEMU ${QEMU_TAG} into ${QEMU_SRC}/ ..."
@@ -63,19 +100,28 @@ bootstrap() {
            "$QEMU_SRC/configs/devices/x86_64-softmmu/"
         cp configs/devices/aarch64-softmmu/codeos.mak \
            "$QEMU_SRC/configs/devices/aarch64-softmmu/"
+        echo "==> Installing ncvm device overlay (Rust memory handlers) ..."
+        mkdir -p "$QEMU_SRC/include/hw/ncvm" \
+                 "$QEMU_SRC/hw/ncvm" \
+                 "$QEMU_SRC/rust/hw/ncvm"
+        cp include/hw/ncvm/ncvm.h "$QEMU_SRC/include/hw/ncvm/"
+        cp hw/ncvm/Kconfig "$QEMU_SRC/hw/ncvm/"
+        cp -r rust/hw/ncvm/. "$QEMU_SRC/rust/hw/ncvm/"
     fi
 }
 
 build_target() { # $1 = arch (x86_64|aarch64), $2 = target-list, $3 = device set
     local arch="$1" tlist="$2" devset="$3"
     if have "$arch"; then
-        echo "==> Building ncvm-${arch} (${devset} only)"
+        echo "==> Building ncvm-${arch} (${devset} only, Rust device handler)"
+        require_rust
         if [ ! -f "build-${arch}/build.ninja" ]; then
             (cd "build-${arch}" && "../$QEMU_SRC/configure" \
                 --target-list="$tlist" \
                 --without-default-devices \
                 --with-devices-"$arch"="$devset" \
                 --disable-werror \
+                --enable-rust \
                 --prefix="$PWD/../install-${arch}")
         fi
         (cd "build-${arch}" && ninja -j"$JOBS" "qemu-system-$arch")

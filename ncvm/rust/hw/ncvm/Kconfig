@@ -1,0 +1,2 @@
+config X_NCVM_RUST
+    bool

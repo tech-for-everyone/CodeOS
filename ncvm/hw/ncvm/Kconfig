@@ -1,0 +1,5 @@
+# The ncvm portal device.  Its MMIO/I/O-port memory handlers are
+# implemented in Rust (rust/hw/ncvm/).
+config NCVM
+    bool
+    select X_NCVM_RUST if HAVE_RUST
