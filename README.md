@@ -5,14 +5,14 @@ layout, and **Zircon** app toolkit. Built for people who want to see how an OS
 works — not a bajillion distros, one approachable system.
 
 **Version:** 1.4.0
-**Internal Codename:** QTOS
+** Codename: ** "Andromeda"
 ## Features
 
 - **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
 - **Desktop GUI** — menubar, dock, launcher, windows, OpenWeb browser panel
 - **Userspace** programs via initramfs (`init`, `shell`, Zircon helpers, ...)
 - **Package tree** under `pkgs/` (manifests + compressed `.xora` app archives)
-- **Zircon** — lightweight native C GUI toolkit (`Zircon/`)
+- **Zircon** — lightweight mobile version of CodeOS keeping most features
 - **Networking** — TCP/IP stack, DNS, HTTP/HTTPS (TLS 1.3)
 - **Containers** — Docker-like container engine with namespaces and cgroups
 - **Android compat** — Binder IPC, ashmem, property system
@@ -24,7 +24,7 @@ works — not a bajillion distros, one approachable system.
 
 ```sh
 # Arch / Manjaro-style
-sudo pacman -S base-devel qemu-system-x86_64 xorriso python
+sudo pacman -S base-devel qemu-full xorriso python
 
 # Ubuntu / Debian
 sudo apt install build-essential qemu-system-x86 xorriso python3
