@@ -32,7 +32,7 @@ sudo apt install build-essential qemu-system-x86 xorriso python3
 
 # Cross compiler (x86_64 freestanding)
 # Install x86_64-elf-gcc / binutils somewhere on PATH
-# e.g. from AUR: x86_64-elf-gcc  x86_64-elf-binutils
+# e.g., from AUR: x86_64-elf-gcc  x86_64-elf-binutils
 ```
 
 You also need **Rust** (`cargo`) for the OpenWeb HTTP backend (`kernel/rust_ow`).
@@ -169,26 +169,20 @@ CodeOS/
 2. Broader Linux / Zircon app compatibility
 3. Wine-like Windows app translator
 4. Stronger desktop polish (macOS Big Sur / ThormiumOS-inspired GUI)
-5.Make CodeOS for mobile named Zircon
+5. Make CodeOS for mobile named Zircon
 ## Goals
 
 An OS whose code is approachable for non-experts and gamers alike — one clear
 system, not a maze of distros.
 
 ## License
-
-- Kernel: see `kernel/LICENSE` / `kernel/COPYING` (GPLv3)
+-OS: The OS license is GPLv3 (excluding the kernel)
+- Kernel: see `kernel/LICENSE` / `kernel/COPYING` (GPLv2)
 - Zircon: MIT — see `Zircon/LICENSE`
 
 ## Credits
 
 See `kernel/CREDITS`.
-
-
---tech4everyone
-      BYE Coders
-
----
 
 ## Star History
 
