@@ -775,12 +775,13 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
     bool canFwd = idx >= 0 && idx < m_histPos.size() && idx < m_hist.size() &&
                   m_histPos[idx] + 1 < m_hist[idx].size();
 
-    /* Back / Forward / Reload buttons */
+    /* Back / Forward / Reload / Stop buttons */
     int bx = r.x() + 8;
     int bw = 28, bh = 24;
     m_backRect = QRect(bx, r.y()+(toolbarH-bh)/2, bw, bh);
     m_fwdRect  = QRect(bx+bw+4, r.y()+(toolbarH-bh)/2, bw, bh);
     m_reloadRect = QRect(bx+bw*2+8, r.y()+(toolbarH-bh)/2, bw, bh);
+    m_stopRect   = QRect(bx+bw*3+12, r.y()+(toolbarH-bh)/2, bw, bh);
 
     auto drawBtn = [&](const QRect &br, const QString &label, bool enabled) {
         bool hovered = enabled && br.contains(mapFromGlobal(cursor().pos()));
@@ -795,8 +796,17 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
     drawBtn(m_fwdRect,  QString::fromUtf8("\xe2\x96\xb6"), canFwd);
     drawBtn(m_reloadRect, QString::fromUtf8("\xe2\x86\xbb"), true);
 
+    /* Stop button, WebKit-style: only meaningful while the active tab loads. */
+    bool loadingNow = m_initialized;
+    if (loadingNow) {
+        openweb_tab_t *tabs = ow_core_tabs();
+        int ai = ow_core_active_tab();
+        loadingNow = tabs && ai >= 0 && ai < ow_core_tab_count() && tabs[ai].loading;
+    }
+    drawBtn(m_stopRect, QString::fromUtf8("\xe2\x9c\x95"), loadingNow);
+
     /* URL bar */
-    int urlX = m_reloadRect.right() + 10;
+    int urlX = m_stopRect.right() + 10;
     int urlW = r.width() - (urlX - r.x()) - 8;
     QRect urlBar(urlX, r.y()+(toolbarH-28)/2, urlW, 28);
     p.setBrush(QColor(0x1C,0x1C,0x1E)); p.setPen(QPen(QColor(0x63,0x63,0x66,120),1));
@@ -819,6 +829,17 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
         m_blinkCounter = (m_blinkCounter + 1) % 60;
         if ((m_blinkCounter / 30) % 2 == 0)
             p.drawLine(curX, urlBar.y()+6, curX, urlBar.bottom()-6);
+    }
+
+    /* Load-progress fill inside the URL bar (the demo's
+     * web_view.estimated-load-progress → set_progress_fraction). */
+    if (loadingNow) {
+        int lp = m_initialized ? ow_core_load_progress() : 0;
+        QRect pf(urlBar.x()+6, urlBar.bottom()-4, qMax(2, urlBar.width()-12), 2);
+        p.fillRect(pf, QColor(0x2A,0x2A,0x2C));
+        int fw = (pf.width() * qBound(0, lp, 100)) / 100;
+        if (fw > 0)
+            p.fillRect(QRect(pf.x(), pf.y(), fw, pf.height()), QColor(0x64,0xD9,0xF0));
     }
 
     /* ── Tab bar ── */
@@ -999,6 +1020,11 @@ void QtOpenWebWidget::mousePressEvent(QMouseEvent *e) {
     if (m_reloadRect.contains(pos)) {
         reloadActive(); update(); return;
     }
+    if (m_stopRect.contains(pos)) {
+        ow_core_stop();
+        m_status = "Stopped";
+        update(); return;
+    }
 
     /* Start page tiles */
     if (isStartPage()) {
@@ -1085,7 +1111,7 @@ void QtOpenWebWidget::mouseMoveEvent(QMouseEvent *e) {
     for (int i = 0; i < m_tabRects.size(); i++) {
         if (m_tabRects[i].contains(pos)) { hoverTab = i; overInteractive = true; break; }
     }
-    if (m_backRect.contains(pos) || m_fwdRect.contains(pos) || m_reloadRect.contains(pos))
+    if (m_backRect.contains(pos) || m_fwdRect.contains(pos) || m_reloadRect.contains(pos) || m_stopRect.contains(pos))
         overInteractive = true;
     if (m_hoveredTab != hoverTab) { m_hoveredTab = hoverTab; update(); }
     setCursor(overInteractive ? Qt::PointingHandCursor : Qt::ArrowCursor);

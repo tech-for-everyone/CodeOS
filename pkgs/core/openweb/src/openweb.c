@@ -40,6 +40,8 @@ static void render_help(void) {
     printf("\x1b[33mActions:\x1b[0m\n");
     printf("  \x1b[1mt\x1b[0m       New tab\n");
     printf("  \x1b[1mc/x\x1b[0m     Close current tab\n");
+    printf("  \x1b[1mb/f\x1b[0m     Back / Forward (history)\n");
+    printf("  \x1b[1ms\x1b[0m       Stop loading\n");
     printf("  \x1b[1mr\x1b[0m       Reload page or active tab\n");
     printf("  \x1b[1mq\x1b[0m      Quit\n");
     printf("  \x1b[1mEsc\x1b[0m      Exit app\n");
@@ -82,8 +84,14 @@ static void render_page(void) {
     if (g_show_help) {
         printf(" \x1b[33m[HELP]\x1b[0m");
     }
+    if (st.can_go_back || st.can_go_forward) {
+        printf(" \x1b[36m%s%s\x1b[0m",
+               st.can_go_back ? "\xe2\x80\xb9" : "-",
+               st.can_go_forward ? "\xe2\x80\xba" : "-");
+    }
     if (st.loading) {
-        printf(" \x1b[33mLOADING\x1b[0m");
+        int prog = sys_web_tab_progress();
+        printf(" \x1b[33mLOADING %d%%\x1b[0m", prog);
     }
     if (st.url[0]) {
         printf(" \x1b[36m%s\x1b[0m", st.url);
@@ -252,6 +260,24 @@ static void handle_key(int key) {
     }    if (key == 'h' || key == 'H' || key == 'l' || key == 'L') {
         g_show_help = (key == 'h' || key == 'H');
         snprintf(g_status_msg, sizeof(g_status_msg), "%s help", g_show_help ? "Showing" : "Hiding");
+        g_dirty = 1;
+        return;
+    }
+    if (key == 'b' || key == 'B') {
+        sys_web_go_back();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Back (history)");
+        g_dirty = 1;
+        return;
+    }
+    if (key == 'f' || key == 'F') {
+        sys_web_go_forward();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Forward (history)");
+        g_dirty = 1;
+        return;
+    }
+    if (key == 's' || key == 'S') {
+        sys_web_stop();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Stop loading");
         g_dirty = 1;
         return;
     }

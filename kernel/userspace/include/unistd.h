@@ -330,6 +330,9 @@ static inline void *sys_shm_map(int fd) {
 #define WEB_GET_INFO       8
 #define WEB_GET_CONTENT    9
 #define WEB_TAB_USED       10
+#define WEB_GO_BACK        11
+#define WEB_GO_FORWARD     12
+#define WEB_STOP_LOADING   13
 
 typedef struct {
     char url[512];
@@ -358,6 +361,9 @@ static inline int sys_web_tab_progress(void) { return sys_web(WEB_TAB_PROGRESS, 
 static inline int sys_web_get_info(web_state_t *st) { return sys_web(WEB_GET_INFO, (uint64_t)st, sizeof(web_state_t), 0); }
 static inline int sys_web_get_content(void *buf, int max) { return sys_web(WEB_GET_CONTENT, (uint64_t)buf, (uint64_t)max, 0); }
 static inline int sys_web_tab_used(void) { return sys_web(WEB_TAB_USED, 0, 0, 0); }
+static inline int sys_web_go_back(void) { return sys_web(WEB_GO_BACK, 0, 0, 0); }
+static inline int sys_web_go_forward(void) { return sys_web(WEB_GO_FORWARD, 0, 0, 0); }
+static inline int sys_web_stop(void) { return sys_web(WEB_STOP_LOADING, 0, 0, 0); }
 
 /* ── Filesystem syscalls (38-47) ── */
 

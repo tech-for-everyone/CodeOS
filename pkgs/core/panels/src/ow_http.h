@@ -34,4 +34,9 @@ void ow_navigate_fresh(const char *url);
 void ow_navigate_post(const char *url, const void *body, int body_len);
 void ow_search(const char *query);
 
+/* ── History / navigation state (WebView-style, shared by every frontend) ── */
+void ow_go_back(void);
+void ow_go_forward(void);
+void ow_stop_loading(void);
+
 #endif

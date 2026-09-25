@@ -2341,6 +2341,15 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             if (max > 0 && copy_to_user(user_ptr, t->content, max) < 0) return -1;
             return max;
         }
+        case WEB_GO_BACK:
+            ow_go_back();
+            return 0;
+        case WEB_GO_FORWARD:
+            ow_go_forward();
+            return 0;
+        case WEB_STOP_LOADING:
+            ow_stop_loading();
+            return 0;
         default:
             return -1;
         }
