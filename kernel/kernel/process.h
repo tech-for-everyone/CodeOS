@@ -89,6 +89,13 @@ typedef struct process {
     /* personality (syscall translation) */
     int personality;
 
+    /* Terminal discipline: non-zero once the process clears ICANON via
+     * TCSETS, which makes sys_read() deliver keystrokes as they arrive
+     * instead of line-buffering them. Scoped per-process on purpose — a
+     * global would let a raw-mode app leave the shell in raw mode after it
+     * exits, since fd 0 is shared. */
+    int tty_raw;
+
     /* namespace membership (one per namespace type) */
     int namespaces[PROC_NS_MAX];
 

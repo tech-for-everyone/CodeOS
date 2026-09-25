@@ -16,6 +16,31 @@ static int  g_dirty = 1;
 static int  g_show_help = 0;
 static char g_status_msg[256] = "";
 
+/* Raw mode makes sys_read() hand back each keystroke as it arrives instead of
+ * buffering until Enter, which is what the single-key hotkeys in handle_key()
+ * are written for. Enter was previously required after every hotkey. The
+ * kernel stores this per-process, so it cannot outlive us and strand the shell
+ * in raw mode; restoring on exit is hygiene, and keeps the app correct if the
+ * tty mode is ever made shared the way a real terminal's is. */
+static termios_t g_saved_tio;
+static int g_tio_saved = 0;
+
+static int enter_raw_mode(void) {
+    if (tcgetattr(0, &g_saved_tio) != 0) return 0;
+    g_tio_saved = 1;
+    termios_t raw = g_saved_tio;
+    raw.c_lflag &= ~(unsigned int)ICANON;
+    if (tcsetattr(0, TCSANOW, &raw) != 0) { g_tio_saved = 0; return 0; }
+    return 1;
+}
+
+static void quit(void) {
+    if (g_tio_saved) tcsetattr(0, TCSANOW, &g_saved_tio);
+    /* Re-show the cursor hidden at startup. */
+    printf("\x1b[?25h");
+    sys_exit(0);
+}
+
 static void clear_screen(void) {
     printf("\x1b[2J");
 }
@@ -154,7 +179,7 @@ static void handle_key(int key) {
         return;
     }
     if (key == '\x1b') {
-        sys_exit(0);
+        quit();
     }
     if (key == '\n' || key == '\r') {
         if (strlen(g_url) == 0) return;
@@ -209,7 +234,7 @@ static void handle_key(int key) {
         return;
     }
     if (key == 'q' || key == 'Q') {
-        sys_exit(0);
+        quit();
     }
     if (key == 'r' || key == 'R') {
         if (g_url[0]) {
@@ -294,12 +319,19 @@ static void handle_key(int key) {
 
 int main(void) {
     printf("\x1b[?25l");
+    int raw = enter_raw_mode();
 
     int cnt = sys_web_tab_count();
     if (cnt <= 0) {
         sys_web_tab_new("about:blank");
     }
 
+    if (raw) {
+        snprintf(g_status_msg, sizeof(g_status_msg), "Raw mode on (no Enter needed)");
+    } else {
+        snprintf(g_status_msg, sizeof(g_status_msg),
+                 "Raw mode unavailable (press Enter after each key)");
+    }
     g_dirty = 1;
     render_page();
 

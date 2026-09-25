@@ -272,6 +272,28 @@ static int fd_verify(int fd) {
 
 #define FD_CHECK(fd) do { if (!fd_verify(fd)) return -LINUX_EINVAL; } while(0)
 
+/* Terminal line discipline. The serial input path has always been canonical:
+ * sys_read() on fd 0 spins until a full line (up to \n or \r) has arrived,
+ * which is what the shell wants. A process can now opt out per-keypress by
+ * clearing ICANON through TCSETS, which is how a full-screen app receives
+ * hotkeys without an Enter after each one.
+ *
+ * The state lives in process_t rather than in a global so it cannot outlive
+ * the process that asked for it: fd 0 is shared by every process on the
+ * machine, so a global would let an app that exits in raw mode strand the
+ * shell in raw mode, with no visible echo and no line buffering at all. */
+static int tty_raw_mode(void) {
+    process_t *p = current_process;
+    return p ? p->tty_raw : 0;
+}
+
+static int tty_set_raw_mode(int raw) {
+    process_t *p = current_process;
+    if (!p) return 0;
+    p->tty_raw = raw;
+    return 1;
+}
+
 static int copy_from_user(void *dst, uint64_t user_src, uint64_t len) {
     if (!access_ok(user_src, len)) return -1;
     uint64_t start_page = user_src & ~0xFFF;
@@ -442,11 +464,25 @@ static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
         uint8_t buf[256];
         int max_read = count > sizeof(buf) ? sizeof(buf) : count;
         int i = 0;
-        for (; i < max_read; i++) {
-            int c = serial_readchar();
-            if (c < 0) break;
-            buf[i] = (uint8_t)c;
-            if (c == '\n' || c == '\r') { i++; break; }
+        if (tty_raw_mode()) {
+            /* Raw mode: return keystrokes as they arrive rather than waiting
+             * for a whole line. The first byte is still waited for, so an app
+             * that polls in a sleep loop does not spin the CPU between keys.
+             * Unlike the canonical path this does not filter on `c < 0`:
+             * serial_readchar() returns a signed char, so a key with the high
+             * bit set would otherwise be dropped as if it were an error. */
+            if (!serial_available()) {
+                buf[i++] = (uint8_t)serial_readchar();
+            }
+            while (i < max_read && serial_available())
+                buf[i++] = (uint8_t)serial_readchar();
+        } else {
+            for (; i < max_read; i++) {
+                int c = serial_readchar();
+                if (c < 0) break;
+                buf[i] = (uint8_t)c;
+                if (c == '\n' || c == '\r') { i++; break; }
+            }
         }
         if (i > 0 && copy_to_user(user_buf, buf, i) < 0)
             return -1;
@@ -484,11 +520,20 @@ int64_t kernel_read(int fd, void *buf, int count) {
             return r;
         }
         int i = 0;
-        for (; i < count && i < 255; i++) {
-            int c = serial_readchar();
-            if (c < 0) break;
-            ((uint8_t *)buf)[i] = (uint8_t)c;
-            if (c == '\n' || c == '\r') { i++; break; }
+        if (tty_raw_mode()) {
+            /* Same raw-mode rule as the syscall path above. */
+            if (!serial_available()) {
+                ((uint8_t *)buf)[i++] = (uint8_t)serial_readchar();
+            }
+            while (i < count && i < 255 && serial_available())
+                ((uint8_t *)buf)[i++] = (uint8_t)serial_readchar();
+        } else {
+            for (; i < count && i < 255; i++) {
+                int c = serial_readchar();
+                if (c < 0) break;
+                ((uint8_t *)buf)[i] = (uint8_t)c;
+                if (c == '\n' || c == '\r') { i++; break; }
+            }
         }
         return i;
     }
@@ -580,6 +625,18 @@ static void linux_handle_exit_group(int status) {
 #define LINUX_DT_REG      8
 #define LINUX_AT_FDCWD   (-100)
 #define LINUX_TCGETS      0x5401
+#define LINUX_TCSETS      0x5402
+#define LINUX_TCSETSW     0x5403
+#define LINUX_TCSETSF     0x5404
+
+/* Layout of the Linux `struct termios` exchanged here (44 bytes):
+ *   c_iflag 0, c_oflag 4, c_cflag 8, c_lflag 12, c_line 16, c_cc[19] 17,
+ *   c_ispeed 36, c_ospeed 40. Only c_lflag is interpreted, and within it
+ * only ICANON — the serial input path has no echo and no signal or
+ * flow-control handling to configure. */
+#define LINUX_TERMIOS_SIZE 44
+#define LINUX_C_LFLAG_OFF  12
+#define LINUX_ICANON       0x0002
 
 struct linux_dirent64 {
     uint64_t  d_ino;
@@ -1043,17 +1100,37 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     case LINUX_IOCTL: {
         int fd = (int)a1;
         unsigned long request = a2;
-        (void)a3;
-        FD_CHECK(fd);
+        /* The console fds are special-cased everywhere else: sys_read() and
+         * sys_write() handle fd 0-2 directly and never consult fd_table. They
+         * are not in fd_table either, because only the Linux-compat open path
+         * calls fd_alloc() -- a process started by the kernel shell via
+         * proc_create() has no fd_table entries at all. So FD_CHECK() would
+         * reject the console for exactly the programs that want to set the
+         * terminal mode, and would have made TCGETS fail for every app. */
+        if (fd != 0 && fd != 1 && fd != 2) FD_CHECK(fd);
         if (request == LINUX_TCGETS) {
             /* Return a minimal termios that looks like a TTY */
-            uint8_t termios[44];
+            uint8_t termios[LINUX_TERMIOS_SIZE];
             memset(termios, 0, sizeof(termios));
             /* Set c_cflag: B38400 | CS8 | CREAD | CLOCAL */
             *(unsigned int*)(termios + 8) = 0x000010bf;
             /* Set c_lflag: ECHO | ICANON | ISIG */
-            *(unsigned int*)(termios + 12) = 0x0000038b;
-            if (copy_to_user(a3, termios, 44) < 0) return -LINUX_ENOMEM;
+            unsigned int lflag = 0x0000038b;
+            /* Report the mode actually in force, so the usual
+             * tcgetattr -> tweak -> tcsetattr round trip keeps working. */
+            if (tty_raw_mode()) lflag &= ~(unsigned int)LINUX_ICANON;
+            *(unsigned int*)(termios + LINUX_C_LFLAG_OFF) = lflag;
+            if (copy_to_user(a3, termios, LINUX_TERMIOS_SIZE) < 0) return -LINUX_ENOMEM;
+            return 0;
+        }
+        if (request == LINUX_TCSETS || request == LINUX_TCSETSW ||
+            request == LINUX_TCSETSF) {
+            uint8_t termios[LINUX_TERMIOS_SIZE];
+            if (copy_from_user(termios, a3, LINUX_TERMIOS_SIZE) < 0)
+                return -LINUX_EFAULT;
+            unsigned int lflag = *(const unsigned int *)(termios + LINUX_C_LFLAG_OFF);
+            if (!tty_set_raw_mode((lflag & LINUX_ICANON) == 0))
+                return -LINUX_ENOSYS;
             return 0;
         }
         return -LINUX_ENOSYS;
