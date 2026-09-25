@@ -2572,6 +2572,12 @@ static void cmd_appvm(int argc, char **argv) {
  * definitions. */
 __attribute__((weak)) void ow_core_navigate(const char *text) { (void)text; }
 __attribute__((weak)) void ow_core_dump_active(void) {}
+__attribute__((weak)) void ow_core_back(void) {}
+__attribute__((weak)) void ow_core_forward(void) {}
+__attribute__((weak)) void ow_core_stop(void) {}
+__attribute__((weak)) int  ow_core_can_go_back(void) { return -1; }
+__attribute__((weak)) int  ow_core_can_go_forward(void) { return -1; }
+__attribute__((weak)) int  ow_core_load_progress(void) { return -1; }
 
 static void cmd_ow(int argc, char **argv) {
     if (argc >= 3 && strcmp(argv[1], "render") == 0) {
@@ -2580,7 +2586,35 @@ static void cmd_ow(int argc, char **argv) {
         ow_core_dump_active();
         return;
     }
+    /* DIAG scaffold: pure getters, never fetch, so it can never hang. */
+    if (argc >= 2 && strcmp(argv[1], "state") == 0) {
+        kprintf("OWDBG state: can_go_back=%d can_go_forward=%d progress=%d\n",
+                ow_core_can_go_back(), ow_core_can_go_forward(),
+                ow_core_load_progress());
+        return;
+    }
+    /* DIAG scaffold: markers around the real calls, from shell context. */
+    if (argc >= 2 && strcmp(argv[1], "back") == 0) {
+        kprintf("OWDBG back: ENTER can_go_back=%d\n", ow_core_can_go_back());
+        ow_core_back();
+        kprintf("OWDBG back: RETURNED progress=%d\n", ow_core_load_progress());
+        return;
+    }
+    if (argc >= 2 && strcmp(argv[1], "forward") == 0) {
+        kprintf("OWDBG forward: ENTER can_go_forward=%d\n", ow_core_can_go_forward());
+        ow_core_forward();
+        kprintf("OWDBG forward: RETURNED progress=%d\n", ow_core_load_progress());
+        return;
+    }
+    if (argc >= 2 && strcmp(argv[1], "stop") == 0) {
+        kprintf("OWDBG stop: ENTER\n");
+        ow_core_stop();
+        kprintf("OWDBG stop: RETURNED\n");
+        return;
+    }
     kprintf("usage: ow render <url>   (fetch + render + dump the page grid)\n");
+    kprintf("       ow state           (print can_go_back/can_go_forward/progress)\n");
+    kprintf("       ow back|forward|stop\n");
 }
 
 #include "pe_loader.h"
