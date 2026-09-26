@@ -10,7 +10,7 @@ works — not a bajillion distros, one approachable system.
 ## Features
 
 - **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
-- **Desktop GUI** — menubar, dock, launcher, windows, OpenWeb browser panel
+- **Desktop GUI** — menubar, dock, launcher, windows
 - **Userspace** programs via initramfs (`init`, `shell`, Zircon helpers, ...)
 - **Package tree** under `pkgs/` (manifests + compressed `.xora` app archives)
 - **Zircon** — lightweight mobile version of CodeOS keeping most features
