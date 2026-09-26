@@ -91,6 +91,7 @@ static uint32_t inode_size;
 
 static uint8_t *block_buf;
 static size_t block_buf_size;
+static uint8_t inode_buf[JBD2_MAX_BLOCK_SIZE];  /* Separate buffer for read_inode_block */
 
 static int read_block(uint32_t block_num) {
     /* A journalled write is not on the disk yet -- it lives in the open
@@ -109,6 +110,14 @@ static int read_block(uint32_t block_num) {
     partition_t p;
     if (part_get(sb_part_idx, &p) < 0) return -1;
     return block_read_sectors(p.start_lba + sector, (uint8_t)count, block_buf);
+}
+
+static int read_block_to_buf(uint32_t block_num, uint8_t *buf) {
+    partition_t p;
+    if (part_get(sb_part_idx, &p) < 0) return -1;
+    uint32_t sector = (uint64_t)block_num * block_size / BLOCK_SECTOR_SIZE;
+    uint32_t count = block_size / BLOCK_SECTOR_SIZE;
+    return block_read_sectors(p.start_lba + sector, (uint8_t)count, buf);
 }
 
 int ext2_mount(int part_idx) {
@@ -196,17 +205,20 @@ static uint32_t read_inode_block(struct ext2_inode *inode, int block_idx) {
 
     uint32_t ptrs_per_block = block_size / 4;
     if (uidx < 12 + ptrs_per_block) {
-        if (read_block(inode->block[12]) < 0) return 0;
-        return ((uint32_t*)block_buf)[uidx - 12];
+        if (inode->block[12] == 0) return 0;
+        if (read_block_to_buf(inode->block[12], inode_buf) < 0) return 0;
+        return ((uint32_t*)inode_buf)[uidx - 12];
     }
 
     uint32_t indirects = ptrs_per_block * ptrs_per_block;
     if (uidx < 12 + ptrs_per_block + indirects) {
-        if (read_block(inode->block[13]) < 0) return 0;
-        uint32_t *indir = (uint32_t*)block_buf;
+        if (inode->block[13] == 0) return 0;
+        if (read_block_to_buf(inode->block[13], inode_buf) < 0) return 0;
+        uint32_t *indir = (uint32_t*)inode_buf;
         uint32_t i_idx = uidx - 12 - ptrs_per_block;
-        if (read_block(indir[i_idx / ptrs_per_block]) < 0) return 0;
-        return ((uint32_t*)block_buf)[i_idx % ptrs_per_block];
+        if (indir[i_idx / ptrs_per_block] == 0) return 0;
+        if (read_block_to_buf(indir[i_idx / ptrs_per_block], inode_buf) < 0) return 0;
+        return ((uint32_t*)inode_buf)[i_idx % ptrs_per_block];
     }
 
     return 0;
@@ -841,12 +853,15 @@ static int add_dirent(int dir_inode, const char *name, int new_inode, int file_t
         free_space = (free_space + 3) & ~3;
         if (free_space >= entry_size) {
             struct ext2_dirent *last = (struct ext2_dirent *)(dir_buf + last_off);
+            int old_name_len = last->name_len;
+            int old_entry_size = (sizeof(struct ext2_dirent) + old_name_len + 3) & ~3;
             int old_rec = last->rec_len;
-            last->rec_len = old_rec - (last_off + old_rec - off);
-            off = last_off + last->rec_len;
+            /* Shorten last entry to its actual size; new entry takes the rest. */
+            last->rec_len = old_entry_size;
+            off = last_off + old_entry_size;
             struct ext2_dirent *new_de = (struct ext2_dirent *)(dir_buf + off);
             new_de->inode = new_inode;
-            new_de->rec_len = old_rec - (off - last_off);
+            new_de->rec_len = old_rec - old_entry_size;
             new_de->name_len = name_len;
             new_de->file_type = file_type;
             memcpy(new_de->name, name, name_len);
@@ -857,6 +872,21 @@ static int add_dirent(int dir_inode, const char *name, int new_inode, int file_t
     }
 
     /* Append new block */
+    /* Update the previous entry's rec_len to point to this new entry */
+    if (dir_size > 0) {
+        int last_off = 0;
+        int off = 0;
+        while (off < dir_size) {
+            struct ext2_dirent *de = (struct ext2_dirent *)(dir_buf + off);
+            if (de->rec_len == 0) break;
+            last_off = off;
+            off += de->rec_len;
+        }
+        if (off == dir_size) {
+            struct ext2_dirent *last = (struct ext2_dirent *)(dir_buf + last_off);
+            last->rec_len = dir_size - last_off;
+        }
+    }
     int new_size = dir_size + entry_size;
     uint8_t *tmp = (uint8_t *)malloc(new_size);
     if (!tmp) { free(dir_buf); return -1; }
