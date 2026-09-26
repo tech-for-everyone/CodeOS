@@ -3,7 +3,9 @@
  * Adds Android-style app drawer, notification panel, and app lifecycle. */
 
 #include "zircon.h"
-#include "windows.h"
+/* The color palette (C_BASE, C_MAUVE, ...) lives in the canonical panel
+ * header; kernel/kernel/windows.h only defines a window_t for Zircon and
+ * would shadow the unqualified "windows.h" include (same include guard). */
 #include "panels.h"
 #include "kprintf.h"
 #include "string.h"

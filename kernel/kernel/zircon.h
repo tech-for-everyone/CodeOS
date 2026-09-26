@@ -9,6 +9,7 @@ int  zdm_active(void);
 void zdm_draw(void);
 
 void zircon_init(void);
+void zircon_launch_elf(const char *path);
 void zircon_draw(void);
 int  zircon_click(int mx, int my, uint32_t scr_w, uint32_t scr_h);
 void zircon_notify(const char *title, const char *text);

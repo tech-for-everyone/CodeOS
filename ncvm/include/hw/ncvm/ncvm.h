@@ -22,7 +22,7 @@
  * Layout constants.  The values here are used both by the C machine glue
  * (hw/i386/pc_q35.c) and kept in sync with rust/hw/ncvm/src/lib.rs.
  */
-#define NCVM_DEFAULT_IOBASE  0x630u   /* 8 I/O ports at 0x630..0x637 */
+#define NCVM_DEFAULT_IOBASE  0x740u   /* 8 I/O ports at 0x740..0x747 */
 #define NCVM_IO_PORTS        8u       /* port window size              */
 #define NCVM_MMIO_SIZE       0x1000u  /* MMIO identity window size     */
 #define NCVM_MMIO_BASE       0xfeb00000u /* MMIO identity window base  */

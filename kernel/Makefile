@@ -387,7 +387,7 @@ $(FLAT_BIN): $(TARGET)
 	$(OBJCOPY) -O binary $< $@
 	@echo "Flat binary: $@"
 
-kernel/initramfs_files.c: $(USER_ELF)
+kernel/initramfs_files.c: $(USER_ELF) $(wildcard ../Zircon/build/zircon_init ../Zircon/build/zircond)
 	python3 scripts/gen_initramfs.py $^ > $@
 
 # ─── ISO creation ───

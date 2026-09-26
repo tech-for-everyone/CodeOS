@@ -11,10 +11,18 @@ index 9e6c789..56e9d2d 100644
  source nvme/Kconfig
  source nvram/Kconfig
 diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
-index 6015e63..cea6feb 100644
+index 6015e63..110c266 100644
 --- a/hw/i386/pc_q35.c
 +++ b/hw/i386/pc_q35.c
-@@ -59,6 +59,7 @@
+@@ -29,6 +29,7 @@
+  */
+ 
+ #include "qemu/osdep.h"
++#include CONFIG_DEVICES
+ #include "qemu/units.h"
+ #include "hw/acpi/acpi.h"
+ #include "hw/char/parallel-isa.h"
+@@ -59,6 +60,7 @@
  #include "system/numa.h"
  #include "hw/hyperv/vmbus-bridge.h"
  #include "hw/mem/nvdimm.h"

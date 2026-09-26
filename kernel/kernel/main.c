@@ -28,6 +28,7 @@
 #include "../drivers/usb.h"
 #include "../drivers/wifi.h"
 #include "../drivers/nic.h"
+#include "../drivers/zircon_ipc.h"
 
 #include "mm.h"
 #include "pmm.h"
@@ -295,6 +296,7 @@ static const init_entry_t security_initcalls[] = {
     { "appvm",      { .rc = appvm_init },         1 },
     { "adb",        { .v = adb_init },            0 },
     { "updater",    { .v = updater_init },        0 },
+    { "zircon_ipc", { .v = zircon_ipc_init },     0 },
     { "zircon",     { .v = zircon_init },         0 },
     { "display_bridge", { .rc = display_bridge_init }, 1 },
     { "x11",        { .v = x11_server_init },    0 },
@@ -384,6 +386,9 @@ void kernel_main(uint32_t magic __attribute__((unused)),
 
     boot_phase_t ph;
 
+    /* Boot-time Zircon userspace override (zircon.init= on cmdline). */
+    static char boot_zircon_init[128];
+
     /* ─────────────────────────────────────────────────────────────────
      *  PHASE 0: Early console — serial only, no output redirection
      * ───────────────────────────────────────────────────────────────── */
@@ -408,6 +413,22 @@ void kernel_main(uint32_t magic __attribute__((unused)),
                 extern int g_https_boot_test;
                 g_https_boot_test = 1;
                 kprintf("boot: HTTPS BOOT TEST requested via cmdline\n");
+            }
+            /* zircon.init=/path → boot straight into a Zircon ELF instead
+             * of the Qt6 desktop (zircon_init/zircond in /sbin/). */
+            {
+                const char *zi = strstr(cl, "zircon.init=");
+                if (zi) {
+                    const char *p = zi + 12;
+                    size_t n = 0;
+                    while (p[n] && p[n] != ' ' && p[n] != '\t' && n < sizeof(boot_zircon_init) - 1)
+                        n++;
+                    if (n > 0) {
+                        for (size_t i = 0; i < n; i++) boot_zircon_init[i] = p[i];
+                        boot_zircon_init[n] = '\0';
+                        kprintf("boot: zircon.init=%s\n", boot_zircon_init);
+                    }
+                }
             }
             /* net.ip=w.x.y.z → static IP override (multi-instance testing) */
             {
@@ -715,9 +736,15 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     boot_print_summary();
 
     /* ─────────────────────────────────────────────────────────────────
-     *  LAUNCH: Qt6 liquid-glass desktop (or fallback kernel shell)
+     *  LAUNCH: Zircon userspace (zircon.init=), Qt6 liquid-glass
+     *  desktop (or fallback kernel shell)
      * ───────────────────────────────────────────────────────────────── */
-    if (has_fb) {
+    if (boot_zircon_init[0] && has_fb) {
+        /* Boot straight into Zircon userspace (e.g. /sbin/zircon_init). */
+        bootsplash_set_progress(100, "Zircon");
+        bootsplash_finish();
+        zircon_launch_elf(boot_zircon_init);
+    } else if (has_fb) {
         /* Wire the X11 compositor into the desktop render path. */
         extern void xs_init(void);
         xs_init();

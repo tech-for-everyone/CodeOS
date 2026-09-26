@@ -14,7 +14,7 @@ pub use crate::device::ncvm_create;
 pub const TYPE_NCVM: &::std::ffi::CStr = c"ncvm";
 
 // Layout constants, kept in sync with include/hw/ncvm/ncvm.h.
-pub const NCVM_DEFAULT_IOBASE: u32 = 0x630;
+pub const NCVM_DEFAULT_IOBASE: u32 = 0x740;
 pub const NCVM_IO_PORTS: u64 = 8;
 pub const NCVM_MMIO_SIZE: u64 = 0x1000;
 pub const NCVM_MMIO_BASE: u64 = 0xfeb00000;
