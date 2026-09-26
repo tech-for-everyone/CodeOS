@@ -542,9 +542,9 @@ pub unsafe extern "C" fn penrose_init() {
     // drained below so the WM manages + tiles them before the first frame.
     unsafe {
         let titles: [*const u8; 3] = [
-            b"penrose shell\0".as_ptr(),
-            b"codeos files\0".as_ptr(),
-            b"openweb\0".as_ptr(),
+            b"HyperDE\0".as_ptr(),
+            b"DevStore\0".as_ptr(),
+            b"OpenWeb\0".as_ptr(),
         ];
         for &title in &titles {
             prs_demo_window(title);

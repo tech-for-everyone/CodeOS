@@ -424,7 +424,7 @@ uint32_t prs_demo_window(const char *title) {
 }
 
 void prs_demo_spawn(void) {
-    const char *names[] = { "penrose shell", "codeos files", "openweb" };
+    const char *names[] = { "HyperDE", "DevStore", "OpenWeb" };
     for (int i = 0; i < 3; i++) {
         prs_demo_window(names[i]);
     }

@@ -1,4 +1,5 @@
 #include "ext2.h"
+#include "jbd2.h"
 #include "part.h"
 #include "string.h"
 #include "kprintf.h"
@@ -92,6 +93,16 @@ static uint8_t *block_buf;
 static size_t block_buf_size;
 
 static int read_block(uint32_t block_num) {
+    /* A journalled write is not on the disk yet -- it lives in the open
+     * transaction's staging area until that transaction commits. So a
+     * metadata block that this transaction has already modified has to be
+     * served from there, or the reader gets a stale copy and makes a
+     * plausible-looking but wrong decision with it: the block allocator
+     * re-reading the block bitmap hands the same block to every allocation
+     * in the transaction, which is how a 20-block file ends up with one
+     * block stored thirteen times in its inode. */
+    if (jbd2_peek_block(block_num, block_buf) == 0) return 0;
+
     uint32_t sector = (uint64_t)block_num * block_size / BLOCK_SECTOR_SIZE;
     uint32_t count = block_size / BLOCK_SECTOR_SIZE;
     if (count > 255) count = 255;
@@ -133,7 +144,19 @@ int ext2_mount(int part_idx) {
     uint32_t bg_count = (sb.blocks_count + blocks_per_group - 1) / blocks_per_group;
     bg_desc_blocks = (bg_count * sizeof(struct ext2_bg_desc) + block_size - 1) / block_size;
 
+    /* Initialize the journal if this is an ext3 image (journal inode present). */
+    if (sb.journal_inum != 0) {
+        jbd2_init(sb.journal_inum);
+    }
+
     ext2_mounted_val = 1;
+    return 1;
+}
+
+int ext2_unmount(void) {
+    if (!ext2_mounted_val) return 0;
+    jbd2_shutdown(1);
+    ext2_mounted_val = 0;
     return 1;
 }
 
@@ -150,7 +173,9 @@ static int read_bg_desc(int bg, struct ext2_bg_desc *bgd) {
     return 0;
 }
 
-int ext2_read_inode(int inode_num, void *buf) {
+static int write_block(uint32_t block_num);
+
+int ext2_read_inode(int inode_num, volatile struct ext2_inode *buf) {
     int bg = (inode_num - 1) / inodes_per_group;
     int idx = (inode_num - 1) % inodes_per_group;
     struct ext2_bg_desc bgd;
@@ -160,7 +185,7 @@ int ext2_read_inode(int inode_num, void *buf) {
     if (block_size == 0) return -1;
     uint32_t block_num = tbl_block + byte_off / block_size;
     if (read_block(block_num) < 0) return -1;
-    memcpy(buf, block_buf + (byte_off % block_size), inode_size > 128 ? 128 : inode_size);
+    memcpy((void *)buf, block_buf + (byte_off % block_size), inode_size > 128 ? 128 : inode_size);
     return 0;
 }
 
@@ -435,7 +460,7 @@ static int write_bg_desc(int bg, struct ext2_bg_desc *bgd) {
     return write_block(block_num);
 }
 
-int ext2_write_inode(int inode_num, void *buf) {
+int ext2_write_inode(int inode_num, const volatile struct ext2_inode *buf) {
     int bg = (inode_num - 1) / inodes_per_group;
     int idx = (inode_num - 1) % inodes_per_group;
     struct ext2_bg_desc bgd;
@@ -444,7 +469,7 @@ int ext2_write_inode(int inode_num, void *buf) {
     uint32_t byte_off = idx * inode_size;
     uint32_t block_num = tbl_block + byte_off / block_size;
     if (read_block(block_num) < 0) return -1;
-    memcpy(block_buf + (byte_off % block_size), buf, inode_size > 128 ? 128 : inode_size);
+    memcpy(block_buf + (byte_off % block_size), (const void *)buf, inode_size > 128 ? 128 : inode_size);
     return write_block(block_num);
 }
 
@@ -463,6 +488,10 @@ static void set_block_bit(int bg, uint32_t bit, int used) {
     write_block(block_num);
 }
 
+static uint32_t bg_first_block(uint32_t bg) {
+    return bg * blocks_per_group + sb.first_data_block;
+}
+
 static uint32_t alloc_block_goal(int preferred_bg) {
     uint32_t bg_count = (sb.blocks_count + blocks_per_group - 1) / blocks_per_group;
     if (preferred_bg < 0 || (uint32_t)preferred_bg >= bg_count) preferred_bg = 0;
@@ -473,11 +502,11 @@ static uint32_t alloc_block_goal(int preferred_bg) {
         if (read_bg_desc(bg, &bgd) < 0) continue;
         if (bgd.free_blocks_count == 0) continue;
 
+        uint32_t first = bg_first_block(bg);
         uint32_t blocks_in_bg = blocks_per_group;
         if (bg == bg_count - 1) {
-            uint32_t last_bg_start = bg * blocks_per_group;
-            if (last_bg_start + blocks_in_bg > sb.blocks_count)
-                blocks_in_bg = sb.blocks_count - last_bg_start;
+            if (first + blocks_in_bg > sb.blocks_count)
+                blocks_in_bg = sb.blocks_count - first;
         }
 
         uint32_t bitmap_block = bgd.block_bitmap;
@@ -489,7 +518,7 @@ static uint32_t alloc_block_goal(int preferred_bg) {
 
             for (int bit = 0; bit < 8 && (int)(byte_idx * 8 + bit) < (int)blocks_in_bg; bit++) {
                 if (!(block_buf[byte_idx % block_size] & (1 << bit))) {
-                    uint32_t abs_block = bg * blocks_per_group + byte_idx * 8 + bit;
+                    uint32_t abs_block = first + byte_idx * 8 + bit;
                     if (abs_block >= sb.blocks_count) continue;
 
                     set_block_bit(bg, byte_idx * 8 + bit, 1);
@@ -519,10 +548,10 @@ static uint32_t alloc_block_for_inode(int inode_num) {
 
 static void free_block(uint32_t phys_block) {
     if (phys_block == 0) return;
-    uint32_t bg = phys_block / blocks_per_group;
+    uint32_t bg = (phys_block - sb.first_data_block) / blocks_per_group;
     struct ext2_bg_desc bgd;
     read_bg_desc(bg, &bgd);
-    uint32_t bit = phys_block - bg * blocks_per_group;
+    uint32_t bit = phys_block - bg_first_block(bg);
     set_block_bit(bg, bit, 0);
     bgd.free_blocks_count++;
     write_bg_desc(bg, &bgd);
@@ -963,7 +992,6 @@ int ext2_mkdir(const char *path) {
     dotdot->name[1] = '.';
 
     write_block(block);
-
     inode.block[0] = block;
     inode.size = block_size;
     inode.blocks = block_size / 512;
@@ -1135,3 +1163,29 @@ int ext2_rmdir(const char *path) {
     free_inode(ent.inode);
     return 0;
 }
+
+/* ── raw block access for the journal ────────────────────────────
+ * jbd2.c must move bytes between the journal and the filesystem without
+ * disturbing block_buf, which callers still hold across the call. These
+ * move bytes without touching the shared buffer.
+ */
+int ext2_read_block_from(uint32_t block_num, void *dst) {
+    partition_t p;
+    if (part_get(sb_part_idx, &p) < 0) return -1;
+    return block_read_sectors(p.start_lba + block_num * block_size / BLOCK_SECTOR_SIZE,
+                                (uint8_t)(block_size / BLOCK_SECTOR_SIZE), dst);
+}
+
+int ext2_write_block_from(uint32_t block_num, const void *src) {
+    return write_sectors(block_num * block_size / BLOCK_SECTOR_SIZE,
+                            block_size / BLOCK_SECTOR_SIZE, src);
+}
+
+uint32_t ext2_inode_phys_block(int inode_num, int block_idx) {
+    struct ext2_inode inode;
+    if (ext2_read_inode(inode_num, &inode) < 0) return 0;
+    return read_inode_block(&inode, block_idx);
+}
+
+uint32_t ext2_block_count(void) { return sb.blocks_count; }
+uint32_t ext2_block_size(void) { return block_size; }

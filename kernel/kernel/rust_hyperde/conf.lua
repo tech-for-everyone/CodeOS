@@ -155,7 +155,7 @@ return {
     windowrule = {
         float = { "dmenu", "file_progress", "splash" },
         fullscreen = { "mpv", "firefox" },
-        maximized = { "codeos-files", "openweb" },
+        maximized = { "DevStore", "OpenWeb" },
         pinned = { "dunst" },
         ignore_focus = { "splash" },
         center = { "confirm", "dialog" },

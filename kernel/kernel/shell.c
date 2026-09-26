@@ -3516,6 +3516,146 @@ static void cmd_cat_ext(int argc, char **argv) {
     free(buf);
 }
 
+/* fstest — direct exercise of the ext2/3 driver.
+ *
+ * The shell's ordinary ls/cat/mkdir go through fs.c, which is the in-memory
+ * node table backing the initramfs; they never touch the block driver. ext2
+ * is only reachable from the shell via mount/els/ecat, and none of those write,
+ * so without this builtin the disk filesystem has no regression coverage at
+ * all -- and the write path (ext2_write_file_path, reached in anger only by
+ * the editor and the downloader) would be entirely untested.
+ *
+ * Output is one "FSTEST <ok|FAIL> <name>" line per check so a harness can
+ * assert on it, and a final count. */
+static int fstest_checks;
+static int fstest_failed;
+/* `fstest N` runs only the first N checks, so the first operation that damages
+ * the image can be identified by bisecting instead of by reading the whole
+ * result and guessing. 0 means run everything. */
+static int fstest_limit;
+
+static void fstest_report(const char *name, int ok) {
+    fstest_checks++;
+    if (!ok) fstest_failed++;
+    kprintf("FSTEST %s %s\n", ok ? "ok" : "FAIL", name);
+}
+
+/* Sections consult this rather than letting fstest_report() stop them: the
+ * operations after the limit must not run at all, or the damage they cause
+ * cannot be attributed to the one we are looking for. */
+static int fstest_stop(void) {
+    return fstest_limit && fstest_checks >= fstest_limit;
+}
+
+static void cmd_fstest(int argc, char **argv) {
+    fstest_checks = 0;
+    fstest_failed = 0;
+    /* No atoi() in the freestanding libc, so parse the optional limit here. */
+    fstest_limit = 0;
+    if (argc > 1) {
+        for (const char *p = argv[1]; *p >= '0' && *p <= '9'; p++)
+            fstest_limit = fstest_limit * 10 + (*p - '0');
+    }
+
+    if (!ext2_mounted()) {
+        kprintf("FSTEST FAIL not-mounted\n");
+        kprintf("FSTEST RESULT 0/1\n");
+        return;
+    }
+
+    char buf[4096];
+    int n;
+
+    /* Start from a known state. These are best-effort: they are expected to
+     * fail on a clean image, so the result is deliberately ignored. */
+    ext2_rmdir("/fstest");
+    ext2_unlink("/fstest_small");
+    ext2_unlink("/fstest_big");
+    ext2_unlink("/fstest_dir/a");
+    ext2_rmdir("/fstest_dir");
+
+    if (fstest_stop()) goto done;
+
+    /* 1. read a file that mke2fs populated, proving mount + read path */
+    n = ext2_read_file_path("/etc/conf.txt", buf, sizeof(buf) - 1);
+    fstest_report("read-prepopulated",
+                  n > 0 && memcmp(buf, "alpha content one", 18) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 2. create + write + read back a small file */
+    /* ext2_creat returns the new inode number, not 0 -- a strictly stronger
+     * success test than "== 0", and one that also catches a creat that reports
+     * success without allocating anything. */
+    int rc = ext2_creat("/fstest_small");
+    fstest_report("creat-small", rc > 0);
+    rc = ext2_write_file_path("/fstest_small", "hello fstest", 12);
+    fstest_report("write-small", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_small", buf, sizeof(buf) - 1);
+    fstest_report("read-back-small", n == 12 && memcmp(buf, "hello fstest", 12) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 3. rewrite with a different length, to catch size/blocks bookkeeping
+     *    that only goes wrong when the new content is not the old length */
+    rc = ext2_write_file_path("/fstest_small", "a much longer second write", 27);
+    fstest_report("rewrite-longer", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_small", buf, sizeof(buf) - 1);
+    fstest_report("read-back-longer",
+                  n == 27 && memcmp(buf, "a much longer second write", 27) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 4. directories */
+    rc = ext2_mkdir("/fstest_dir");
+    fstest_report("mkdir", rc == 0);
+    rc = ext2_creat("/fstest_dir/a");
+    fstest_report("creat-in-dir", rc > 0);
+    rc = ext2_write_file_path("/fstest_dir/a", "nested", 6);
+    fstest_report("write-in-dir", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_dir/a", buf, sizeof(buf) - 1);
+    fstest_report("read-nested", n == 6 && memcmp(buf, "nested", 6) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 5. a file large enough to need an indirect block. With a 1 KiB block
+     *    size that is 12 direct blocks, so 20 KiB forces block 12 to be
+     *    allocated and the single-indirect path to be walked. This is the
+     *    case that a journal must treat as ordinary data. */
+    {
+        static char big[20480];
+        for (int i = 0; i < (int)sizeof(big); i++)
+            big[i] = (char)('A' + (i % 26));
+        rc = ext2_creat("/fstest_big");
+        fstest_report("creat-big", rc > 0);
+        rc = ext2_write_file_path("/fstest_big", big, sizeof(big));
+        fstest_report("write-big", rc == (int)sizeof(big));
+        static char rbig[20480];
+        n = ext2_read_file_path("/fstest_big", rbig, sizeof(rbig));
+        fstest_report("read-back-big",
+                      n == (int)sizeof(big) && memcmp(big, rbig, sizeof(big)) == 0);
+    }
+
+    if (fstest_stop()) goto done;
+
+    /* 6. unlink and confirm it is gone; rmdir and confirm it is gone */
+    rc = ext2_unlink("/fstest_dir/a");
+    fstest_report("unlink", rc == 0);
+    n = ext2_read_file_path("/fstest_dir/a", buf, sizeof(buf) - 1);
+    fstest_report("unlinked-is-gone", n < 0);
+    rc = ext2_rmdir("/fstest_dir");
+    fstest_report("rmdir", rc == 0);
+    n = ext2_read_file_path("/fstest_dir", buf, sizeof(buf) - 1);
+    fstest_report("rmdir-is-gone", n < 0);
+
+done:
+    kprintf("FSTEST RESULT %d/%d\n",
+            fstest_checks - fstest_failed, fstest_checks);
+}
+
 static void cmd_printenv(int argc, char **argv) {
     if (argc > 1) {
         const char *v = env_get(argv[1]);
@@ -3951,6 +4091,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "setcursor") == 0) cmd_setcursor(argc, argv);
     else if (strcmp(cmd, "lsblk") == 0) cmd_lsblk();
     else if (strcmp(cmd, "mount") == 0) cmd_mount(argc, argv);
+    else if (strcmp(cmd, "fstest") == 0) cmd_fstest(argc, argv);
     else if (strcmp(cmd, "els") == 0) cmd_ls_ext(argc, argv);
     else if (strcmp(cmd, "ecat") == 0) cmd_cat_ext(argc, argv);
     else if (strcmp(cmd, "sysinfo") == 0) cmd_sysinfo();
