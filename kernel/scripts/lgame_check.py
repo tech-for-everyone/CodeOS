@@ -192,6 +192,86 @@ def check_pong(rgb, w, h):
     return (not fails), fails
 
 
+def find_colour(rgb, w, x0, y0, x1, y1, colour, tol=6):
+    """Bounding box + count of `colour` inside the given rect, or None.
+
+    Two things this has to get right, and the first version got neither:
+
+    - The match must be **pixel-aligned**. Searching the raw byte buffer for a
+      3-byte pattern also finds straddles: a run of GAME-OVER red
+      (255,68,68) contains the head pattern 44-FF-44 starting one byte into the
+      run, and `bytes.count` reported 1418 head pixels where a per-pixel
+      comparison found 418. Every geometry assertion below was being computed
+      from straddles until the `i % 3` test went in.
+    - It must scan a rect the caller chose, not silently the board. Bounding the
+      scan to the board and then asserting the result is inside the board is a
+      tautology; a control that painted a segment past the last cell could not
+      make it fail.
+
+    Byte-wise `find` per row rather than a per-pixel Python loop: the board is
+    720x480 and the capture loop calls this several times a frame.
+    """
+    pat = bytes(colour)
+    lo_x, hi_x, lo_y, hi_y, n = x1, -1, y1, -1, 0
+    for y in range(y0, y1):
+        base = y * w
+        row = rgb[(base + x0) * 3:(base + x1) * 3]
+        start = 0
+        while True:
+            i = row.find(pat, start)
+            if i < 0:
+                break
+            start = i + 1
+            if i % 3:
+                continue          # straddles two pixels; not a pixel of colour
+            x = x0 + i // 3
+            lo_x, hi_x = min(lo_x, x), max(hi_x, x)
+            lo_y, hi_y = min(lo_y, y), max(hi_y, y)
+            n += 1
+    return None if n == 0 else (lo_x, hi_x, lo_y, hi_y, n)
+
+
+# Snake's own constants, read from lgame_snake.c -- never eyeballed.
+#   SNAKE_COLS/ROWS/TILE = 30/20/24, board_x = (800 - 30*24)/2 = 40, board_y = 70
+#   clear 0x0A1410, board outline 0x334433 at (38,68) 724x484,
+#   head 0x44FF44, body 0x228822, food 0xFF5533
+# lgame_color_hex reads r=(h>>16) g=(h>>8) b=(h&0xFF) a=(h>>24), so these are
+# plain RGB triples.
+SNAKE_BG     = (0x0A, 0x14, 0x10)
+SNAKE_BORDER = (0x33, 0x44, 0x33)
+SNAKE_HEAD   = (0x44, 0xFF, 0x44)
+SNAKE_BODY   = (0x22, 0x88, 0x22)
+SNAKE_FOOD   = (0xFF, 0x55, 0x33)
+SNAKE_X, SNAKE_Y = 40, 70
+SNAKE_W, SNAKE_H = 30 * 24, 20 * 24      # 720 x 480, cells only
+SNAKE_TILE = 24
+
+
+def cell_span(box):
+    """A find_colour bbox as a (col0, col1, row0, row1) cell range.
+
+    Each segment is a 22x22 fill inset 1px into its 24px cell, so pixel x maps
+    to cell floor((x - SNAKE_X - 1) / 24).
+    """
+    x0, x1, y0, y1, _ = box
+    return ((x0 - (SNAKE_X + 1)) // SNAKE_TILE, (x1 - (SNAKE_X + 1)) // SNAKE_TILE,
+            (y0 - (SNAKE_Y + 1)) // SNAKE_TILE, (y1 - (SNAKE_Y + 1)) // SNAKE_TILE)
+
+
+def cell_gap(a, b):
+    """Manhattan distance between two cell spans; 0 if they overlap.
+
+    1 means the two spans share a cell edge -- which is what a snake's head and
+    body always do, coiled or straight, because the segment ahead of the head is
+    in the body. 0 means they overlap, i.e. the head was drawn into the body.
+    """
+    ac0, ac1, ar0, ar1 = cell_span(a)
+    bc0, bc1, br0, br1 = cell_span(b)
+    dx = 0 if ac0 <= bc1 and bc0 <= ac1 else min(abs(ac0 - bc1), abs(bc0 - ac1))
+    dy = 0 if ar0 <= br1 and br0 <= ar1 else min(abs(ar0 - br1), abs(br0 - ar1))
+    return dx + dy
+
+
 def check_snake(rgb, w, h):
     fails = []
 
@@ -201,7 +281,72 @@ def check_snake(rgb, w, h):
             fails.append(f"{what} @({x},{y}) = rgb{tuple(got)}, want "
                          f"rgb{color}")
 
-    want("background", 200, 300, BG)
+    # Static geometry. The outline is 1px -- fb_drawrect draws four lines, not
+    # a filled rect -- and sits 2px outside the cells, so these pixels are the
+    # border wherever the snake happens to be.
+    want("empty board cell", 200, 300, SNAKE_BG)
+    want("background below the score line", 100, 620, SNAKE_BG)
+    want("board outline, left edge", 38, 300, SNAKE_BORDER)
+    want("board outline, top edge", 100, 68, SNAKE_BORDER)
+
+    board = (SNAKE_X, SNAKE_Y, SNAKE_X + SNAKE_W, SNAKE_Y + SNAKE_H)
+    inside = (0, 0, w, h)
+    # Scanned across the WHOLE frame, not the board. Bounding the scan to the
+    # board and then asserting the result is inside the board is a tautology --
+    # the first version of this check did exactly that, and a control that
+    # painted a segment past the last cell could not make it fail. Widening the
+    # scan is what gives the confinement and grid assertions teeth: a segment
+    # drawn at the wrong offset now shows up outside the board, or off-grid.
+    head = find_colour(rgb, w, *inside, SNAKE_HEAD)
+    body = find_colour(rgb, w, *inside, SNAKE_BODY)
+    food = find_colour(rgb, w, *inside, SNAKE_FOOD)
+
+    if head is None:
+        fails.append(f"no head colour rgb{SNAKE_HEAD} anywhere in the frame")
+    if body is None:
+        fails.append(f"no body colour rgb{SNAKE_BODY} anywhere in the frame")
+    if food is None:
+        fails.append(f"no food colour rgb{SNAKE_FOOD} anywhere in the frame "
+                     f"(food is respawned when eaten, so it is always drawn)")
+
+    # Head/body contiguity, replacing a direction assertion that was simply
+    # false. `init_snake` puts the head at col 13 with the body at 14..16, so
+    # the head is the LEFTMOST segment at rest; `step_snake` shifts the body
+    # down the array and assigns the new head last, and it only becomes
+    # max-x after several moves -- and the capture can land at any point in
+    # between. "head is rightmost" is not an invariant, and it was asserted as
+    # one. What *is* invariant is that the head shares an edge with the body:
+    # the segment in front of the head is always part of the body, whether the
+    # snake is lying straight or coiled. Manhattan distance 1 says exactly
+    # that, and it also catches the head being drawn on top of the body (0).
+    if head and body:
+        gap = cell_gap(head, body)
+        if gap != 1:
+            fails.append(f"head is not edge-adjacent to the body: head cells "
+                         f"{cell_span(head)}, body cells {cell_span(body)}, "
+                         f"manhattan gap {gap} (want 1)")
+
+    # Geometry. Each segment is a 22x22 fill inset 1px into its 24px cell, so a
+    # correct segment starts at SNAKE_X + col*24 + 1 -- fixed residues, which
+    # catch a wrong board origin or a wrong inset just as well as confinement.
+    for name, box in (("head", head), ("body", body)):
+        if not box:
+            continue
+        x0, x1, y0, y1, _ = box
+        if not (SNAKE_X <= x0 and x1 < SNAKE_X + SNAKE_W
+                and SNAKE_Y <= y0 and y1 < SNAKE_Y + SNAKE_H):
+            fails.append(f"{name} {box} is not confined to the board "
+                         f"({SNAKE_X},{SNAKE_Y})-"
+                         f"({SNAKE_X + SNAKE_W},{SNAKE_Y + SNAKE_H})")
+        if x0 % SNAKE_TILE != (SNAKE_X + 1) % SNAKE_TILE:
+            fails.append(f"{name} left edge x={x0} is off the {SNAKE_TILE}px "
+                         f"cell grid (want x % {SNAKE_TILE} == "
+                         f"{(SNAKE_X + 1) % SNAKE_TILE})")
+        if y0 % SNAKE_TILE != (SNAKE_Y + 1) % SNAKE_TILE:
+            fails.append(f"{name} top edge y={y0} is off the {SNAKE_TILE}px "
+                         f"cell grid (want y % {SNAKE_TILE} == "
+                         f"{(SNAKE_Y + 1) % SNAKE_TILE})")
+
     return (not fails), fails
 
 
