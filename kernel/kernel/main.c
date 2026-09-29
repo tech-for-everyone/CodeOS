@@ -389,6 +389,12 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     /* Boot-time Zircon userspace override (zircon.init= on cmdline). */
     static char boot_zircon_init[128];
 
+    /* no-desktop: skip the Qt6 desktop and drop to the kernel shell even
+     * when a framebuffer is present. The shell is the only way to reach the
+     * fullscreen builtins (games pong/snake, calc, ...), and without this
+     * flag a graphical boot runs qt_desktop_run() straight past it. */
+    static int boot_no_desktop = 0;
+
     /* ─────────────────────────────────────────────────────────────────
      *  PHASE 0: Early console — serial only, no output redirection
      * ───────────────────────────────────────────────────────────────── */
@@ -418,6 +424,10 @@ void kernel_main(uint32_t magic __attribute__((unused)),
                 extern void prs_set_demos_disabled(int);
                 prs_set_demos_disabled(1);
                 kprintf("boot: no-demos -- self-test windows suppressed\n");
+            }
+            if (strstr(cl, "no-desktop")) {
+                boot_no_desktop = 1;
+                kprintf("boot: no-desktop -- Qt6 desktop suppressed, using the shell\n");
             }
             /* zircon.init=/path → boot straight into a Zircon ELF instead
              * of the Qt6 desktop (zircon_init/zircond in /sbin/). */
@@ -749,7 +759,7 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         bootsplash_set_progress(100, "Zircon");
         bootsplash_finish();
         zircon_launch_elf(boot_zircon_init);
-    } else if (has_fb) {
+    } else if (has_fb && !boot_no_desktop) {
         /* Wire the X11 compositor into the desktop render path. */
         extern void xs_init(void);
         xs_init();
@@ -757,7 +767,10 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         extern void user_wm_init(void);
         user_wm_init();
     }
-    if (has_fb && qt_desktop_init()) {
+    if (boot_no_desktop && has_fb) {
+        /* Clear the splash so the shell has the framebuffer to itself. */
+        bootsplash_finish();
+    } else if (has_fb && qt_desktop_init()) {
         bootsplash_set_progress(100, "Ready!");
         bootsplash_finish();
         qt_desktop_run();
