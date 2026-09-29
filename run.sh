@@ -85,6 +85,7 @@ QEMU_ARGS=(
     -smp "$CPUS"
     -serial stdio
     -enable-kvm
+    -accel kvm
 )
 
 # USB devices
