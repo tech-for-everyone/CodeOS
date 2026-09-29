@@ -2218,7 +2218,11 @@ static void cmd_lgame_game(int argc, char **argv) {
         return;
     }
     kprintf("lgame: fullscreen mode (ESC to quit back to shell)\n");
-    if (argv[0][0] == 'p')
+    /* Both of this function's call sites already gate on a full strcmp, so
+     * argv[0] is only ever "pong" or "snake" and the first-character test was
+     * not actually a bug. Matching the whole name anyway: it is the form that
+     * stays correct if a third caller is ever added, and the cost is nil. */
+    if (strcmp(argv[0], "pong") == 0)
         lgame_pong_run();
     else
         lgame_snake_run();
