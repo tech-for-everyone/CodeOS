@@ -61,6 +61,16 @@ int  lgame_running(void);
 void lgame_title(const char *title);
 
 /* ── Timing ── */
+/* Target frames per second. lgame_frame_begin() paces the loop to this by
+ * sleeping off the remainder of the frame, so a game that redraws as fast as
+ * the blit allows does not peg a core. Set to 0 to disable pacing and get the
+ * old uncapped behaviour. */
+#define LGAME_TARGET_FPS 60
+/* Hard ceiling on a single frame's delta, so a frame that was delayed (a
+ * debugger, a mode switch, a long preemption) cannot teleport every moving
+ * object across the screen on the next update. */
+#define LGAME_MAX_DT_MS  100
+
 uint64_t lgame_time_ms(void);
 uint64_t lgame_delta_time_ms(void);
 void     lgame_frame_begin(void);
@@ -121,5 +131,20 @@ int  lgame_mouse_button(int button);  /* 0=left, 1=right */
 /* ── Math helpers ── */
 int  lgame_rand(int min, int max);
 void lgame_srand(uint32_t seed);
+
+/* ── Self test ── */
+/* Renders a fixed, known frame and returns 0 on success, negative on the
+ * first failure. Exists because most of this API is otherwise unreachable
+ * from the shipped binary: the two games only use the rect, pixel and text
+ * primitives, so --gc-sections discards the entire texture path along with
+ * everything that calls it. A defect in code that no binary contains cannot
+ * be runtime-verified, and a fix to it is only build-verified.
+ *
+ * scripts/lgame_check.py asserts the resulting framebuffer against the
+ * colours named below, so this is a real pixel check, not a self-report.
+ * The probe rectangles are laid out in the top-left of a 1280x800 surface and
+ * each occupies a distinct 64x64 block; the test draws a half-transparent
+ * quad over a solid backdrop so the blend result is a known value. */
+int  lgame_selftest(void);
 
 #endif

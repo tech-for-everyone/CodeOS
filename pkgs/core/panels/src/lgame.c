@@ -110,7 +110,10 @@ uint64_t lgame_delta_time_ms(void) {
 void lgame_frame_begin(void) {
     uint64_t now = timer_get_milliseconds();
     uint64_t delta = now - lgame.last_frame_ms;
-    if (delta > 1000) delta = 16;
+    /* Clamp to LGAME_MAX_DT_MS so one stalled frame cannot make the next
+     * update integrate the whole stall at once. (Was 1000ms, which let a
+     * one-second hitch fling the ball clear off the pitch.) */
+    if (delta > LGAME_MAX_DT_MS) delta = LGAME_MAX_DT_MS;
     lgame.dt_ms = delta;
     lgame.last_frame_ms = now;
     lgame.frame_start_ms = now;
@@ -120,6 +123,25 @@ void lgame_frame_begin(void) {
 
     /* Start drawing into the back buffer for this frame */
     fb_backbuffer_begin();
+
+#if LGAME_TARGET_FPS > 0
+    /* Pace the loop. The game loop is
+     *     while (lgame_running()) { lgame_frame_begin(); ...update...; draw;
+     *                              lgame_present(); }
+     * so without this it runs flat out: the ball's speed is dt-based and so
+     * stays correct, but the whole thing burns a full core redrawing the
+     * same scene thousands of times a second. Sleeping the remainder of the
+     * frame yields the CPU (timer_sleep() halts rather than spins) and caps
+     * the rate at LGAME_TARGET_FPS.
+     *
+     * Only sleeps when the frame came in *under* budget -- if drawing already
+     * took longer than the target, there is nothing left to wait off and
+     * delaying further would only make the game slower than it already is.
+     */
+    uint32_t budget_ms = 1000u / (uint32_t)LGAME_TARGET_FPS;
+    if (delta < budget_ms)
+        timer_sleep_ms((uint32_t)(budget_ms - delta));
+#endif
 }
 
 /* ── 2D Rendering ── */
@@ -209,28 +231,42 @@ void lgame_draw_text_scaled(int x, int y, const char *text, lgame_color_t color,
     uint32_t fh = fb_getheight();
     uint32_t pitch = fb_get_pitch() / 4;
     uint32_t c = lgame_color_pack(color);
-    uint32_t gx = (uint32_t)(x < 0 ? 0 : x);
     while (*text) {
         const uint8_t *glyph = font8x16[(unsigned char)*text];
         for (int row = 0; row < 16; row++) {
-            if ((uint32_t)(y + row * scale) >= fh) continue;
+            /* Clip in signed space. The old guard was
+             *   if ((uint32_t)(y + row * scale) >= fh) continue;
+             * which only tests the top edge: a negative y makes the cast wrap
+             * to a huge value, so *every* row is skipped and text drawn above
+             * the framebuffer silently vanishes -- but only because the cast
+             * happened to save it, not because the case was handled. The
+             * inner loop then recomputed the same row as `uint32_t py` and
+             * indexed buf[py * pitch + qx] with it, so a row that was not
+             * skipped for a large negative y would have wrapped to a
+             * multi-gigabyte offset. Signed compares bound both ends.
+             */
+            int row_y = y + row * scale;
+            if (row_y >= (int)fh) break;          /* past the bottom: done */
+            if (row_y + scale <= 0) continue;     /* still above the top */
             uint8_t bits = glyph[row];
+            if (!bits) continue;
             for (int col = 0; col < 8; col++) {
                 if (!((bits >> (7 - col)) & 1)) continue;
-                uint32_t px = gx + (uint32_t)col * scale;
-                if (px >= fw) continue;
+                int base_x = x + col * scale;
+                if (base_x >= (int)fw) break;
+                if (base_x + scale <= 0) continue;
                 for (int sy = 0; sy < scale; sy++) {
-                    uint32_t py = (uint32_t)y + (uint32_t)(row * scale + sy);
-                    if (py >= fh) break;
+                    int py = row_y + sy;
+                    if (py < 0 || py >= (int)fh) continue;
                     for (int sx = 0; sx < scale; sx++) {
-                        uint32_t qx = px + (uint32_t)sx;
-                        if (qx >= fw) break;
-                        buf[py * pitch + qx] = c;
+                        int qx = base_x + sx;
+                        if (qx < 0 || qx >= (int)fw) continue;
+                        buf[(size_t)py * pitch + qx] = c;
                     }
                 }
             }
         }
-        gx += (uint32_t)(8 * scale);
+        x += 8 * scale;
         text++;
     }
 }
@@ -297,56 +333,105 @@ void lgame_free_texture(lgame_texture_t *tex) {
     free(tex);
 }
 
+/* Source-over blend of a texel onto a destination pixel, in place.
+ *
+ * The destination framebuffer is opaque (alpha 0xFF everywhere -- fb_fill and
+ * the games' clear colour both write 0xFF into the top byte, and
+ * `lgame_color_hex` promotes a zero alpha byte to 255), so the result is
+ * opaque too and the alpha channel is written as 0xFF rather than dropped.
+ *
+ * The old code wrote `rb | g`, which emitted an alpha byte of 0. Nothing
+ * noticed because the framebuffer is never itself a texture source today --
+ * but `lgame_create_texture_from_screen` does exactly that, so any code that
+ * round-tripped a screenshot through a texture would have read every pixel
+ * back as fully transparent.
+ *
+ * The channel weights are divided by 255 (the true alpha range) rather than
+ * shifted right by 8. `>> 8` divides by 256, which is not the same operation:
+ * at alpha=255 it darkens every channel by a factor of 255/256, so a fully
+ * opaque blend was never quite the source colour.
+ *
+ * It is also the *wrong shift for these masks*. `src & 0x00FF00` already sits
+ * in the green slot, so shifting it right by 8 drops green into the blue slot
+ * and leaves the result needing a re-mask; combined with the missing alpha
+ * byte, a mid-alpha blend came out as visibly wrong colours, e.g. 50% white
+ * over blue producing rgb(190,255,255) instead of rgb(127,127,255).
+ * scripts/lgame_check.py asserts every alpha on a ramp, and reverting this
+ * helper to `>> 8` makes exactly the three mid-alpha probes fail while the
+ * fully-opaque and fully-transparent columns still pass -- the old code
+ * short-circuited those two, so that is the sensitivity the fix had to have.
+ */
+static inline void lgame_blend_pixel(uint32_t *dstp, uint32_t src) {
+    uint32_t dst = *dstp;
+    uint32_t alpha = src >> 24;
+    if (alpha == 255) {
+        *dstp = src;
+        return;
+    }
+    if (alpha == 0)
+        return;
+    uint32_t inv = 255 - alpha;
+    uint32_t rb = (((src & 0xFF00FF) * alpha + (dst & 0xFF00FF) * inv) / 255) & 0xFF00FF;
+    uint32_t g  = (((src & 0x00FF00) * alpha + (dst & 0x00FF00) * inv) / 255) & 0x00FF00;
+    *dstp = 0xFF000000u | rb | g;
+}
+
 void lgame_draw_texture(lgame_texture_t *tex, int x, int y) {
     if (!lgame.initialized || !tex || !tex->pixels) return;
     uint32_t *buf = fb_get_active_buffer();
     if (!buf) return;
     uint32_t fw = fb_getwidth();
     uint32_t fh = fb_getheight();
-    uint32_t pitch = fw;
+    uint32_t pitch = fb_get_pitch() / 4;
     for (int row = 0; row < tex->height; row++) {
         int py = y + row;
         if (py < 0 || (uint32_t)py >= fh) continue;
         for (int col = 0; col < tex->width; col++) {
             int px = x + col;
             if (px < 0 || (uint32_t)px >= fw) continue;
-            uint32_t src = tex->pixels[(size_t)row * tex->width + col];
-            uint32_t alpha = src >> 24;
-            if (alpha == 255) {
-                buf[(size_t)py * pitch + px] = src;
-            } else if (alpha > 0) {
-                uint32_t dst = buf[(size_t)py * pitch + px];
-                uint32_t inv = 255 - alpha;
-                uint32_t rb = ((src & 0xFF00FF) * alpha + (dst & 0xFF00FF) * inv) >> 8;
-                uint32_t g  = ((src & 0x00FF00) * alpha + (dst & 0x00FF00) * inv) >> 8;
-                buf[(size_t)py * pitch + px] = rb | g;
-            }
+            lgame_blend_pixel(&buf[(size_t)py * pitch + px],
+                              tex->pixels[(size_t)row * tex->width + col]);
         }
     }
 }
 
 void lgame_draw_texture_tinted(lgame_texture_t *tex, int x, int y, lgame_color_t tint) {
-    if (!lgame.initialized || !tex) return;
+    if (!lgame.initialized || !tex || !tex->pixels) return;
     uint32_t t = lgame_color_pack(tint);
     uint32_t ta = (t >> 24) & 0xFF;
     uint32_t tr = (t >> 16) & 0xFF;
     uint32_t tg = (t >> 8) & 0xFF;
     uint32_t tb = t & 0xFF;
 
+    uint32_t *buf = fb_get_active_buffer();
+    if (!buf) return;
+    uint32_t fw = fb_getwidth();
+    uint32_t fh = fb_getheight();
+    uint32_t pitch = fb_get_pitch() / 4;
+
+    /* The tint is applied to a local copy of each texel and blended straight
+     * into the back buffer. This used to write the tinted values back through
+     * `tex->pixels` and then call lgame_draw_texture(), which made a *draw*
+     * call mutate its own source: drawing the same sprite twice with
+     * different tints produced two different results, and a second
+     * lgame_draw_texture() of the untinted sprite came out tinted. A caller
+     * that reused one texture for a normal blit and a highlighted blit had
+     * no way back to the original pixels short of recreating it.
+     */
     for (int row = 0; row < tex->height; row++) {
+        int py = y + row;
+        if (py < 0 || (uint32_t)py >= fh) continue;
         for (int col = 0; col < tex->width; col++) {
-            uint32_t *px = &tex->pixels[(size_t)row * tex->width + col];
-            uint32_t s = *px;
-            uint32_t sr = (s >> 16) & 0xFF;
-            uint32_t sg = (s >> 8) & 0xFF;
-            uint32_t sb = s & 0xFF;
-            sr = (sr * tr) / 255;
-            sg = (sg * tg) / 255;
-            sb = (sb * tb) / 255;
-            *px = (ta << 24) | (sr << 16) | (sg << 8) | sb;
+            int px = x + col;
+            if (px < 0 || (uint32_t)px >= fw) continue;
+            uint32_t s = tex->pixels[(size_t)row * tex->width + col];
+            uint32_t sr = ((s >> 16) & 0xFF) * tr / 255;
+            uint32_t sg = ((s >> 8) & 0xFF) * tg / 255;
+            uint32_t sb = (s & 0xFF) * tb / 255;
+            lgame_blend_pixel(&buf[(size_t)py * pitch + px],
+                              (ta << 24) | (sr << 16) | (sg << 8) | sb);
         }
     }
-    lgame_draw_texture(tex, x, y);
 }
 
 void lgame_draw_texture_scaled(lgame_texture_t *tex, int x, int y, int scale) {
@@ -371,22 +456,13 @@ static void blit_tex(uint32_t *buf, uint32_t pitch, uint32_t fw, uint32_t fh,
             if (px0 < 0 || (uint32_t)px0 >= fw) continue;
             int sxr = sx + col;
             uint32_t src = px[(size_t)syr * (size_t)tex_w + (size_t)sxr];
-            uint32_t alpha = src >> 24;
             for (int sy01 = 0; sy01 < scale; sy01++) {
                 uint32_t qy = (uint32_t)py + (uint32_t)sy01;
                 if (qy >= fh) break;
                 for (int sx01 = 0; sx01 < scale; sx01++) {
                     uint32_t qx = (uint32_t)px0 + (uint32_t)sx01;
                     if (qx >= fw) break;
-                    if (alpha == 255) {
-                        buf[qy * pitch + qx] = src;
-                    } else if (alpha > 0) {
-                        uint32_t dst = buf[qy * pitch + qx];
-                        uint32_t inv = 255 - alpha;
-                        uint32_t rb = ((src & 0xFF00FF) * alpha + (dst & 0xFF00FF) * inv) >> 8;
-                        uint32_t g  = ((src & 0x00FF00) * alpha + (dst & 0x00FF00) * inv) >> 8;
-                        buf[qy * pitch + qx] = rb | g;
-                    }
+                    lgame_blend_pixel(&buf[qy * pitch + qx], src);
                 }
             }
         }
@@ -422,17 +498,8 @@ void lgame_draw_texture_flipped(lgame_texture_t *tex, int x, int y, int flip_x, 
         for (int col = 0; col < tex->width; col++) {
             int px = x + (flip_x ? (tex->width - 1 - col) : col);
             if (px < 0 || (uint32_t)px >= fw) continue;
-            uint32_t src = tex->pixels[(size_t)row * tex->width + col];
-            uint32_t alpha = src >> 24;
-            if (alpha == 255) {
-                buf[(size_t)py * pitch + px] = src;
-            } else if (alpha > 0) {
-                uint32_t dst = buf[(size_t)py * pitch + px];
-                uint32_t inv = 255 - alpha;
-                uint32_t rb = ((src & 0xFF00FF) * alpha + (dst & 0xFF00FF) * inv) >> 8;
-                uint32_t g  = ((src & 0x00FF00) * alpha + (dst & 0x00FF00) * inv) >> 8;
-                buf[(size_t)py * pitch + px] = rb | g;
-            }
+            lgame_blend_pixel(&buf[(size_t)py * pitch + px],
+                              tex->pixels[(size_t)row * tex->width + col]);
         }
     }
 }
@@ -564,4 +631,101 @@ int lgame_rand(int min, int max) {
 
 void lgame_srand(uint32_t seed) {
     lgame_rand_seed = seed;
+}
+
+/* ── Self test ── */
+/* Most of this API is otherwise unreachable from the shipped binary. The two
+ * games use only the rect, pixel and text primitives, so --gc-sections
+ * discards the whole texture path, and a defect in code no binary contains
+ * cannot be runtime-verified -- only build-verified. This draws a fixed frame
+ * whose every probe pixel has an exactly computable colour, and
+ * scripts/lgame_check.py asserts those pixels.
+ *
+ * Layout, 64x64 blocks left to right from the top-left, over an opaque blue
+ * backdrop (0x0000FF):
+ *
+ *   A (0,0)     left as bare backdrop: the "untouched" control
+ *   B (64,0)    the whole texture, an alpha ramp from opaque white at its
+ *               left column to fully transparent at its right. A ramp makes
+ *               the blend formula checkable across every alpha instead of at
+ *               one lucky value.
+ *   C (128,0)   the same texture tinted green. This shows the tint is applied
+ *               at all; it cannot show whether it was applied *in place*,
+ *               because B is already on screen by the time C is drawn. G is
+ *               the mutation probe.
+ *   D (192,0)   the texture's top-left 32x32 quadrant at 2x (scaled region).
+ *   E (256,0)   the whole texture flipped in both axes. There is no
+ *               region-flipped entry point -- lgame_draw_texture_flipped()
+ *               takes the full texture plus two flags -- so this is the
+ *               complete 64x64 ramp mirrored, opaque column now on the right.
+ *   F (900,0)   text drawn at y = -8, deliberately off the top edge. Under
+ *               the old unsigned guard a row was written at a multi-gigabyte
+ *               offset; it must now clip cleanly, with only rows 0..7 of the
+ *               16-row glyph landing on screen. Placed clear of the blocks so
+ *               it cannot overwrite the A control.
+ *   G (384,0)   the same texture drawn UNTINTED, after the tinted draw at C.
+ *               Must be identical to B. This is the mutation probe: B, D and
+ *               E would also be wrong under the old in-place tint, but only as
+ *               a side effect of being drawn later, so G is the only
+ *               assertion that tests the claim itself. Reinstating the old
+ *               write-back (with the blend left untouched, so C is unaffected)
+ *               fails all six G assertions plus D and E, and leaves A, B, C
+ *               and F passing -- the check fires on the mutation and only on
+ *               the mutation.
+ */
+#define SELFTEST_BLOCK   64
+#define SELFTEST_BG      0xFF0000FFu   /* opaque blue  */
+#define SELFTEST_OPAQUE  0xFFFFFFFFu   /* opaque white */
+#define SELFTEST_TINT    0xFF00FF00u   /* green tint   */
+
+int lgame_selftest(void) {
+    if (lgame_init(0, 0, "LGame selftest") != LGAME_OK)
+        return -1;
+
+    lgame_frame_begin();
+    lgame_clear(lgame_color_hex(SELFTEST_BG));
+
+    /* 64x64 alpha ramp: opaque white at x=0 fading to fully transparent at
+     * x=63, so each column has a known (src, alpha) pair. */
+    lgame_texture_t *tex = lgame_create_texture(64, 64);
+    if (!tex) {
+        lgame_quit();
+        return -2;
+    }
+    for (int y = 0; y < 64; y++) {
+        for (int x = 0; x < 64; x++) {
+            uint32_t a = (uint32_t)(255 - (x * 255) / 63);
+            tex->pixels[(size_t)y * 64 + x] = (a << 24) | 0x00FFFFFFu;
+        }
+    }
+
+    /* Blend/ramp probe. */
+    lgame_draw_texture(tex, SELFTEST_BLOCK * 1, 0);
+    /* Tint probe -- drawn after B, so an in-place mutation would show in B. */
+    lgame_draw_texture_tinted(tex, SELFTEST_BLOCK * 2, 0,
+                              lgame_color_hex(SELFTEST_TINT));
+    /* Scaled region probe. */
+    lgame_draw_texture_region_scaled(tex, 0, 0, 32, 32,
+                                     SELFTEST_BLOCK * 3, 0, 2);
+    /* Flip probe. */
+    lgame_draw_texture_flipped(tex, SELFTEST_BLOCK * 4, 0, 1, 1);
+    /* Off the top edge: must clip, not wrap. Kept well clear of the probe
+     * blocks -- the glyph is 16 rows tall starting at y=-8, so rows 0..7 DO
+     * land on screen by design, and placing this over block A would destroy
+     * the untouched control the check relies on. */
+    lgame_draw_text(900, -8, "clip", lgame_color_hex(SELFTEST_OPAQUE));
+
+    /* Mutation probe, and the only one that tests the actual claim: draw the
+     * texture UNTINTED again, after the tinted draw above. It must be
+     * pixel-identical to block B. When the tint was applied in place, this
+     * block came out green -- a *draw* call had permanently altered its
+     * source, so a caller that blitted one sprite normally and then
+     * highlighted it could never get the original back. */
+    lgame_draw_texture(tex, SELFTEST_BLOCK * 6, 0);
+
+    lgame_present();
+
+    lgame_free_texture(tex);
+    lgame_quit();
+    return 0;
 }

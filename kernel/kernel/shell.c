@@ -2225,6 +2225,24 @@ static void cmd_lgame_game(int argc, char **argv) {
     kprintf("lgame: returned to shell\n");
 }
 
+/* `lgame-selftest` -- draws the fixed probe frame from lgame_selftest() and
+ * leaves it on screen. scripts/lgame_check.py asserts the pixels, which is
+ * the only way the texture path gets exercised: nothing else in the binary
+ * calls it, so without this --gc-sections drops it and any fix to it would
+ * be build-verified only. */
+static void cmd_lgame_selftest(void) {
+    extern int lgame_selftest(void);
+    if (!fb_available()) {
+        kprintf("lgame: no framebuffer available (needs graphical boot)\n");
+        return;
+    }
+    int rc = lgame_selftest();
+    if (rc == 0)
+        kprintf("lgame: selftest frame drawn\n");
+    else
+        kprintf("lgame: selftest FAILED rc=%d\n", rc);
+}
+
 static void cmd_sort(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: sort <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
@@ -4146,6 +4164,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "gplay") == 0) cmd_gplay(argc, argv);
     else if (strcmp(cmd, "pong") == 0) cmd_lgame_game(argc, argv);
     else if (strcmp(cmd, "snake") == 0) cmd_lgame_game(argc, argv);
+    else if (strcmp(cmd, "lgame-selftest") == 0) cmd_lgame_selftest();
     else if (strcmp(cmd, "sort") == 0) cmd_sort(argc, argv);
     else if (strcmp(cmd, "cp") == 0) cmd_cp(argc, argv);
     else if (strcmp(cmd, "mv") == 0) cmd_mv(argc, argv);
