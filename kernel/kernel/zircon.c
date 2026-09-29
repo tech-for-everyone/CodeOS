@@ -3,7 +3,9 @@
  * Adds Android-style app drawer, notification panel, and app lifecycle. */
 
 #include "zircon.h"
-#include "windows.h"
+/* The color palette (C_BASE, C_MAUVE, ...) lives in the canonical panel
+ * header; kernel/kernel/windows.h only defines a window_t for Zircon and
+ * would shadow the unqualified "windows.h" include (same include guard). */
 #include "panels.h"
 #include "kprintf.h"
 #include "string.h"
@@ -406,8 +408,11 @@ void zircon_launch_elf(const char *path) {
     uint64_t rsp = elf_setup_stack(stack, entry, 1, argv, 0, 0, &auxv);
     kprintf("zircon: launching '%s' entry=0x%lx rsp=0x%lx\n", path, entry, rsp);
 
-    /* Create process so syscalls (brk, mmap, exit) work */
-    proc_create(path, entry, stack);
+    /* Create process so syscalls (brk, mmap, exit) work.
+     * Level 3 (kernel app): Zircon brings its own init and compositor and
+     * runs as a co-equal OS on top of this kernel, not as an ordinary
+     * program, so it sits at the same level as the window protocol. */
+    proc_create(path, entry, stack, LEVEL_KERNEL);
 
     user_mode_set_return(shell_exec_done);
     user_mode_begin();

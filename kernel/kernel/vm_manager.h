@@ -100,9 +100,6 @@ int   vm_list_all(char names[][VM_NAME_MAX], int max);
 int   vm_get_state(int vm_id);
 const char *vm_state_str(vm_state_t state);
 
-/* ─── VM exec (run command inside VM) ─── */
-int vm_exec(int vm_id, const char *path, int argc, char **argv, char **envp);
-
 /* ─── VM info / inspect ─── */
 int vm_inspect(int vm_id, char *buf, int max);
 int vm_logs(int vm_id, char *buf, int max);

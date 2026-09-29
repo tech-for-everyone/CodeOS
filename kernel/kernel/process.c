@@ -36,7 +36,8 @@ int proc_init(void) {
     return 0;
 }
 
-int proc_create(const char *name, uint64_t entry, uint64_t stack_top) {
+int proc_create(const char *name, uint64_t entry, uint64_t stack_top,
+                proc_level_t level) {
     int slot = find_proc_slot();
     if (slot < 0) return -1;
 
@@ -58,12 +59,18 @@ int proc_create(const char *name, uint64_t entry, uint64_t stack_top) {
     p->children = 0;
     p->sibling = 0;
     p->next = 0;
+    p->level = level;
     setup_fds(p);
 
     if (!current_process)
         current_process = p;
 
     return p->pid;
+}
+
+int proc_create_level(const char *name, uint64_t entry, uint64_t stack_top,
+                proc_level_t level) {
+    return proc_create(name, entry, stack_top, level);
 }
 
 int proc_fork(void) {
@@ -522,4 +529,54 @@ void pipe_close(pipe_t *p, int writer) {
         p->open = 0;
         pmm_free_page(virt_to_phys((uint64_t)p));
     }
+}
+
+/* ── Task / security levels ── */
+
+int proc_set_level(int pid, proc_level_t level) {
+    if (level < LEVEL_CONTAINER || level > LEVEL_KERNEL) return -1;
+    for (int i = 0; i < PROC_MAX; i++) {
+        if (proc_table[i].pid == pid && proc_table[i].state != PROC_DEAD) {
+            proc_table[i].level = level;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+proc_level_t proc_get_level(int pid) {
+    for (int i = 0; i < PROC_MAX; i++) {
+        if (proc_table[i].pid == pid && proc_table[i].state != PROC_DEAD)
+            return proc_table[i].level;
+    }
+    /* Unreachable pid.  Report LEVEL_KERNEL rather than LEVEL_CONTAINER: the
+     * authorization check must never be handed a low level for a pid that
+     * does not exist, or `kill <any number>` would always be permitted.
+     * Denying is the safe direction.  systemm_level_of() checks existence
+     * separately and reports -1, so this fallback is only reached by callers
+     * that did not. */
+    return LEVEL_KERNEL;
+}
+
+/* Does a live task with this pid exist?  Needed to tell "no such task" apart
+ * from "that task is above your level" -- without it, an unreachable pid
+ * reports the fallback level and the error message blames the wrong thing. */
+int proc_exists(int pid) {
+    for (int i = 0; i < PROC_MAX; i++) {
+        if (proc_table[i].pid == pid && proc_table[i].state != PROC_DEAD)
+            return 1;
+    }
+    return 0;
+}
+
+/* Look up a task by pid and copy its name into buf.
+ * Returns 0 on success, -1 if not found. */
+int proc_get_pid_name(int pid, char *buf, int len) {
+    for (int i = 0; i < PROC_MAX; i++) {
+        if (proc_table[i].pid == pid && proc_table[i].state != PROC_DEAD) {
+            strncpy_safe(buf, proc_table[i].name, len);
+            return 0;
+        }
+    }
+    return -1;
 }

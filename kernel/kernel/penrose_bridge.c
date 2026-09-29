@@ -416,6 +416,19 @@ void prs_emit_motion(int mx, int my, uint16_t state) {
 // a window is created and immediately "mapped" which queues a MapRequest for
 // the window manager to pick up, tile and present.
 
+/* Set by main.c from the `no-demos` command-line flag. Read through
+ * prs_demos_disabled() rather than directly so the Rust side has one symbol to
+ * bind and the C side keeps the definition to itself. */
+static int g_demos_disabled;
+
+int prs_demos_disabled(void) {
+    return g_demos_disabled;
+}
+
+void prs_set_demos_disabled(int disabled) {
+    g_demos_disabled = disabled;
+}
+
 uint32_t prs_demo_window(const char *title) {
     uint32_t xid = x11_create_kernel_window(title, 480, 360);
     if (!xid) return 0;
@@ -424,7 +437,7 @@ uint32_t prs_demo_window(const char *title) {
 }
 
 void prs_demo_spawn(void) {
-    const char *names[] = { "penrose shell", "codeos files", "openweb" };
+    const char *names[] = { "HyperDE", "DevStore", "OpenWeb" };
     for (int i = 0; i < 3; i++) {
         prs_demo_window(names[i]);
     }

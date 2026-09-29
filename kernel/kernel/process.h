@@ -11,6 +11,29 @@
 #define PROC_PIPE_BUF 4096
 #define PROC_NS_MAX 8  /* one per namespace type */
 
+/* Security levels for the task manager.
+ *
+ * Higher numbers are higher privilege.  Enforcement is asymmetric:
+ * a task may only interfere with (kill, inspect, signal) tasks at
+ * a *lower* level.  This keeps level-3 kernel apps (android-containers,
+ * the X11 window protocol) safe from level-2 programs and below, and
+ * keeps containerized (level-0) workloads isolated from everything
+ * that isn't explicitly authorized.
+ *
+ *   0  container  — containerized env, potentially dangerous
+ *   1  os         — run by the actual OS, still high security
+ *   2  user       — most programs; hyperde talks to systemm which
+ *                    talks to the kernel at this level
+ *   3  kernel     — kernel apps, high priority: android-containers,
+ *                    x11 window protocol, etc.
+ */
+typedef enum {
+    LEVEL_CONTAINER = 0,
+    LEVEL_OS,
+    LEVEL_USER,
+    LEVEL_KERNEL
+} proc_level_t;
+
 /* Virtual address layout — must agree with VMM and linker. */
 #define PROC_BRK_BASE  0x60000000UL
 #define PROC_BRK_MAX   0x70000000UL
@@ -89,6 +112,13 @@ typedef struct process {
     /* personality (syscall translation) */
     int personality;
 
+    /* Terminal discipline: non-zero once the process clears ICANON via
+     * TCSETS, which makes sys_read() deliver keystrokes as they arrive
+     * instead of line-buffering them. Scoped per-process on purpose — a
+     * global would let a raw-mode app leave the shell in raw mode after it
+     * exits, since fd 0 is shared. */
+    int tty_raw;
+
     /* namespace membership (one per namespace type) */
     int namespaces[PROC_NS_MAX];
 
@@ -99,6 +129,10 @@ typedef struct process {
     int uid, gid;
     int euid, egid;
 
+    /* security level (0=container, 1=os, 2=user, 3=kernel).
+     * A task may only interfere with tasks at a *lower* level. */
+    proc_level_t level;
+
     /* process tree */
     struct process *next;
     struct process *children;
@@ -108,7 +142,10 @@ typedef struct process {
 
 /* ── Process lifecycle ── */
 int proc_init(void);
-int proc_create(const char *name, uint64_t entry, uint64_t stack_top);
+int proc_create(const char *name, uint64_t entry, uint64_t stack_top,
+                proc_level_t level);
+int proc_create_level(const char *name, uint64_t entry, uint64_t stack_top,
+                proc_level_t level);
 int proc_fork(void);
 uint64_t proc_exec(uint64_t entry, uint64_t stack_top, int argc, char **argv, char **envp, elf_auxv_info_t *auxv);
 int proc_exit(int status);
@@ -138,5 +175,17 @@ void pipe_close(pipe_t *p, int writer);
 extern process_t *current_process;
 extern process_t proc_table[PROC_MAX];
 extern int next_pid;
+
+/* ── Task / security levels ──
+ * These are the raw accessors: read a level, set a level.  They do not
+ * enforce anything.  The rule for who may act on whom, and the code that
+ * enforces it, is in systemm.h -- the shell builtin and the kill/tkill/tgkill
+ * syscalls all go through there so there is one implementation.  Do not add a
+ * second authorization check here. */
+int  proc_set_level(int pid, proc_level_t level);
+proc_level_t proc_get_level(int pid);
+int  proc_list(void);
+int  proc_exists(int pid);
+int  proc_get_pid_name(int pid, char *buf, int len);
 
 #endif

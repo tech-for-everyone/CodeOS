@@ -262,10 +262,63 @@ int container_add_volume(container_t *c, const char *host_path, const char *cont
     return 0;
 }
 
+/* ─── Return leaf for a container session ───
+ *
+ * Both container entry points (container_start, container_exec) are execs:
+ * they hand the process to a new image and let it run.  The syscall or builtin
+ * that asked is never resumed, and its frame is not something to return into.
+ *
+ * So the return is a *named leaf*, which is what user_mode_force_return() jumps
+ * to when the container program exits.  Passing 0 instead makes user_mode_enter
+ * fall back to (%rsp) -- the C return address inside the calling function -- and
+ * that is what used to fault: control came back into a container-exec syscall
+ * whose trapframe no longer had a stack underneath it, and the eventual iretq
+ * jumped into a nonsense address (user mode, cs=0x23, garbage RIP).
+ *
+ * The android window bridge is the one thing that must be undone before
+ * stopping: user_wm_setup() arms fds 3/4 for /system/app payloads, and the
+ * matching user_wm_release() has no other caller in the tree.  It used to sit on
+ * the abandoned return path, so it had in practice never run.
+ *
+ * Single-slot, like the statics in umode.c that the same mechanism relies on:
+ * a container exec nested inside another container exec would overwrite it.
+ * Nothing in the tree does that, and execve has the same shape.
+ */
+static int container_wm_release_pid;
+static int container_unwind;
+
+static void container_exec_done(void) {
+    if (container_wm_release_pid) {
+        user_wm_release(container_wm_release_pid);
+        container_wm_release_pid = 0;
+    }
+    if (container_unwind) {
+        /* The frame beneath this leaf is dead, so unwind exactly one exec
+         * level.  Reaching a container session from a syscall means the caller
+         * was a real process, so proc_exec() replaced its program: that syscall
+         * is never resumed and its trapframe is not something to return into.
+         * Returning normally here popped an address off the inner stack and
+         * jumped into garbage -- a user-mode fault at a nonsense RIP.
+         *
+         * user_mode_restore() only puts the globals back, it does not touch the
+         * live %rsp, so the return has to go through user_mode_force_return(),
+         * which restores the enclosing kernel stack and re-enters the enclosing
+         * leaf.  That leaf (shell_exec_done) *can* return, because beneath it is
+         * the shell builtin that started the outer exec -- the same reason the
+         * plain `task run` path works, and why one level is the right amount.
+         *
+         * The kernel-context case must NOT do this: there the C frame that
+         * called user_mode_enter is still live on the shell's kernel stack, so
+         * returning normally lands back in it and the shell carries on. */
+        container_unwind = 0;
+        user_mode_restore();
+        user_mode_force_return(); /* does not return */
+    }
+    shell_exec_done();
+}
+
 /* ─── Start a container (launch PID 1) ─── */
 int container_start(int id) {
-    int saved_ns[PROC_NS_MAX];
-    int saved_cg, saved_uid, saved_gid, saved_euid, saved_egid;
     container_t *c = container_get(id);
     if (!c) { kprintf("appvm: unknown container\n"); return -1; }
     if (c->state != CONTAINER_CREATED && c->state != CONTAINER_STOPPED) {
@@ -320,24 +373,34 @@ int container_start(int id) {
 
     /* Prefer a dedicated process for pid-1 (fresh address space, safe from
      * any enclosing user session). Fall back to the shared-process path only
-     * when called from inside a user syscall. */
+     * when called from inside a user syscall.
+     *
+     * This is the container *initializer* -- the entrypoint the image boots --
+     * and it is LEVEL_KERNEL, not LEVEL_CONTAINER.  The split matters: the
+     * initializer is the trusted part that establishes the container's
+     * namespaces, cgroup and uid mapping, and it is what launches the
+     * untrusted apps that then run at LEVEL_CONTAINER (see
+     * container_exec).  A level-0 initializer could not launch anything,
+     * because 0 >= 0 holds but 0 >= 3 does not, so the kernel-side session
+     * managers would have no authority over their own containers.
+     *
+     * The initializer is reachable only from kernel code: waydroid, the
+     * android session and VM boot all call container_start(), and none of them
+     * has a process_t, so nothing a user can signal can reach this level. */
     process_t *proc = proc_current();
+    /* Captured before the proc_create branch below, which reassigns proc and
+     * would make this unconditionally true. */
     int host_mode = (proc != 0);
     uint64_t rsp;
     if (!proc) {
         rsp = elf_setup_stack(stack, entry, 1, init_argv, 0, 0, &auxv);
         if (!rsp) return -1;
-        proc_create(full_path, entry, stack);
+        proc_create(full_path, entry, stack, LEVEL_KERNEL);
         proc = proc_current();
         if (!proc) return -1;
     } else {
         rsp = proc_exec(entry, stack, 1, init_argv, 0, &auxv);
         if (!rsp) return -1;
-        for (int i = 0; i < PROC_NS_MAX; i++)
-            saved_ns[i] = proc->namespaces[i];
-        saved_cg = proc->cgroup_id;
-        saved_uid = proc->uid; saved_gid = proc->gid;
-        saved_euid = proc->euid; saved_egid = proc->egid;
     }
 
     if (proc) {
@@ -377,27 +440,27 @@ int container_start(int id) {
             (c->ip >> 24) & 0xFF, (c->ip >> 16) & 0xFF,
             (c->ip >> 8) & 0xFF, c->ip & 0xFF);
 
+    /* Same drop-into-user-mode contract as container_exec() and the execve
+     * syscall: name a leaf, point syscall_kernel_rsp at the process's own
+     * stack, and never expect to be resumed.  See container_exec_done for why
+     * the return has to be a named leaf rather than this function's C return
+     * address, and why a private stack was wrong (too small, freed under a
+     * live trapframe, and leaked outright in the kernel-context branch that
+     * returned before the free).
+     *
+     * container_unwind picks between the two correct endings: kernel-context
+     * callers keep returning into this live frame, and only the syscall case
+     * unwinds a level. */
     extern uint64_t syscall_kernel_rsp;
-    uint64_t outer_scrsp = syscall_kernel_rsp;
-    uint64_t nest_phys = (uint64_t)pmm_alloc_page();
-    uint64_t nest_scrsp = nest_phys ? (uint64_t)phys_to_virt(nest_phys) + 0x1000 : outer_scrsp;
-    syscall_kernel_rsp = nest_scrsp;
+    container_unwind = host_mode;
     user_mode_preserve();
-    user_mode_set_return(host_mode ? 0 : shell_exec_done);
+    user_mode_set_return(container_exec_done);
     user_mode_begin();
+    thread_t *t = sched_current();
+    if (t && t->syscall_stack_top)
+        syscall_kernel_rsp = (uint64_t)t->syscall_stack_top;
     user_mode_enter(entry, rsp);
-    if (!host_mode)
-        return 0; /* control never resumes here in kernel-context mode */
-    syscall_kernel_rsp = outer_scrsp;
-    user_mode_restore();
-    if (nest_phys) pmm_free_page(nest_phys);
-    if (proc_current()) {
-        for (int i = 0; i < PROC_NS_MAX; i++)
-            proc_current()->namespaces[i] = saved_ns[i];
-        proc_current()->cgroup_id = saved_cg;
-        proc_current()->uid = saved_uid; proc_current()->gid = saved_gid;
-        proc_current()->euid = saved_euid; proc_current()->egid = saved_egid;
-    }
+    /* Control never resumes here; the initializer's exit lands in the leaf. */
     return 0;
 }
 
@@ -509,8 +572,6 @@ int container_mark_running(int id) {
 }
 
 int container_exec(int id, const char *path, int argc, char **argv, char **envp) {
-    int saved_ns[PROC_NS_MAX];
-    int saved_cg, saved_uid, saved_gid, saved_euid, saved_egid;
     container_t *c = container_get(id);
     if (!c) {
         kprintf("appvm: unknown container id %d\n", id);
@@ -551,17 +612,26 @@ int container_exec(int id, const char *path, int argc, char **argv, char **envp)
     if (!cur) {
         rsp = elf_setup_stack(stack, entry, argc, argv, envc, envp, &auxv);
         if (!rsp) return -1;
-        proc_create(full_path, entry, stack);
+        /* An *app inside* a running container: LEVEL_CONTAINER, regardless of
+         * who asked.  container_start() creates the initializer at
+         * LEVEL_KERNEL; this is the untrusted payload that runs under it.
+         * Inheriting the caller's level here would let a level-2 user obtain a
+         * level-2 process inside a container, and the containment would mean
+         * nothing. */
+        proc_create(full_path, entry, stack, LEVEL_CONTAINER);
         cur = proc_current();
         if (!cur) return -1;
     } else {
         rsp = proc_exec(entry, stack, argc, argv, envp, &auxv);
         if (!rsp) return -1;
-        for (int i = 0; i < PROC_NS_MAX; i++)
-            saved_ns[i] = cur->namespaces[i];
-        saved_cg = cur->cgroup_id;
-        saved_uid = cur->uid; saved_gid = cur->gid;
-        saved_euid = cur->euid; saved_egid = cur->egid;
+        /* proc_exec() reuses the caller's process_t, so without this the
+         * process would keep whatever level it had and a level-2 user could
+         * ask to run inside a container and stay level-2 -- and then signal
+         * level-2 processes on the *host*, which is not what containment
+         * means.  Entering the container as an app drops it to
+         * LEVEL_CONTAINER, the same level the branch above gives a freshly
+         * created payload.  Both branches therefore agree. */
+        proc_set_level(cur->pid, LEVEL_CONTAINER);
     }
 
     if (cur) {
@@ -580,32 +650,46 @@ int container_exec(int id, const char *path, int argc, char **argv, char **envp)
     }
 
     /* Android apps draw through the user-window bridge (fds 3/4). */
-    if (cur && is_android_app_path(path))
+    container_wm_release_pid = 0;
+    if (cur && is_android_app_path(path)) {
         user_wm_setup(cur->pid);
-
-    extern uint64_t syscall_kernel_rsp;
-    uint64_t outer_scrsp = syscall_kernel_rsp;
-    uint64_t nest_phys = (uint64_t)pmm_alloc_page();
-    uint64_t nest_scrsp = nest_phys ? (uint64_t)phys_to_virt(nest_phys) + 0x1000 : outer_scrsp;
-    syscall_kernel_rsp = nest_scrsp;
-    user_mode_preserve();
-    user_mode_set_return(host_mode ? 0 : shell_exec_done);
-    user_mode_begin();
-    user_mode_enter(entry, rsp);
-    if (is_android_app_path(path) && proc_current())
-        user_wm_release(proc_current()->pid);
-    if (!host_mode)
-        return 0; /* control never resumes here in kernel-context mode */
-    syscall_kernel_rsp = outer_scrsp;
-    user_mode_restore();
-    if (nest_phys) pmm_free_page(nest_phys);
-    if (proc_current()) {
-        for (int i = 0; i < PROC_NS_MAX; i++)
-            proc_current()->namespaces[i] = saved_ns[i];
-        proc_current()->cgroup_id = saved_cg;
-        proc_current()->uid = saved_uid; proc_current()->gid = saved_gid;
-        proc_current()->euid = saved_euid; proc_current()->egid = saved_egid;
+        container_wm_release_pid = cur->pid;
     }
+
+    /* Drop into the new image exactly the way the execve syscall does
+     * (SYSCALL_EXECVE in syscall.c).  That is what this is: proc_exec above
+     * replaced this process's program, so the syscall that asked for it is
+     * never resumed.
+     *
+     * Naming a return leaf is the load-bearing part.  The leaf is what
+     * user_mode_force_return() jumps to when the nested program exits; 0 would
+     * make user_mode_enter fall back to (%rsp) instead -- the C return address
+     * inside this function -- so control would re-enter the middle of the
+     * abandoned container-exec syscall, whose trapframe by then no longer had a
+     * stack underneath it.
+     *
+     * syscall_kernel_rsp likewise points at the process's own syscall stack,
+     * which sched.c sized at SYSCALL_STACK_SIZE and which is still alive.  It
+     * used to be a private page, which was wrong three ways: too small for the
+     * handler chain that runs on it, freed on the way out while the live
+     * trapframe still stood on it, and leaked outright in the kernel-context
+     * branch (which returned before the free).  Together those faulted on
+     * return -- user mode (cs=0x23) executing a kernel address, because the
+     * iretq frame the syscall epilogue popped had been overwritten.
+     *
+     * Only the syscall case unwinds a level; see container_exec_done. */
+    extern uint64_t syscall_kernel_rsp;
+    container_unwind = host_mode;
+    user_mode_preserve();
+    user_mode_set_return(container_exec_done);
+    user_mode_begin();
+    thread_t *t = sched_current();
+    if (t && t->syscall_stack_top)
+        syscall_kernel_rsp = (uint64_t)t->syscall_stack_top;
+    user_mode_enter(entry, rsp);
+    /* Control never resumes here.  The nested program's exit lands in
+     * shell_exec_done, and this process's original program was replaced by
+     * proc_exec, so there is nothing left to return to. */
     return 0;
 }
 

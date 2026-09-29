@@ -5,6 +5,7 @@
 #include "mm.h"
 #include "shell.h"
 #include "fs.h"
+#include "ext2.h"
 #include "stdlib.h"
 
 /* Simple script_atoll implementation for freestanding environment */
@@ -1799,17 +1800,41 @@ finish:
     return 0;
 }
 
+/* Upper bound on a script read from a file. Matches the cap the fs.c branch
+ * of script_run_file() has always applied. */
+#define SCRIPT_FILE_MAX (256 * 1024)
+
 int script_run_file(const char *path) {
     int sz = 0, dir = 0;
-    if (fs_get_info((char*)path, &sz, &dir) < 0 || dir || sz <= 0) {
+    char *buf = NULL;
+    int n = -1;
+
+    /* Two sources, tried in the same order as sys_open(): the in-memory fs.c
+     * namespace (the initramfs) first, then the mounted ext2 volume. The ext2
+     * fallback is not optional -- main.c PHASE 7 mounts a block partition and
+     * then immediately calls this on /scripts/test1.script and
+     * /scripts/complex.script, and fs.c only ever contains what
+     * initramfs_populate() put there, so without it every script on a disk
+     * volume silently fails to open. The shell's own `cat` has the same gap,
+     * which is why `els`/`ecat` exist as separate ext2-aware builtins. */
+    if (fs_get_info((char*)path, &sz, &dir) >= 0 && !dir && sz > 0) {
+        if (sz > 256 * 1024) sz = 256 * 1024;
+        buf = malloc(sz + 1);
+        if (!buf) { kprintf("script: OOM\n"); return -1; }
+        n = fs_read((char*)path, buf, sz);
+    } else if (ext2_mounted()) {
+        /* Size is not known up front here, so read into a fixed buffer the
+         * same way cmd_cat_ext does. */
+        buf = malloc(SCRIPT_FILE_MAX + 1);
+        if (!buf) { kprintf("script: OOM\n"); return -1; }
+        n = ext2_read_file_path(path, buf, SCRIPT_FILE_MAX);
+    }
+
+    if (n <= 0) {
         kprintf("script: cannot open '%s'\n", path);
+        free(buf);
         return -1;
     }
-    if (sz > 256 * 1024) sz = 256 * 1024;
-    char *buf = malloc(sz + 1);
-    if (!buf) { kprintf("script: OOM\n"); return -1; }
-    int n = fs_read((char*)path, buf, sz);
-    if (n <= 0) { free(buf); return -1; }
     buf[n] = 0;
     script_val_t r;
     int rc = script_eval(buf, &r);

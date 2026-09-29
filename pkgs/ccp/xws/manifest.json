@@ -1,0 +1,15 @@
+{
+  "name": "xws",
+  "version": "2025.1",
+  "description": "X Window System (X11) core protocol and extension definitions",
+  "license": "MIT/BSD-2-Clause",
+  "type": "source",
+  "category": "Development",
+  "repo": "ccp",
+  "provides": ["x11", "xorg"],
+  "homepage": "https://www.x.org",
+  "url": "https://gitlab.freedesktop.org/xorg/proto/xorgproto",
+  "upstream_name": "xorgproto",
+  "source": "upstream",
+  "note": "Counterpart to wayland-protocol: the X11 protocol headers and specification documents (xorgproto). Nothing in the tree consumes these headers. kernel/kernel/x11_server.c implements a partial in-kernel X11 server with its own local opcode table in x11_server.h and does not include them, and there is no X client in the tree to connect. Listed so GUI packages have real 'x11'/'xorg' capabilities to depend on."
+}

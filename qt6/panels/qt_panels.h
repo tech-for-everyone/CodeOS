@@ -656,7 +656,7 @@ private:
     QString m_status;
     int m_scrollY = 0;
     int m_maxScroll = 0;
-    QRect m_backRect, m_fwdRect, m_reloadRect, m_newTabRect;
+    QRect m_backRect, m_fwdRect, m_reloadRect, m_stopRect, m_newTabRect;
     QList<QRect> m_tabRects;
     QList<QRect> m_tabCloseRects;
     int m_hoveredTab = -1;

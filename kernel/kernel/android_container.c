@@ -180,15 +180,6 @@ const char *android_container_state_str(android_container_state_t state) {
     }
 }
 
-/* ─── Container exec ─── */
-
-int android_container_exec(int id, const char *path, int argc, char **argv) {
-    android_container_t *c = android_container_get(id);
-    if (!c || c->state != ANDROID_STATE_RUNNING) return -1;
-
-    return container_exec(c->container_id, path, argc, argv, NULL);
-}
-
 /* ─── Container info ─── */
 
 int android_container_inspect(int id, char *buf, int max) {

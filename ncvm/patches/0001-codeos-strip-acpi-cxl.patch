@@ -1,0 +1,79 @@
+diff --git a/hw/acpi/Kconfig b/hw/acpi/Kconfig
+index daabbe6..584624f 100644
+--- a/hw/acpi/Kconfig
++++ b/hw/acpi/Kconfig
+@@ -5,7 +5,6 @@ config ACPI_X86
+     bool
+     select ACPI
+     select ACPI_NVDIMM
+-    select ACPI_CXL
+     select ACPI_CPU_HOTPLUG
+     select ACPI_MEMORY_HOTPLUG
+     select ACPI_HMAT
+diff --git a/hw/arm/Kconfig b/hw/arm/Kconfig
+index 7877506..034accc 100644
+--- a/hw/arm/Kconfig
++++ b/hw/arm/Kconfig
+@@ -34,7 +34,6 @@ config ARM_VIRT
+     select ACPI_PCIHP
+     select ACPI_PCI_BRIDGE
+     select VIRTIO_MEM_SUPPORTED
+-    select ACPI_CXL
+     select ACPI_HMAT
+ 
+ config CUBIEBOARD
+diff --git a/hw/arm/virt-acpi-build.c b/hw/arm/virt-acpi-build.c
+index 200e2a1..776a999 100644
+--- a/hw/arm/virt-acpi-build.c
++++ b/hw/arm/virt-acpi-build.c
+@@ -135,7 +135,9 @@ static void build_acpi0017(Aml *table)
+     method = aml_method("_STA", 0, AML_NOTSERIALIZED);
+     aml_append(method, aml_return(aml_int(0x0B)));
+     aml_append(dev, method);
++#ifdef CONFIG_ACPI_CXL
+     build_cxl_dsm_method(dev);
++#endif
+ 
+     aml_append(scope, dev);
+     aml_append(table, scope);
+@@ -1232,10 +1234,12 @@ void virt_acpi_build(VirtMachineState *vms, AcpiBuildTables *tables)
+         }
+     }
+ 
++    #ifdef CONFIG_ACPI_CXL
+     if (vms->cxl_devices_state.is_enabled) {
+         cxl_build_cedt(table_offsets, tables_blob, tables->linker,
+                        vms->oem_id, vms->oem_table_id, &vms->cxl_devices_state);
+     }
++#endif
+ 
+     if (ms->nvdimms_state->is_enabled) {
+         nvdimm_build_acpi(table_offsets, tables_blob, tables->linker,
+diff --git a/hw/i386/acpi-build.c b/hw/i386/acpi-build.c
+index 9446a9f..7368323 100644
+--- a/hw/i386/acpi-build.c
++++ b/hw/i386/acpi-build.c
+@@ -839,8 +839,9 @@ static void build_acpi0017(Aml *table)
+     method = aml_method("_STA", 0, AML_NOTSERIALIZED);
+     aml_append(method, aml_return(aml_int(0x0B)));
+     aml_append(dev, method);
++#ifdef CONFIG_ACPI_CXL
+     build_cxl_dsm_method(dev);
+-
++#endif
+     aml_append(scope, dev);
+     aml_append(table, scope);
+ }
+@@ -2071,10 +2072,12 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
+                           machine->nvdimms_state, machine->ram_slots,
+                           x86ms->oem_id, x86ms->oem_table_id);
+     }
++#ifdef CONFIG_ACPI_CXL
+     if (pcms->cxl_devices_state.is_enabled) {
+         cxl_build_cedt(table_offsets, tables_blob, tables->linker,
+                        x86ms->oem_id, x86ms->oem_table_id, &pcms->cxl_devices_state);
+     }
++#endif
+ 
+     acpi_add_table(table_offsets, tables_blob);
+     build_waet(tables_blob, tables->linker, x86ms->oem_id, x86ms->oem_table_id);

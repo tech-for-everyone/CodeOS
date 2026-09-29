@@ -18,7 +18,7 @@ set -euo pipefail
 
 VM="CodeOS"
 SRC="$(cd "$(dirname "$0")" && pwd)"
-ISO="${SRC}/kernel/codeos-1-kernel.iso"
+ISO="${SRC}/kernel/codeos-1.0.iso"
 DISK="${SRC}/disk.img"
 FULL_LOG="/tmp/codeos-vbox-serial.log"
 
@@ -77,7 +77,7 @@ provision () {
 }
 
 attach_media () {
-    [ -f "${ISO}" ] || die "missing ${ISO} (run 'make -C kernel codeos-1-kernel.iso')"
+    [ -f "${ISO}" ] || die "missing ${ISO} (run 'make -C kernel codeos-1.0.iso')"
     need_vdi
     VBoxManage storagectl "${VM}" --name "IDE" --add ide --controller PIIX3 >/dev/null 2>&1 || true
     # rootfs MUST be IDE primary master (0:0) — kernel ata_init() probes the

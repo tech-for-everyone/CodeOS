@@ -3,6 +3,6 @@
 set -e
 
 cd "$(dirname "$0")/../kernel"
-make codeos-1-kernel.iso
-cp codeos-1-kernel.iso ../codeos-1-kernel.iso
-echo "ISO built: codeos-1-kernel.iso"
+make codeos-1.0.iso
+cp codeos-1.0.iso ../codeos-1.0.iso
+echo "ISO built: codeos-1.0.iso"

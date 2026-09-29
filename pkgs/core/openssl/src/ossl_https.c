@@ -253,7 +253,7 @@ int ossl_https_get(int fd, const char *host, const char *path,
     if (!host || !path || !buf || fd < 0) return -1;
     if (ossl_global_init() != 0) return -1;
 
-    SSL_METHOD *meth = TLS_client_method();
+    const SSL_METHOD *meth = TLS_client_method();
     SSL_CTX *ctx = SSL_CTX_new(meth);
     if (!ctx) { ossl_dump_errors("ctx", 8); return -1; }
 

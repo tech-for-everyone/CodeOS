@@ -48,6 +48,45 @@ void ow_core_reload(void) {
         ow_navigate_fresh(tabs[index].url);
 }
 
+/* WebView-style navigation: history lives in the Rust core, so every frontend
+ * (Qt, tty `openweb`, Zircon browser) shares the same back/forward stacks. */
+void ow_core_back(void) {
+    if (!g_initialized) return;
+    ow_go_back();
+}
+
+void ow_core_forward(void) {
+    if (!g_initialized) return;
+    ow_go_forward();
+}
+
+void ow_core_stop(void) {
+    if (!g_initialized) return;
+    ow_stop_loading();
+}
+
+int ow_core_can_go_back(void) {
+    openweb_tab_t *tabs;
+    int index;
+    if (!g_initialized) return 0;
+    index = ow_get_tab_active();
+    tabs = ow_get_tabs();
+    if (tabs && index >= 0 && index < ow_get_tab_count())
+        return tabs[index].can_go_back;
+    return 0;
+}
+
+int ow_core_can_go_forward(void) {
+    openweb_tab_t *tabs;
+    int index;
+    if (!g_initialized) return 0;
+    index = ow_get_tab_active();
+    tabs = ow_get_tabs();
+    if (tabs && index >= 0 && index < ow_get_tab_count())
+        return tabs[index].can_go_forward;
+    return 0;
+}
+
 void ow_core_new_tab(void) {
     ow_core_init();
     ow_tab_new("about:blank");

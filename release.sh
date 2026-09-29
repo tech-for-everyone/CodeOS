@@ -29,7 +29,7 @@ ARCHIVE="CodeOS-${VERSION}"
 step "Preparing release: ${ARCHIVE}"
 
 # Verify build artifacts exist
-if [ ! -f "${KERNEL_DIR}/codeos-1-kernel.iso" ]; then
+if [ ! -f "${KERNEL_DIR}/codeos-1.0.iso" ]; then
     error "ISO not found — run ./build.sh first"
     exit 1
 fi
@@ -42,7 +42,7 @@ fi
 mkdir -p "${OUT_DIR}/${ARCHIVE}"
 
 # Copy artifacts with architecture suffix
-cp "${KERNEL_DIR}/codeos-1-kernel.iso" "${OUT_DIR}/${ARCHIVE}/CodeOS-${VERSION}-x86_64.iso"
+cp "${KERNEL_DIR}/codeos-1.0.iso" "${OUT_DIR}/${ARCHIVE}/CodeOS-${VERSION}-x86_64.iso"
 cp "${KERNEL_DIR}/codeos-1-kernel.bin"  "${OUT_DIR}/${ARCHIVE}/CodeOS-${VERSION}-x86_64.bin"
 
 # Generate checksums

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-ISO="${SRC}/kernel/codeos-1-kernel.iso"
+ISO="${SRC}/kernel/codeos-1.0.iso"
 MEM="4G"
 
 if [ ! -f "$ISO" ]; then

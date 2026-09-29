@@ -109,7 +109,7 @@ static s64 lsys6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
 #define SYS_PRCTL       157
 #define SYS_ARCH_PRCTL  158
 #define SYS_KILL        62
-#define SYS_GETRUSAGE   165
+#define SYS_GETRUSAGE   98
 #define SYS_GETTIMEOFDAY 96
 #define SYS_CLOCK_GETTIME 228
 #define SYS_GETTID      186
@@ -138,6 +138,7 @@ static s64 lsys6(s64 n, s64 a1, s64 a2, s64 a3, s64 a4, s64 a5, s64 a6) {
 #define SYS_PIPE2       293
 #define SYS_INOTIFY_INIT1 294
 #define SYS_TGKILL      234
+#define SYS_MADVISE      28
 
 static void out(const char *s) {
     s64 len = 0;
@@ -161,11 +162,28 @@ static void outln(s64 v, const char *tail) {
     if (tail) out(tail);
 }
 
+/* Result tallies for the summary line.  The probe is only worth running if
+ * something can tell it failed, so pass() below is a real assertion: it used
+ * to print "OK" whatever the kernel returned, which meant a syscall could
+ * start returning -ENOSYS (or worse, a wrong value) and the suite would still
+ * be green. */
+static int lp_checks;
+static int lp_failed;
+static int lp_first_fail_line;
+
 static void pass(const char *name, s64 v) {
-    out("LP[A ] ");
+    lp_checks++;
+    /* Every call site here is "this syscall should work", so success is a
+     * non-negative return.  errno-style failures come back negative. */
+    int ok = (v >= 0);
+    if (!ok) {
+        lp_failed++;
+        if (!lp_first_fail_line) lp_first_fail_line = lp_checks;
+    }
+    out(ok ? "LP[OK  ] " : "LP[FAIL] ");
     out(name);
     out(": ");
-    outln(v, " OK\n");
+    outln(v, ok ? " OK\n" : " FAILED (expected >= 0)\n");
 }
 
 static void gap(const char *name, s64 v) {
@@ -194,7 +212,36 @@ struct linux_uname {
 struct timespec { long tv_sec; long tv_nsec; };
 struct timeval { long tv_sec; long tv_usec; };
 
-static char b64[64];
+/* Scratch buffers.
+ *
+ * Split by *who chooses the write size*, because that is what decides
+ * whether a buffer is big enough:
+ *
+ *   - Arg-bounded writes (read, getcwd, readlinkat, getdents64, getrandom):
+ *     the kernel never writes more than the caller passed, so a 64-byte
+ *     buffer is safe and we pass an explicit length.
+ *
+ *   - Fixed-size ABI writes: the kernel writes a whole struct regardless of
+ *     what the caller passed, so the buffer MUST match the struct or we
+ *     scribble past it.  These used to share one 64-byte b64 and did
+ *     exactly that -- statx wrote 256 bytes, rusage and stat 144 -- which
+ *     silently zeroed whatever statics sat after b64 in .bss (it ate this
+ *     file's own lp_checks/lp_failed counters).  Each gets its own buffer
+ *     sized to the real x86-64 ABI so a future change is visible in review.
+ *
+ * Sizes verified against the handlers in kernel/kernel/syscall.c:
+ *   stat/fstat/lstat/newfstatat -> LINUX_STAT_SZ = 144
+ *   statx                       -> 256
+ *   getrusage                   -> 144
+ */
+#define ABI_STAT_SZ   144
+#define ABI_STATX_SZ  256
+#define ABI_RUSAGE_SZ 144
+
+static char b64[64];                       /* arg-bounded scratch only */
+static char b_stat[ABI_STAT_SZ];
+static char b_statx[ABI_STATX_SZ];
+static char b_rusage[ABI_RUSAGE_SZ];
 
 void _start(void) {
     out("LPROBE: begin\n");
@@ -234,7 +281,7 @@ void _start(void) {
             s64 m3 = lsys(SYS_MUNMAP, r, 4096, 0);
             pass("munmap", m3);
         }
-        pass("madvise", lsys(28, 0, 4096, 0)); /* MADVISE */
+        pass("madvise", lsys(SYS_MADVISE, 0, 4096, 0));
     }
 
     /* --- fs --- */
@@ -258,14 +305,18 @@ void _start(void) {
             pass("getcwd", r);
         }
         {
-            s64 r = lsys4(SYS_NEWFSTATAT, -100, (s64)"/", (s64)b64, 0);
+            s64 r = lsys4(SYS_NEWFSTATAT, -100, (s64)"/", (s64)b_stat, 0);
             pass("newfstatat(/)", r);
         }
         {
-            s64 r = lsys4(SYS_STATX, -100, (s64)"/", 0, (s64)b64);
+            s64 r = lsys4(SYS_STATX, -100, (s64)"/", 0, (s64)b_statx);
             raw("statx(/)", r);
         }
-        pass("readlinkat", lsys4(SYS_READLINKAT, -100, (s64)"/bin", (s64)b64, 63));
+        /* Only /proc/self/exe is resolvable, so probe that: asking about a
+         * plain directory like /bin correctly returns ENOENT and proves
+         * nothing about readlinkat. */
+        pass("readlinkat(/proc/self/exe)",
+             lsys4(SYS_READLINKAT, -100, (s64)"/proc/self/exe", (s64)b64, 63));
         {
             s64 fdd = lsys4(SYS_OPENAT, -100, (s64)"/", 0, 0);
             pass("openat(/)", fdd);
@@ -286,19 +337,25 @@ void _start(void) {
         r = lsys4(SYS_RT_SIGPROCMASK, 0, 0, (s64)&sa.mask, 8);
         pass("rt_sigprocmask", r);
     }
-    pass("kill(0,SIGKILL=9?)", lsys4(SYS_KILL, 0, 99, 0, 0));
+    /* Signal 99 is not a valid signal, so EINVAL is the correct answer here --
+     * this probes the argument check, not delivery. */
+    gap("kill(0,sig=99 invalid)", lsys4(SYS_KILL, 0, 99, 0, 0));
     pass("tgkill", lsys4(SYS_TGKILL, 0, 0, 15, 0));
-    pass("futex", lsys4(SYS_FUTEX, 0, 202, 0, 0));
+    gap("futex", lsys4(SYS_FUTEX, 0, 202, 0, 0));
     pass("prctl(PR_GET_NAME?)", lsys4(SYS_PRCTL, 15, (s64)b64, 0, 0));
     pass("set_tid_address", lsys(SYS_SETTID, (s64)b64, 0, 0));
     pass("set_robust_list", lsys(SYS_SET_ROBUST_LIST, (s64)b64, 24, 0));
     pass("sigaltstack", lsys(SYS_SIGALTSTACK, 0, (s64)b64, 0));
 
     /* --- fd ops --- */
+    /* pipe/pipe2 are unimplemented, and dup of a console fd cannot work:
+     * fd_alloc() reserves 0-2 and never puts the console in fd_table, so
+     * there is no entry to copy.  sys_read/sys_write/ioctl special-case the
+     * console by number instead.  Report these as gaps, not failures. */
     {
         int p[2];
         s64 r = lsys(SYS_PIPE, (s64)p, 0, 0);
-        pass("pipe", r);
+        gap("pipe", r);
         if (r == 0) {
             lsys(SYS_WRITE, p[1], (s64)"x", 1);
             s64 rd = lsys(SYS_READ, p[0], (s64)b64, 1);
@@ -307,11 +364,11 @@ void _start(void) {
             lsys(SYS_CLOSE, p[1], 0, 0);
         }
         r = lsys(SYS_PIPE2, (s64)p, 0, 0);
-        pass("pipe2", r);
+        gap("pipe2", r);
         if (r == 0) { lsys(SYS_CLOSE, p[0], 0, 0); lsys(SYS_CLOSE, p[1], 0, 0); }
-        pass("dup", lsys(SYS_DUP, 1, 0, 0));
-        pass("dup2", lsys(SYS_DUP2, 1, 5, 0));
-        pass("dup3", lsys4(SYS_DUP3, 1, 6, 0, 0));
+        gap("dup(stdout)", lsys(SYS_DUP, 1, 0, 0));
+        gap("dup2(stdout)", lsys(SYS_DUP2, 1, 5, 0));
+        gap("dup3(stdout)", lsys4(SYS_DUP3, 1, 6, 0, 0));
         lsys(SYS_CLOSE, 5, 0, 0);
         lsys(SYS_CLOSE, 6, 0, 0);
     }
@@ -328,7 +385,7 @@ void _start(void) {
         pass("getrandom(8)", r);
     }
     pass("prlimit64", lsys4(SYS_PRLIMIT64, 0, 0, 0, 0));
-    pass("getrusage", lsys4(SYS_GETRUSAGE, 0, (s64)b64, 0, 0));
+    pass("getrusage", lsys4(SYS_GETRUSAGE, 0, (s64)b_rusage, 0, 0));
     pass("writev", lsys4(SYS_WRITEV, 1, (s64)b64, 1, 0));
     pass("sched_yield", lsys(SYS_SCHED_YIELD, 0, 0, 0));
     {
@@ -340,8 +397,8 @@ void _start(void) {
         s64 r = lsys4(SYS_IOCTL, 1, 0, 0, 0);
         raw("ioctl", r);
     }
-    pass("getpriority", lsys(SYS_GETPRIORITY, 0, 0, 0));
-    pass("sched_getaffinity", lsys4(SYS_SCHED_GETAFFINITY, 0, 0, (s64)b64, 64));
+    gap("getpriority", lsys(SYS_GETPRIORITY, 0, 0, 0));
+    gap("sched_getaffinity", lsys4(SYS_SCHED_GETAFFINITY, 0, 0, (s64)b64, 64));
 
     /* --- real UDP over the Linux socket mapping: DNS query to slirp --- */
     {
@@ -450,7 +507,19 @@ void _start(void) {
     gap("pread64",        lsys4(SYS_PREAD64, -1, (s64)b64, 16, 0));
     gap("pwrite64",       lsys4(SYS_PWRITE64, -1, (s64)b64, 16, 0));
 
-    out("LPROBE: done\n");
-    lsys(SYS_EXIT, 0, 0, 0);
+    /* Machine-readable summary.  The harness (scripts/fs_test.py) greps for
+     * this line, so the format is part of the contract: it counts, and it
+     * reports how many of the pass() assertions failed. */
+    out("LPROBE: checks=");
+    outn(lp_checks);
+    out(" failed=");
+    outn(lp_failed);
+    if (lp_failed) {
+        out(" first_fail_at=");
+        outn(lp_first_fail_line);
+    }
+    out("\n");
+    out(lp_failed ? "LPROBE: FAIL\n" : "LPROBE: done\n");
+    lsys(SYS_EXIT, lp_failed ? 1 : 0, 0, 0);
     for (;;) { }
 }

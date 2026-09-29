@@ -16,6 +16,31 @@ static int  g_dirty = 1;
 static int  g_show_help = 0;
 static char g_status_msg[256] = "";
 
+/* Raw mode makes sys_read() hand back each keystroke as it arrives instead of
+ * buffering until Enter, which is what the single-key hotkeys in handle_key()
+ * are written for. Enter was previously required after every hotkey. The
+ * kernel stores this per-process, so it cannot outlive us and strand the shell
+ * in raw mode; restoring on exit is hygiene, and keeps the app correct if the
+ * tty mode is ever made shared the way a real terminal's is. */
+static termios_t g_saved_tio;
+static int g_tio_saved = 0;
+
+static int enter_raw_mode(void) {
+    if (tcgetattr(0, &g_saved_tio) != 0) return 0;
+    g_tio_saved = 1;
+    termios_t raw = g_saved_tio;
+    raw.c_lflag &= ~(unsigned int)ICANON;
+    if (tcsetattr(0, TCSANOW, &raw) != 0) { g_tio_saved = 0; return 0; }
+    return 1;
+}
+
+static void quit(void) {
+    if (g_tio_saved) tcsetattr(0, TCSANOW, &g_saved_tio);
+    /* Re-show the cursor hidden at startup. */
+    printf("\x1b[?25h");
+    sys_exit(0);
+}
+
 static void clear_screen(void) {
     printf("\x1b[2J");
 }
@@ -40,6 +65,8 @@ static void render_help(void) {
     printf("\x1b[33mActions:\x1b[0m\n");
     printf("  \x1b[1mt\x1b[0m       New tab\n");
     printf("  \x1b[1mc/x\x1b[0m     Close current tab\n");
+    printf("  \x1b[1mb/f\x1b[0m     Back / Forward (history)\n");
+    printf("  \x1b[1ms\x1b[0m       Stop loading\n");
     printf("  \x1b[1mr\x1b[0m       Reload page or active tab\n");
     printf("  \x1b[1mq\x1b[0m      Quit\n");
     printf("  \x1b[1mEsc\x1b[0m      Exit app\n");
@@ -82,8 +109,14 @@ static void render_page(void) {
     if (g_show_help) {
         printf(" \x1b[33m[HELP]\x1b[0m");
     }
+    if (st.can_go_back || st.can_go_forward) {
+        printf(" \x1b[36m%s%s\x1b[0m",
+               st.can_go_back ? "\xe2\x80\xb9" : "-",
+               st.can_go_forward ? "\xe2\x80\xba" : "-");
+    }
     if (st.loading) {
-        printf(" \x1b[33mLOADING\x1b[0m");
+        int prog = sys_web_tab_progress();
+        printf(" \x1b[33mLOADING %d%%\x1b[0m", prog);
     }
     if (st.url[0]) {
         printf(" \x1b[36m%s\x1b[0m", st.url);
@@ -146,7 +179,7 @@ static void handle_key(int key) {
         return;
     }
     if (key == '\x1b') {
-        sys_exit(0);
+        quit();
     }
     if (key == '\n' || key == '\r') {
         if (strlen(g_url) == 0) return;
@@ -201,7 +234,7 @@ static void handle_key(int key) {
         return;
     }
     if (key == 'q' || key == 'Q') {
-        sys_exit(0);
+        quit();
     }
     if (key == 'r' || key == 'R') {
         if (g_url[0]) {
@@ -255,6 +288,24 @@ static void handle_key(int key) {
         g_dirty = 1;
         return;
     }
+    if (key == 'b' || key == 'B') {
+        sys_web_go_back();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Back (history)");
+        g_dirty = 1;
+        return;
+    }
+    if (key == 'f' || key == 'F') {
+        sys_web_go_forward();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Forward (history)");
+        g_dirty = 1;
+        return;
+    }
+    if (key == 's' || key == 'S') {
+        sys_web_stop();
+        snprintf(g_status_msg, sizeof(g_status_msg), "Stop loading");
+        g_dirty = 1;
+        return;
+    }
     if (key >= ' ' && key <= '~') {
         int len = strlen(g_url);
         if (len < MAX_URL - 1) {
@@ -268,12 +319,19 @@ static void handle_key(int key) {
 
 int main(void) {
     printf("\x1b[?25l");
+    int raw = enter_raw_mode();
 
     int cnt = sys_web_tab_count();
     if (cnt <= 0) {
         sys_web_tab_new("about:blank");
     }
 
+    if (raw) {
+        snprintf(g_status_msg, sizeof(g_status_msg), "Raw mode on (no Enter needed)");
+    } else {
+        snprintf(g_status_msg, sizeof(g_status_msg),
+                 "Raw mode unavailable (press Enter after each key)");
+    }
     g_dirty = 1;
     render_page();
 

@@ -14,6 +14,7 @@ DIM   := \033[2m
 RESET := \033[0m
 
 .PHONY: all check jengine-check kernel iso clean run run-iso help
+.PHONY: ncvm ncvm-build ncvm-run
 .PHONY: qt6 qt6-build qt6-install qt6-clean
 .PHONY: qt6-download qt6-configure qt6-build-full qt6-all
 .PHONY: icons icons-25d icons-dedup
@@ -27,6 +28,7 @@ check:
 	@printf "$(CYAN)$(BOLD)==> Checking build environment...$(RESET)\n"
 	$(MAKE) -C kernel check
 	$(MAKE) jengine-check
+	$(MAKE) ncvm-check
 
 jengine-check:
 	@printf "$(CYAN)$(BOLD)==> Checking Jengine...$(RESET)\n"
@@ -35,23 +37,39 @@ jengine-check:
 	@/tmp/codeos-jengine-test
 	@printf "$(GREEN)Jengine checks passed$(RESET)\n"
 
+# pkgs/core/ncvm/src/ncvm.c reaches the kernel through inline `int $0x80`
+# stubs, so the only way to test it on the host is to shadow unistd.h with
+# tests/codeos_shim.h and compile the real source against POSIX. CMD_DIR is
+# overridden to a scratch dir so the wire protocol can be exercised without
+# touching /tmp/crosvm-cmds. See AGENTS.md for what the shim does and does
+# not model.
+ncvm-check:
+	@printf "$(CYAN)$(BOLD)==> Checking ncvm backend...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -Werror \
+		-Ipkgs/core/ncvm/tests \
+		-DCMD_DIR='"/tmp/ncvm-hosttest-cmds"' \
+		pkgs/core/ncvm/tests/ncvm_test.c \
+		-o /tmp/codeos-ncvm-test
+	@/tmp/codeos-ncvm-test
+	@printf "$(GREEN)ncvm checks passed$(RESET)\n"
+
 # ── Kernel ────────────────────────────────────────────────────────
 kernel:
 	@printf "$(CYAN)$(BOLD)==> Building kernel...$(RESET)\n"
 	$(MAKE) -C kernel all
 	@printf "$(GREEN)Kernel built successfully$(RESET)\n"
 
-iso: codeos-1-kernel.iso
+iso: codeos-1.0.iso
 
-codeos-1-kernel.iso:
+codeos-1.0.iso:
 	@printf "$(CYAN)$(BOLD)==> Creating ISO...$(RESET)\n"
-	$(MAKE) -C kernel codeos-1-kernel.iso
-	cp kernel/codeos-1-kernel.iso codeos-1-kernel.iso
-	@printf "$(GREEN)ISO ready: codeos-1-kernel.iso$(RESET)\n"
+	$(MAKE) -C kernel codeos-1.0.iso
+	cp kernel/codeos-1.0.iso codeos-1.0.iso
+	@printf "$(GREEN)ISO ready: codeos-1.0.iso$(RESET)\n"
 
 clean: clean-qt6
 	$(MAKE) -C kernel clean
-	rm -f codeos-1-kernel.bin codeos-1-kernel.iso
+	rm -f codeos-1-kernel.bin codeos-1.0.iso
 	@printf "$(GREEN)Clean complete$(RESET)\n"
 
 run: kernel
@@ -59,6 +77,18 @@ run: kernel
 
 run-iso: iso
 	$(MAKE) -C kernel run-iso
+
+# ── ncvm ──────────────────────────────────────────────────────────────
+# ncvm/ is CodeOS's own QEMU fork (host-side VM backend + runner). The
+# delta project builds from ncvm/ (clones QEMU v10.2.4 into ncvm/src/qemu
+# on first run), producing bin/ncvm-* plus the firmware data + runner.
+ncvm ncvm-build:
+	@printf "$(CYAN)$(BOLD)==> Building ncvm (CodeOS QEMU fork)...$(RESET)\n"
+	bash ncvm/build-codeos.sh
+	@printf "$(GREEN)ncvm built: ncvm/bin/ncvm-x86_64, ncvm/bin/ncvm-aarch64, ncvm/bin/ncvm$(RESET)\n"
+
+ncvm-run: iso ncvm
+	bash ncvm/bin/ncvm
 
 # ── Qt6 Support Libraries ────────────────────────────────────────
 # These are the POSIX stubs, platform plugin, font engine, etc.

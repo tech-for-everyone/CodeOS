@@ -476,6 +476,7 @@ impl Conn for CodeOSConn {
 
 extern "C" {
     fn prs_init();
+    fn prs_demos_disabled() -> i32;
     fn prs_event_pop() -> PrsEvent;
     fn prs_event_count() -> i32;
     fn prs_root() -> u32;
@@ -540,16 +541,26 @@ pub unsafe extern "C" fn penrose_init() {
 
     // Spawn demo X11 windows via the bridge. Their MapRequests are queued and
     // drained below so the WM manages + tiles them before the first frame.
+    //
+    // `no-demos` on the kernel command line suppresses this. The demos are
+    // tiled to fill the screen, so they occlude the traffic lights of any real
+    // window underneath them, which makes the pixel-level chrome check in
+    // scripts/chrome_check.py unreproducible. With them gone the only windows
+    // are the ones the check is actually about.
     unsafe {
-        let titles: [*const u8; 3] = [
-            b"penrose shell\0".as_ptr(),
-            b"codeos files\0".as_ptr(),
-            b"openweb\0".as_ptr(),
-        ];
-        for &title in &titles {
-            prs_demo_window(title);
+        if prs_demos_disabled() != 0 {
+            klog("penrose: demos suppressed by no-demos\n");
+        } else {
+            let titles: [*const u8; 3] = [
+                b"HyperDE\0".as_ptr(),
+                b"DevStore\0".as_ptr(),
+                b"OpenWeb\0".as_ptr(),
+            ];
+            for &title in &titles {
+                prs_demo_window(title);
+            }
+            klog("penrose: demos queued\n");
         }
-        klog("penrose: demos queued\n");
     }
 
     process_pending(&mut wm);

@@ -41,7 +41,7 @@ fi
 # Build kernel
 step "Building kernel..."
 MAKE_JOBS=$(nproc 2>/dev/null || echo 4)
-if ! make -C "$BUILD" codeos-1-kernel.iso -j"$MAKE_JOBS" 2>&1 | tee "$LOGFILE"; then
+if ! make -C "$BUILD" codeos-1.0.iso -j"$MAKE_JOBS" 2>&1 | tee "$LOGFILE"; then
     error "Kernel build failed — see $LOGFILE"
     exit 1
 fi
@@ -50,7 +50,7 @@ fi
 step "Copying build artifacts..."
 mkdir -p "$OUT"
 cp "$BUILD/codeos-1-kernel.bin"  "$OUT/codeos.bin"
-cp "$BUILD/codeos-1-kernel.iso" "$OUT/codeos.iso"
+cp "$BUILD/codeos-1.0.iso" "$OUT/codeos.iso"
 cp "$BUILD/bootloader/limine.conf"      "$OUT/"
 cp "$BUILD/bootloader/limine-bios.sys"  "$OUT/"
 cp "$BUILD/bootloader/limine-deploy"    "$OUT/"

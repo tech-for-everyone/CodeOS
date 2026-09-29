@@ -47,7 +47,7 @@ OPTIONAL_MESSAGES = [
 
 def find_iso():
     candidates = [
-        os.path.join(KERNEL_DIR, "codeos-1-kernel.iso"),
+        os.path.join(KERNEL_DIR, "codeos-1.0.iso"),
         os.path.join(KERNEL_DIR, "codeos-1-kernel-grub.iso"),
     ]
     for c in candidates:
@@ -154,7 +154,7 @@ def main():
     if not kernel_path:
         kernel_path = find_iso()
         if not kernel_path:
-            print("Error: no kernel found. Build first: make -C kernel codeos-1-kernel.iso")
+            print("Error: no kernel found. Build first: make -C kernel codeos-1.0.iso")
             sys.exit(1)
         boot_from = "iso"
 

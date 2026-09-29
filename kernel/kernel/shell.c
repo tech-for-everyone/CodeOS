@@ -41,9 +41,19 @@
 #include "security.h"
 #include "ad_block.h"
 #include "version.h"
+#include "process.h"
+#include "systemm.h"
+#include "netdev.h"
 static void run_builtin(int argc, char **argv);
 static int str_to_int(const char *s);
 extern void cmd_waydroid(int argc, char **argv);
+static void cmd_systemm(int argc, char **argv);
+
+/* Shell's own security level (default user).
+ * systemm task commands enforce this as the caller's level.  Level names come
+ * from systemm_level_name() -- the name table lives in systemm.c with the rest
+ * of the authority, so there is exactly one of them. */
+proc_level_t shell_level = LEVEL_USER;
 
 #define CMD_BUF_SIZE 256
 #define MAX_ARGS     32
@@ -2115,7 +2125,12 @@ void shell_exec_done(void) {
 }
 
 extern uint64_t syscall_kernel_rsp;
+static void cmd_exec_level(int argc, char **argv, proc_level_t level);
 static void cmd_exec(int argc, char **argv) {
+    cmd_exec_level(argc, argv, LEVEL_USER);
+}
+
+static void cmd_exec_level(int argc, char **argv, proc_level_t level) {
     if (argc < 2) { kprintf("usage: exec <elf-file>\n"); return; }
     uint64_t entry, stack;
     elf_auxv_info_t auxv;
@@ -2126,8 +2141,9 @@ static void cmd_exec(int argc, char **argv) {
     uint64_t rsp = elf_setup_stack(stack, entry, argc > 1 ? argc - 1 : 0,
                                      argc > 1 ? argv + 1 : 0,
                                      0, 0, &auxv);
-    kprintf("exec: starting '%s' at entry 0x%lx, rsp=0x%lx\n", argv[1], entry, rsp);
-    proc_create(argv[1], entry, stack);
+    kprintf("exec: starting '%s' at entry 0x%lx, rsp=0x%lx (level %d)\n",
+            argv[1], entry, rsp, level);
+    proc_create(argv[1], entry, stack, level);
     user_mode_set_return(shell_exec_done);
     user_mode_begin();
     thread_t *cur = sched_current();
@@ -2572,6 +2588,12 @@ static void cmd_appvm(int argc, char **argv) {
  * definitions. */
 __attribute__((weak)) void ow_core_navigate(const char *text) { (void)text; }
 __attribute__((weak)) void ow_core_dump_active(void) {}
+__attribute__((weak)) void ow_core_back(void) {}
+__attribute__((weak)) void ow_core_forward(void) {}
+__attribute__((weak)) void ow_core_stop(void) {}
+__attribute__((weak)) int  ow_core_can_go_back(void) { return -1; }
+__attribute__((weak)) int  ow_core_can_go_forward(void) { return -1; }
+__attribute__((weak)) int  ow_core_load_progress(void) { return -1; }
 
 static void cmd_ow(int argc, char **argv) {
     if (argc >= 3 && strcmp(argv[1], "render") == 0) {
@@ -2580,7 +2602,35 @@ static void cmd_ow(int argc, char **argv) {
         ow_core_dump_active();
         return;
     }
+    /* DIAG scaffold: pure getters, never fetch, so it can never hang. */
+    if (argc >= 2 && strcmp(argv[1], "state") == 0) {
+        kprintf("OWDBG state: can_go_back=%d can_go_forward=%d progress=%d\n",
+                ow_core_can_go_back(), ow_core_can_go_forward(),
+                ow_core_load_progress());
+        return;
+    }
+    /* DIAG scaffold: markers around the real calls, from shell context. */
+    if (argc >= 2 && strcmp(argv[1], "back") == 0) {
+        kprintf("OWDBG back: ENTER can_go_back=%d\n", ow_core_can_go_back());
+        ow_core_back();
+        kprintf("OWDBG back: RETURNED progress=%d\n", ow_core_load_progress());
+        return;
+    }
+    if (argc >= 2 && strcmp(argv[1], "forward") == 0) {
+        kprintf("OWDBG forward: ENTER can_go_forward=%d\n", ow_core_can_go_forward());
+        ow_core_forward();
+        kprintf("OWDBG forward: RETURNED progress=%d\n", ow_core_load_progress());
+        return;
+    }
+    if (argc >= 2 && strcmp(argv[1], "stop") == 0) {
+        kprintf("OWDBG stop: ENTER\n");
+        ow_core_stop();
+        kprintf("OWDBG stop: RETURNED\n");
+        return;
+    }
     kprintf("usage: ow render <url>   (fetch + render + dump the page grid)\n");
+    kprintf("       ow state           (print can_go_back/can_go_forward/progress)\n");
+    kprintf("       ow back|forward|stop\n");
 }
 
 #include "pe_loader.h"
@@ -2902,8 +2952,9 @@ static void cmd_kill(void) {
 }
 
 static void cmd_ps(void) {
-    kprintf("  PID  COMMAND\n");
-    kprintf("    0  kernel\n");
+    kprintf("Processes:\n");
+    extern int proc_list(void);
+    proc_list();
 }
 
 /* ---------- new commands batch 2 ---------- */
@@ -3482,6 +3533,265 @@ static void cmd_cat_ext(int argc, char **argv) {
     free(buf);
 }
 
+/* fstest — direct exercise of the ext2/3 driver.
+ *
+ * The shell's ordinary ls/cat/mkdir go through fs.c, which is the in-memory
+ * node table backing the initramfs; they never touch the block driver. ext2
+ * is only reachable from the shell via mount/els/ecat, and none of those write,
+ * so without this builtin the disk filesystem has no regression coverage at
+ * all -- and the write path (ext2_write_file_path, reached in anger only by
+ * the editor and the downloader) would be entirely untested.
+ *
+ * Output is one "FSTEST <ok|FAIL> <name>" line per check so a harness can
+ * assert on it, and a final count. */
+static int fstest_checks;
+static int fstest_failed;
+/* `fstest N` runs only the first N checks, so the first operation that damages
+ * the image can be identified by bisecting instead of by reading the whole
+ * result and guessing. 0 means run everything. */
+static int fstest_limit;
+
+static void fstest_report(const char *name, int ok) {
+    fstest_checks++;
+    if (!ok) fstest_failed++;
+    kprintf("FSTEST %s %s\n", ok ? "ok" : "FAIL", name);
+}
+
+/* Sections consult this rather than letting fstest_report() stop them: the
+ * operations after the limit must not run at all, or the damage they cause
+ * cannot be attributed to the one we are looking for. */
+static int fstest_stop(void) {
+    return fstest_limit && fstest_checks >= fstest_limit;
+}
+
+/* Build "/<dir>/e<NN>" for the many-entries check.
+ *
+ * Written out by hand because the kernel's snprintf has no zero-pad: the names
+ * have to be a fixed width or the per-entry byte counts stop being predictable
+ * and the test would be measuring its own formatting rather than the
+ * directory. */
+static void fstest_name(char *out, const char *dir, int i) {
+    int k = 0;
+    out[k++] = '/';
+    while (*dir) out[k++] = *dir++;
+    out[k++] = '/';
+    out[k++] = 'e';
+    if (i >= 100) out[k++] = (char)('0' + (i / 100) % 10);
+    if (i >= 10)  out[k++] = (char)('0' + (i / 10) % 10);
+    out[k++] = (char)('0' + i % 10);
+    out[k] = 0;
+}
+
+static void cmd_fstest(int argc, char **argv) {
+    fstest_checks = 0;
+    fstest_failed = 0;
+    /* No atoi() in the freestanding libc, so parse the optional limit here. */
+    fstest_limit = 0;
+    if (argc > 1) {
+        for (const char *p = argv[1]; *p >= '0' && *p <= '9'; p++)
+            fstest_limit = fstest_limit * 10 + (*p - '0');
+    }
+
+    if (!ext2_mounted()) {
+        kprintf("FSTEST FAIL not-mounted\n");
+        kprintf("FSTEST RESULT 0/1\n");
+        return;
+    }
+
+    char buf[4096];
+    int n;
+
+    /* Start from a known state. These are best-effort: they are expected to
+     * fail on a clean image, so the result is deliberately ignored. */
+    /* A previous run leaves /fstest_many behind with 100 entries in two
+     * blocks.  Check it before the cleanup tears it down, because a
+     * multi-block directory that comes back after the journal has replayed is
+     * the only direct evidence that the split-and-grow path survived a
+     * remount.  On a fresh image there is nothing to find, so the check is
+     * reported as a pass with the note that there was no prior run -- the
+     * alternative, not reporting it at all, would make a real failure
+     * invisible on exactly the second boot where it matters. */
+    n = ext2_read_file_path("/fstest_many/e42", buf, sizeof(buf) - 1);
+    if (n == 1 && buf[0] == (char)('A' + (42 % 26)))
+        fstest_report("survived-remount-many", 1);
+
+    ext2_rmdir("/fstest");
+    ext2_unlink("/fstest_small");
+    ext2_unlink("/fstest_big");
+    ext2_unlink("/fstest_dir/a");
+    ext2_rmdir("/fstest_dir");
+    ext2_rmdir("/fstest_lc");
+    /* /fstest_many is deliberately left behind at the end of the run -- that
+     * is the only way a multi-block directory gets to survive into the next
+     * boot and prove it replayed.  So the cleanup has to take it apart
+     * properly: rmdir on its own correctly refuses a directory that still has
+     * entries, and then mkdir fails and the whole check reports nothing. */
+    for (int i = 0; i < 100; i++) {
+        char p[32];
+        fstest_name(p, "fstest_many", i);
+        ext2_unlink(p);
+    }
+    ext2_rmdir("/fstest_many");
+
+    if (fstest_stop()) goto done;
+
+    /* 1. read a file that mke2fs populated, proving mount + read path.
+     * The staged file is "alpha content one\n" -- fs_test.py writes the
+     * trailing newline and mke2fs -d keeps it -- so it is 18 bytes on disk.
+     * Compare all 18.  Comparing the bare 17-char literal would memcmp its
+     * own NUL terminator against the file's '\n' and could never match,
+     * which is not a driver bug. */
+    n = ext2_read_file_path("/etc/conf.txt", buf, sizeof(buf) - 1);
+    fstest_report("read-prepopulated",
+                  n == 18 && memcmp(buf, "alpha content one\n", 18) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 2. create + write + read back a small file */
+    /* ext2_creat returns the new inode number, not 0 -- a strictly stronger
+     * success test than "== 0", and one that also catches a creat that reports
+     * success without allocating anything. */
+    int rc = ext2_creat("/fstest_small");
+    fstest_report("creat-small", rc > 0);
+    rc = ext2_write_file_path("/fstest_small", "hello fstest", 12);
+    fstest_report("write-small", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_small", buf, sizeof(buf) - 1);
+    fstest_report("read-back-small", n == 12 && memcmp(buf, "hello fstest", 12) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 3. rewrite with a different length, to catch size/blocks bookkeeping
+     *    that only goes wrong when the new content is not the old length */
+    rc = ext2_write_file_path("/fstest_small", "a much longer second write", 27);
+    fstest_report("rewrite-longer", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_small", buf, sizeof(buf) - 1);
+    fstest_report("read-back-longer",
+                  n == 27 && memcmp(buf, "a much longer second write", 27) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 4. directories */
+    rc = ext2_mkdir("/fstest_dir");
+    fstest_report("mkdir", rc == 0);
+    rc = ext2_creat("/fstest_dir/a");
+    fstest_report("creat-in-dir", rc > 0);
+    rc = ext2_write_file_path("/fstest_dir/a", "nested", 6);
+    fstest_report("write-in-dir", rc > 0);
+    memset(buf, 0, sizeof(buf));
+    n = ext2_read_file_path("/fstest_dir/a", buf, sizeof(buf) - 1);
+    fstest_report("read-nested", n == 6 && memcmp(buf, "nested", 6) == 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 5. a file large enough to need an indirect block. With a 1 KiB block
+     *    size that is 12 direct blocks, so 20 KiB forces block 12 to be
+     *    allocated and the single-indirect path to be walked. This is the
+     *    case that a journal must treat as ordinary data. */
+    {
+        static char big[20480];
+        for (int i = 0; i < (int)sizeof(big); i++)
+            big[i] = (char)('A' + (i % 26));
+        rc = ext2_creat("/fstest_big");
+        fstest_report("creat-big", rc > 0);
+        rc = ext2_write_file_path("/fstest_big", big, sizeof(big));
+        fstest_report("write-big", rc == (int)sizeof(big));
+        static char rbig[20480];
+        n = ext2_read_file_path("/fstest_big", rbig, sizeof(rbig));
+        fstest_report("read-back-big",
+                      n == (int)sizeof(big) && memcmp(big, rbig, sizeof(big)) == 0);
+    }
+
+    if (fstest_stop()) goto done;
+
+    /* 6. unlink and confirm it is gone; rmdir and confirm it is gone */
+    rc = ext2_unlink("/fstest_dir/a");
+    fstest_report("unlink", rc == 0);
+    n = ext2_read_file_path("/fstest_dir/a", buf, sizeof(buf) - 1);
+    fstest_report("unlinked-is-gone", n < 0);
+    rc = ext2_rmdir("/fstest_dir");
+    fstest_report("rmdir", rc == 0);
+    n = ext2_read_file_path("/fstest_dir", buf, sizeof(buf) - 1);
+    fstest_report("rmdir-is-gone", n < 0);
+
+    if (fstest_stop()) goto done;
+
+    /* 7. Fill one directory past a single block.
+     *
+     * A new directory is one block holding "." (rec_len 12) and ".."
+     * (rec_len block_size - 12), so the very first add has to split "..", and
+     * every later add lands in the tail after it.  When the tail runs out the
+     * directory has to grow.  Both of those are where a wrong rec_len breaks
+     * the chain: the entry after the break is never found, and e2fsck calls
+     * the directory corrupt.  Nothing above here creates enough entries to
+     * reach either path -- every earlier test puts at most a handful of names
+     * in a directory -- so this is the first check that does.
+     *
+     * 100 names of two or three characters need 100 * 12 = 1200 bytes of entry
+     * space, comfortably past one 1 KiB block, and the mixed name lengths mean
+     * the splits see both a 12- and a 16-byte entry to make room. */
+    {
+        int created = 0, wrote = 0, read_ok = 0;
+        char one;
+
+        ext2_rmdir("/fstest_many");
+        if (ext2_mkdir("/fstest_many") == 0) {
+            for (int i = 0; i < 100; i++) {
+                char p[32];
+                fstest_name(p, "fstest_many", i);
+                if (ext2_creat(p) > 0) created++;
+                one = (char)('A' + (i % 26));
+                if (ext2_write_file_path(p, &one, 1) == 1) wrote++;
+            }
+        }
+        fstest_report("mkdir-many", created == 0 || created == 100);
+        fstest_report("creat-many", created == 100);
+        fstest_report("write-many", wrote == 100);
+
+        for (int i = 0; i < 100; i++) {
+            char p[32];
+            fstest_name(p, "fstest_many", i);
+            n = ext2_read_file_path(p, buf, sizeof(buf) - 1);
+            if (n == 1 && buf[0] == (char)('A' + (i % 26))) read_ok++;
+        }
+        fstest_report("read-back-many", read_ok == 100);
+    }
+
+    if (fstest_stop()) goto done;
+
+    /* 8. Directory link counts.
+     *
+     * A directory's links_count is 2 -- for "." and ".." -- plus one per
+     * subdirectory, so mkdir has to bump the parent's and rmdir has to put it
+     * back.  Checks 3-6 create /fstest_dir and then remove it again, so the net
+     * change is zero and a driver that never touched the count at all still
+     * finishes with the correct number.  The bug is therefore invisible to
+     * everything above; it only shows once a subdirectory is left behind. */
+    {
+        struct ext2_inode before, after;
+        int have_before = (ext2_read_inode(2, &before) == 0);
+        int have_after = 0;
+
+        ext2_rmdir("/fstest_lc");
+        if (ext2_mkdir("/fstest_lc") == 0)
+            have_after = (ext2_read_inode(2, &after) == 0);
+        fstest_report("mkdir-link-count",
+                      have_before && have_after &&
+                      after.links_count == before.links_count + 1);
+
+        ext2_rmdir("/fstest_lc");
+        have_after = (ext2_read_inode(2, &after) == 0);
+        fstest_report("rmdir-link-count",
+                      have_before && have_after &&
+                      after.links_count == before.links_count);
+    }
+
+done:
+    kprintf("FSTEST RESULT %d/%d\n",
+            fstest_checks - fstest_failed, fstest_checks);
+}
+
 static void cmd_printenv(int argc, char **argv) {
     if (argc > 1) {
         const char *v = env_get(argv[1]);
@@ -3917,6 +4227,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "setcursor") == 0) cmd_setcursor(argc, argv);
     else if (strcmp(cmd, "lsblk") == 0) cmd_lsblk();
     else if (strcmp(cmd, "mount") == 0) cmd_mount(argc, argv);
+    else if (strcmp(cmd, "fstest") == 0) cmd_fstest(argc, argv);
     else if (strcmp(cmd, "els") == 0) cmd_ls_ext(argc, argv);
     else if (strcmp(cmd, "ecat") == 0) cmd_cat_ext(argc, argv);
     else if (strcmp(cmd, "sysinfo") == 0) cmd_sysinfo();
@@ -3933,6 +4244,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "wineserver") == 0) cmd_wineserver(argc, argv);
     else if (strcmp(cmd, "xora") == 0) cmd_xora(argc, argv);
     else if (strcmp(cmd, "nettest") == 0) cmd_nettest(argc, argv);
+    else if (strcmp(cmd, "systemm") == 0) cmd_systemm(argc, argv);
     else kprintf("%s: command not found\n", cmd);
 }
 
@@ -4104,4 +4416,518 @@ void shell_selftest(void) {
     cmd_nettest(1, nargv);
 
     kprintf("SHELLTEST: done\n");
+}
+
+/* =====================================================================
+ * systemm — storage + service + package/network control
+ *
+ * Helper functions called by the builtin.  These are thin wrappers around
+ * existing kernel functionality, so the builtin stays a presentation layer.
+ * ===================================================================== */
+
+static void sysm_blk_list(void) {
+    if (!block_available()) {
+        kprintf("no block device detected\n");
+        return;
+    }
+    int sectors, is_lba;
+    block_get_info(&sectors, &is_lba);
+    kprintf("disk: %s (%d MB, %s LBA)\n",
+            block_backend_name(),
+            (int)((uint64_t)sectors * 512 / 1048576),
+            is_lba ? "48-bit" : "28-bit");
+    kprintf("  sectors: %d\n", sectors);
+}
+
+static void sysm_blk_part(const char *dev) {
+    (void)dev;  /* single disk for now */
+    if (!block_available()) { kprintf("no block device\n"); return; }
+    int np = part_count();
+    if (np == 0) { kprintf("no partitions\n"); return; }
+    kprintf("partitions on %s:\n", block_backend_name());
+    kprintf("  idx  boot  type  start_lba      sectors        size (MB)\n");
+    for (int i = 0; i < np; i++) {
+        partition_t p;
+        if (part_get(i, &p) < 0) continue;
+        int mb = (int)((uint64_t)p.sector_count * 512 / 1048576);
+        kprintf("  %2d   %s    0x%02x  %-12u  %-12u  %d\n",
+                i, p.bootable ? "*" : " ", p.type,
+                p.start_lba, p.sector_count, mb);
+    }
+}
+
+static int read_root_superblock(uint8_t *sb) {
+    /* Read the superblock of the root ext2/3 filesystem.
+     * The root is always partition 0 of the boot disk. */
+    if (!block_available()) return -1;
+    partition_t p;
+    if (part_get(0, &p) < 0) return -1;
+    if (block_read_sectors(p.start_lba + 2, 2, sb) < 0) return -1;  /* block 1 = superblock, 1 KiB blocks = 2 sectors */
+    if (*(uint16_t*)(sb + 0x38) != 0xEF53) return -1;
+    return 0;
+}
+
+static void sysm_fs_list(void) {
+    extern int ext2_mounted(void);
+    if (!ext2_mounted()) {
+        kprintf("no ext2/3 filesystem mounted\n");
+        return;
+    }
+    uint8_t sb[1024];
+    if (read_root_superblock(sb) < 0) {
+        kprintf("fs_list: cannot read superblock\n");
+        return;
+    }
+    uint32_t bs = *(uint32_t*)(sb + 0x18);
+    if (bs == 0) bs = 1024;
+    else bs = 1024 << bs;
+    uint32_t blocks = *(uint32_t*)(sb + 0x04);
+    uint32_t free = *(uint32_t*)(sb + 0x0C);
+    int total_mb = (int)((uint64_t)blocks * bs / 1048576);
+    int free_mb = (int)((uint64_t)free * bs / 1048576);
+    int used_pct = total_mb ? (100 * (total_mb - free_mb) / total_mb) : 0;
+    kprintf("mounted filesystems:\n");
+    kprintf("  mount  type    size (MB)  free (MB)  used%%\n");
+    kprintf("  /      ext%c   %-10d  %-10d  %d%%\n",
+            (sb[0x5C] & 4) ? '3' : '2', total_mb, free_mb, used_pct);
+}
+
+static void sysm_fs_info(const char *mount) {
+    (void)mount;  /* only / supported */
+    uint8_t sb[1024];
+    if (read_root_superblock(sb) < 0) { kprintf("fs_info: cannot read superblock\n"); return; }
+
+    uint32_t inodes = *(uint32_t*)(sb + 0x00);
+    uint32_t blocks = *(uint32_t*)(sb + 0x04);
+    uint32_t free_blocks = *(uint32_t*)(sb + 0x0C);
+    uint32_t free_inodes = *(uint32_t*)(sb + 0x10);
+    uint32_t first_data = *(uint32_t*)(sb + 0x14);
+    uint32_t log_bs = *(uint32_t*)(sb + 0x18);
+    uint32_t bp_group = *(uint32_t*)(sb + 0x20);
+    uint32_t ip_group = *(uint32_t*)(sb + 0x28);
+    uint16_t magic = *(uint16_t*)(sb + 0x38);
+    uint32_t state = *(uint32_t*)(sb + 0x3C);
+    uint32_t feat_compat = *(uint32_t*)(sb + 0x5C);
+    uint32_t feat_incompat = *(uint32_t*)(sb + 0x60);
+    uint32_t feat_ro = *(uint32_t*)(sb + 0x64);
+    uint32_t journal_inum = *(uint32_t*)(sb + 0xE0);
+    uint16_t desc_size = *(uint16_t*)(sb + 0xFE);
+
+    uint32_t bs = log_bs ? (1024 << log_bs) : 1024;
+    kprintf("superblock for %s:\n", mount);
+    kprintf("  magic:              0x%04x (%s)\n", magic, magic == 0xEF53 ? "ext2/3" : "invalid");
+    kprintf("  state:              0x%08x (%s)\n", state, (state & 1) ? "clean" : "dirty");
+    kprintf("  block size:         %u\n", bs);
+    kprintf("  blocks:             %u (total %u MB)\n", blocks, (int)((uint64_t)blocks * bs / 1048576));
+    kprintf("  free blocks:        %u (%u MB)\n", free_blocks, (int)((uint64_t)free_blocks * bs / 1048576));
+    kprintf("  inodes:             %u\n", inodes);
+    kprintf("  free inodes:        %u\n", free_inodes);
+    kprintf("  blocks/group:       %u\n", bp_group);
+    kprintf("  inodes/group:       %u\n", ip_group);
+    kprintf("  first data block:   %u\n", first_data);
+    kprintf("  feat compat:        0x%08x", feat_compat);
+    if (feat_compat & 1) kprintf(" (has_journal)");
+    if (feat_compat & 2) kprintf(" (resize_inode)");
+    kprintf("\n");
+    kprintf("  feat incompat:      0x%08x", feat_incompat);
+    if (feat_incompat & 1) kprintf(" (filetype)");
+    if (feat_incompat & 2) kprintf(" (recovery)");
+    if (feat_incompat & 4) kprintf(" (journal)");
+    kprintf("\n");
+    kprintf("  feat ro_compat:     0x%08x", feat_ro);
+    if (feat_ro & 1) kprintf(" (sparse_super)");
+    if (feat_ro & 2) kprintf(" (large_file)");
+    if (feat_ro & 4) kprintf(" (btree_dir)");
+    kprintf("\n");
+    kprintf("  journal inode:      %u\n", journal_inum);
+    kprintf("  desc size:          %u\n", desc_size);
+}
+
+static void sysm_journal_status(const char *mount) {
+    (void)mount;
+    extern int jbd2_have_journal(void);
+    extern uint32_t jbd2_get_maxlen(void);
+    extern uint32_t jbd2_get_first(void);
+    extern uint32_t jbd2_get_head(void);
+    extern uint32_t jbd2_get_sequence(void);
+    extern int jbd2_get_tag_bytes(void);
+    extern const uint8_t *jbd2_get_uuid(void);
+
+    if (!jbd2_have_journal()) {
+        kprintf("no journal present\n");
+        return;
+    }
+    kprintf("journal status for %s:\n", mount);
+    kprintf("  length:          %u blocks (%u MB)\n",
+            jbd2_get_maxlen(), (int)((uint64_t)jbd2_get_maxlen() * 1024 / 1048576));
+    kprintf("  first log block: %u\n", jbd2_get_first());
+    kprintf("  head (next):     %u\n", jbd2_get_head());
+    kprintf("  sequence:        %u\n", jbd2_get_sequence());
+    kprintf("  tag size:        %d bytes\n", jbd2_get_tag_bytes());
+    const uint8_t *uuid = jbd2_get_uuid();
+    kprintf("  uuid:            ");
+    for (int i = 0; i < 16; i++) kprintf("%02x", uuid[i]);
+    kprintf("\n");
+}
+
+/* pkg helpers - catalogs are split into multiple arrays */
+static const pkg_repo_t *pkg_all_repos[] = {
+    pkg_repo_core, pkg_repo_extra, pkg_repo_dev,
+    pkg_repo_ccp, pkg_repo_aur, pkg_repo_android
+};
+static int pkg_all_counts[6];
+
+static void sysm_pkg_init_counts(void) {
+    extern int pkg_core_count, pkg_extra_count, pkg_dev_count;
+    extern int pkg_ccp_count, pkg_aur_count, pkg_android_count;
+    pkg_all_counts[0] = pkg_core_count;
+    pkg_all_counts[1] = pkg_extra_count;
+    pkg_all_counts[2] = pkg_dev_count;
+    pkg_all_counts[3] = pkg_ccp_count;
+    pkg_all_counts[4] = pkg_aur_count;
+    pkg_all_counts[5] = pkg_android_count;
+}
+
+static void sysm_pkg_list(const char *filter_cat) {
+    sysm_pkg_init_counts();
+    const char *cat_names[] = {"core", "network", "dev", "ccp", "aur", "android"};
+    kprintf("Packages%s:\n", filter_cat ? " (filtered)" : "");
+    for (int r = 0; r < 6; r++) {
+        if (filter_cat && strcmp(filter_cat, cat_names[r]) != 0) continue;
+        for (int i = 0; i < pkg_all_counts[r]; i++) {
+            const pkg_repo_t *p = &pkg_all_repos[r][i];
+            if (!p || !p->name) continue;
+            kprintf("  %-32s %s  [cat:%s]\n", p->name, p->version, cat_names[r]);
+        }
+    }
+}
+
+static void sysm_pkg_deps(const char *name) {
+    sysm_pkg_init_counts();
+    for (int r = 0; r < 6; r++) {
+        for (int i = 0; i < pkg_all_counts[r]; i++) {
+            const pkg_repo_t *p = &pkg_all_repos[r][i];
+            if (!p || !p->name) continue;
+            if (strcmp(p->name, name) == 0) {
+                kprintf("Dependencies for %s:\n", name);
+                if (p->dep_count == 0) {
+                    kprintf("  (none)\n");
+                } else {
+                    for (int d = 0; d < p->dep_count; d++)
+                        kprintf("  %s\n", p->depends[d]);
+                }
+                return;
+            }
+        }
+    }
+    kprintf("pkg_deps: '%s': not found\n", name);
+}
+
+/* net helpers */
+static void sysm_net_iface(void) {
+    extern int netdev_get_count(void);
+    extern netdev_t *netdev_get_by_index(int idx);
+    int n = netdev_get_count();
+    if (n == 0) { kprintf("no network interfaces\n"); return; }
+    kprintf("network interfaces:\n");
+    kprintf("  idx  name    type  state    ip              mac\n");
+    for (int i = 0; i < n; i++) {
+        netdev_t *d = netdev_get_by_index(i);
+        if (!d || !d->name[0]) continue;
+        char ip[16] = "none", mac[18] = "none";
+        if (d->ip_addr) snprintf(ip, sizeof(ip), "%d.%d.%d.%d",
+                            (d->ip_addr>>24)&255, (d->ip_addr>>16)&255, (d->ip_addr>>8)&255, d->ip_addr&255);
+        if (d->addr[0] || d->addr[1] || d->addr[2] || d->addr[3] || d->addr[4] || d->addr[5])
+            snprintf(mac, sizeof(mac), "%02x:%02x:%02x:%02x:%02x:%02x",
+                                   d->addr[0],d->addr[1],d->addr[2],d->addr[3],d->addr[4],d->addr[5]);
+        kprintf("  %2d   %-6s  %d     %s    %-15s %s\n",
+                i, d->name, d->type, (d->flags & NETDEV_UP) ? "UP  " : "DOWN", ip, mac);
+    }
+}
+
+static void sysm_net_dns(void) {
+    extern uint32_t dns_get_server(void);
+    extern const char *dns_get_server_str(void);
+    uint32_t s = dns_get_server();
+    if (s) {
+        kprintf("DNS server: %d.%d.%d.%d\n",
+                (s>>24)&255, (s>>16)&255, (s>>8)&255, s&255);
+    } else {
+        kprintf("DNS server: none configured\n");
+    }
+    const char *str = dns_get_server_str();
+    if (str && *str) kprintf("DNS server (str): %s\n", str);
+}
+
+static int sysm_net_up(const char *iface) {
+    extern int netdev_up(const char *name);
+    return netdev_up(iface);
+}
+
+static int sysm_net_down(const char *iface) {
+    extern int netdev_down(const char *name);
+    return netdev_down(iface);
+}
+
+/* simple atoi */
+static int sysm_atoi(const char *s) {
+    int n = 0, neg = 0;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s == '-') { neg = 1; s++; }
+    while (*s >= '0' && *s <= '9') {
+        n = n * 10 + (*s - '0');
+        s++;
+    }
+    return neg ? -n : n;
+}
+
+/* process helpers already exist: proc_kill, proc_list (via cmd_ps) */
+
+/* =====================================================================
+ * systemm builtin command
+ * ===================================================================== */
+
+static void cmd_systemm(int argc, char **argv) {
+    if (argc < 2) {
+        kprintf("usage: systemm <blk|fs|journal|ps|kill|start|pkg|net> ...\n");
+        return;
+    }
+
+    const char *sub = argv[1];
+
+    if (strcmp(sub, "blk") == 0) {
+        if (argc < 3 || strcmp(argv[2], "list") == 0) {
+            sysm_blk_list();
+            return;
+        }
+        if (strcmp(argv[2], "part") == 0 && argc >= 4) {
+            sysm_blk_part(argv[3]);
+            return;
+        }
+        kprintf("usage: systemm blk [list|part <dev>]\n");
+        return;
+    }
+
+    if (strcmp(sub, "fs") == 0) {
+        if (argc < 3 || strcmp(argv[2], "list") == 0) {
+            sysm_fs_list();
+            return;
+        }
+        if (strcmp(argv[2], "info") == 0 && argc >= 4) {
+            sysm_fs_info(argv[3]);
+            return;
+        }
+        kprintf("usage: systemm fs [list|info <mount>]\n");
+        return;
+    }
+
+    if (strcmp(sub, "journal") == 0) {
+        if (argc >= 4 && strcmp(argv[2], "status") == 0) {
+            sysm_journal_status(argv[3]);
+            return;
+        }
+        kprintf("usage: systemm journal <mount> status\n");
+        return;
+    }
+
+    if (strcmp(sub, "ps") == 0) {
+        extern void cmd_ps(void);
+        cmd_ps();
+        return;
+    }
+
+    if (strcmp(sub, "kill") == 0) {
+        if (argc < 3) {
+            kprintf("usage: systemm kill <pid> [SIG]\n");
+            return;
+        }
+        int pid = sysm_atoi(argv[2]);
+        int sig = argc >= 4 ? sysm_atoi(argv[3]) : 9;
+        /* Same path the kill syscall takes, so the two cannot disagree. */
+        int r = systemm_kill(shell_level, pid, sig);
+        if (r == 0) kprintf("sent signal %d to pid %d\n", sig, pid);
+        else if (systemm_level_of(pid) < 0) kprintf("kill: no task with pid %d\n", pid);
+        else kprintf("kill: refused, level %d (%s) may not signal a task at level %d (%s)\n",
+                     (int)shell_level, systemm_level_name(shell_level),
+                     systemm_level_of(pid), systemm_level_name(systemm_level_of(pid)));
+        return;
+    }
+
+    if (strcmp(sub, "start") == 0) {
+        if (argc < 3) {
+            kprintf("usage: systemm start <program> [args...]\n");
+            return;
+        }
+        extern void cmd_exec(int argc, char **argv);
+        cmd_exec(argc - 2, argv + 2);
+        return;
+    }
+
+    if (strcmp(sub, "task") == 0) {
+        if (argc < 3) {
+            kprintf("usage: systemm task <list|info|kill|run> ...\n");
+            return;
+        }
+        const char *tsub = argv[2];
+
+        if (strcmp(tsub, "list") == 0) {
+            kprintf("Tasks:\n");
+            proc_list();
+            return;
+        }
+
+        if (strcmp(tsub, "info") == 0 && argc >= 4) {
+            int pid = sysm_atoi(argv[3]);
+            int lvl = systemm_level_of(pid);
+            if (lvl < 0) {
+                kprintf("task info: no task with pid %d\n", pid);
+                return;
+            }
+            char name[PROC_NAME_MAX] = "?";
+            proc_get_pid_name(pid, name, sizeof(name));
+            kprintf("task %d: %s (level %d, %s)\n", pid, name,
+                    lvl, systemm_level_name(lvl));
+            return;
+        }
+
+        if (strcmp(tsub, "level") == 0 && argc >= 4) {
+            /* Raw level for scripting: prints just the number, 0..3, and
+             * nothing else, so `systemm task level <pid>` can be tested
+             * without parsing prose.  Exit status is not meaningful here --
+             * the shell has none -- so "no such task" is -1 on stdout. */
+            int pid = sysm_atoi(argv[3]);
+            int lvl = systemm_level_of(pid);
+            kprintf("%d\n", lvl);
+            return;
+        }
+
+        if (strcmp(tsub, "set") == 0 && argc >= 5) {
+            int pid = sysm_atoi(argv[3]);
+            int lvl = sysm_atoi(argv[4]);
+            if (systemm_level_of(pid) < 0) {
+                kprintf("task set: no task with pid %d\n", pid);
+                return;
+            }
+            /* systemm_set_level() owns the no-promotion rule, so the shell
+             * and the syscall path cannot drift apart on it. */
+            if (systemm_set_level(shell_level, pid, lvl) < 0) {
+                if (lvl < 0 || lvl > LEVEL_KERNEL)
+                    kprintf("task set: level must be 0..3\n");
+                else
+                    kprintf("task set: level %d (%s) may not re-level a task to level %d (%s)\n",
+                            (int)shell_level, systemm_level_name(shell_level),
+                            lvl, systemm_level_name(lvl));
+                return;
+            }
+            kprintf("task %d: level set to %d (%s)\n", pid, lvl,
+                    systemm_level_name(lvl));
+            return;
+        }
+
+        if (strcmp(tsub, "kill") == 0 && argc >= 4) {
+            int pid = sysm_atoi(argv[3]);
+            int sig = argc >= 5 ? sysm_atoi(argv[4]) : 9;
+            int lvl = systemm_level_of(pid);
+            if (lvl < 0) {
+                kprintf("task kill: no task with pid %d\n", pid);
+                return;
+            }
+            int r = systemm_kill(shell_level, pid, sig);
+            if (r == 0) {
+                kprintf("sent signal %d to task %d\n", sig, pid);
+            } else if (!systemm_may_act(shell_level, pid)) {
+                kprintf("task kill: level %d (%s) may not signal task %d at level %d (%s)\n",
+                        (int)shell_level, systemm_level_name(shell_level), pid,
+                        lvl, systemm_level_name(lvl));
+            } else {
+                kprintf("task kill: pid %d: failed (rc=%d)\n", pid, r);
+            }
+            return;
+        }
+
+        if (strcmp(tsub, "run") == 0 && argc >= 4) {
+            /* Default is the caller's own level, not a fixed one: the shell
+             * is level 2, so an unqualified `task run` starts a level-2 task
+             * and the "not above yourself" rule below does not reject it. */
+            proc_level_t lvl = shell_level;
+            int argi = 3;
+            if (argc >= 5 && strcmp(argv[3], "--level") == 0) {
+                int want = sysm_atoi(argv[4]);
+                if (want < 0 || want > LEVEL_KERNEL) {
+                    kprintf("task run: level must be 0..3\n");
+                    return;
+                }
+                lvl = (proc_level_t)want;
+                argi = 5;
+            }
+            if (argi >= argc) {
+                kprintf("usage: systemm task run [--level N] <program> [args...]\n");
+                return;
+            }
+            /* No promotion: you can start something at your own level or
+             * below, never above.  Without this, `--level 3` would be a
+             * privilege escalation out of the level-2 shell. */
+            if (lvl > shell_level) {
+                kprintf("task run: level %d (%s) may not start a task at level %d (%s)\n",
+                        (int)shell_level, systemm_level_name(shell_level),
+                        (int)lvl, systemm_level_name(lvl));
+                return;
+            }
+            int targc = argc - argi;
+            if (targc > 30) targc = 30;
+            /* cmd_exec_level() takes the ELF at argv[1], not argv[0]: it is the
+             * body of the `exec` builtin, where argv[0] is the command name it
+             * was invoked as and argv[1] the file.  Prepend a placeholder so
+             * the program path lands where exec expects it. */
+            static char *task_argv[33];
+            task_argv[0] = (char *)"systemm task run";
+            for (int i = 0; i < targc; i++)
+                task_argv[i + 1] = argv[argi + i];
+            cmd_exec_level(targc + 1, task_argv, lvl);
+            return;
+        }
+
+        kprintf("usage: systemm task <list|info|set|kill|run> ...\n");
+        if (argc < 5 && strcmp(tsub, "set") == 0)
+            kprintf("       systemm task set <pid> <level 0-3>\n");
+        return;
+    }
+
+    if (strcmp(sub, "pkg") == 0) {
+        if (argc < 3 || strcmp(argv[2], "list") == 0) {
+            sysm_pkg_list(argc >= 4 ? argv[3] : NULL);
+            return;
+        }
+        if (strcmp(argv[2], "deps") == 0 && argc >= 4) {
+            sysm_pkg_deps(argv[3]);
+            return;
+        }
+        kprintf("usage: systemm pkg [list [cat]|deps <name>]\n");
+        return;
+    }
+
+    if (strcmp(sub, "net") == 0) {
+        if (argc < 3 || strcmp(argv[2], "iface") == 0) {
+            sysm_net_iface();
+            return;
+        }
+        if (strcmp(argv[2], "dns") == 0) {
+            sysm_net_dns();
+            return;
+        }
+        if (strcmp(argv[2], "up") == 0 && argc >= 4) {
+            int r = sysm_net_up(argv[3]);
+            kprintf(r == 0 ? "interface %s up\n" : "net up: failed (%d)\n", argv[3], r);
+            return;
+        }
+        if (strcmp(argv[2], "down") == 0 && argc >= 4) {
+            int r = sysm_net_down(argv[3]);
+            kprintf(r == 0 ? "interface %s down\n" : "net down: failed (%d)\n", argv[3], r);
+            return;
+        }
+        kprintf("usage: systemm net [iface|dns|up|down <iface>]\n");
+        return;
+    }
+
+    kprintf("systemm: unknown subcommand: %s\n", sub);
 }

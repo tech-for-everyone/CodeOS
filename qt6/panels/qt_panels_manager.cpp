@@ -163,9 +163,23 @@ void QtTilingManager::tileWorkspace(int wid) {
     if (!mgr || !mgr->wm()) return;
     for (QWidget *w : qAsConst(ws.windows)) {
         QtAppWindow *aw = qobject_cast<QtAppWindow*>(w);
-        if (aw && aw->wmId() > 0)
+        if (aw && aw->wmId() > 0) {
+            /* Log the rect actually applied to the window.  `tile RUN` above
+             * prints the *screen* rect the tiling was computed from, which is
+             * not where any window ends up (one window lands at
+             * 8,MENUBAR_H+8 regardless).  The compositor's chrome is drawn
+             * from these rects, so anything judging chrome position from the
+             * compositor's own output -- the screenshot regression check --
+             * has to read them from here.  The wm id is logged because a
+             * window is re-tiled several times, and a reader must keep the
+             * last rect for an id or it will judge a stale position. */
+            kprintf("HYPERDE: tile SYNC ws=%d id=%d n=%d '@%d,%d %dx%d' title='%s'\n",
+                    wid, aw->wmId(), ws.windows.size(),
+                    aw->x(), aw->y(), aw->width(), aw->height(),
+                    aw->appTitle().toUtf8().constData());
             lvgl_wm_sync_geometry(mgr->wm(), aw->wmId(),
                                   aw->x(), aw->y(), aw->width(), aw->height());
+        }
     }
 }
 

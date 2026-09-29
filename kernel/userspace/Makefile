@@ -12,6 +12,26 @@ endif
 
 PKG_SRC = ../../pkgs/core
 
+# Packages live under two roots: pkgs/core is canonical, pkgs/extra holds
+# the optional/Android/Wine tier plus the Qt apps.  PROGRAMS below lists
+# bare names, so each one has to be resolved against both roots in order
+# -- otherwise moving a package into pkgs/extra silently removes it from
+# the build ("No rule to make target '../../pkgs/core/<name>/src/<name>.c'")
+# even though the source is present in the tree.
+PKG_ROOTS = $(PKG_SRC) ../../pkgs/extra
+
+# Path to package $(1)'s main source, first existing root wins.  The
+# wildcard has to run per root inside a foreach: writing it as
+# $(wildcard $(PKG_ROOTS)/$(1)/...) expands PKG_ROOTS to a space-separated
+# list first, so the "/$(1)/src/$(1).c" suffix would attach only to the
+# last root and the bare directory "pkgs/core" would win -- which make
+# accepts, so the build would compile a directory instead of failing.
+#
+# The trailing fallback keeps the canonical pkgs/core path in the error
+# message when the package is in neither root, which is a far more useful
+# diagnostic than a bare "No rule to make target".
+pkg_main = $(firstword $(foreach r,$(PKG_ROOTS),$(wildcard $(r)/$(1)/src/$(1).c)) $(PKG_SRC)/$(1)/src/$(1).c)
+
 USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
               -nostdlib -nostartfiles -fno-stack-protector -fno-PIC \
               -Wall -Wextra -Werror -O2 -g \
@@ -23,6 +43,7 @@ PROGRAMS = init shell csl zircon-notify zircon-clock zircon-info \
            apk-parser android-container android-apps code-music \
            linux-runner ld-codeos terminal syscall_test openweb \
            wineserver wine-runner linux-probe run-as dnslookup \
+           crosvm-launcher ncvm \
            android-launcher android-clock android-calculator \
            android-settings android-dialer android-music android-browser \
            android-camera android-calendar android-keyboard
@@ -55,8 +76,8 @@ LIB_ANDROID = lib/android.o lib/android_ui.o
 
 # Programs that only need core libs
 CORE_PROGS = init shell csl zircon-notify zircon-clock zircon-info \
-             code-music linux-runner syscall_test crosvm-launcher android-apps \
-             wineserver wine-runner run-as dnslookup
+             code-music linux-runner syscall_test crosvm-launcher ncvm android-apps \
+             wineserver wine-runner run-as dnslookup leveltest
 # Programs that also need android lib
 ANDROID_PROGS = apk-parser android-container android-launcher \
                 android-clock android-calculator android-settings \
@@ -64,15 +85,15 @@ ANDROID_PROGS = apk-parser android-container android-launcher \
                 android-camera android-calendar android-keyboard
 
 define core-prog-rule
-$(1): $(PKG_SRC)/$(1)/src/$(1).c crt0.o $$(LIB_OBJ)
-	$$(CC) $$(USER_CFLAGS) -c -o $(1).o $$(PKG_SRC)/$(1)/src/$(1).c
+$(1): $$(call pkg_main,$(1)) crt0.o $$(LIB_OBJ)
+	$$(CC) $$(USER_CFLAGS) -c -o $(1).o $$(call pkg_main,$(1))
 	$$(LD) $$(USER_LDFLAGS) -T link.ld -o $$@ $(1).o crt0.o $$(LIB_OBJ)
 endef
 $(foreach p,$(CORE_PROGS),$(eval $(call core-prog-rule,$(p))))
 
 define android-prog-rule
-$(1): $(PKG_SRC)/$(1)/src/$(1).c crt0.o $$(LIB_OBJ) $$(LIB_ANDROID)
-	$$(CC) $$(USER_CFLAGS) -c -o $(1).o $$(PKG_SRC)/$(1)/src/$(1).c
+$(1): $$(call pkg_main,$(1)) crt0.o $$(LIB_OBJ) $$(LIB_ANDROID)
+	$$(CC) $$(USER_CFLAGS) -c -o $(1).o $$(call pkg_main,$(1))
 	$$(LD) $$(USER_LDFLAGS) -T link.ld -o $$@ $(1).o crt0.o $$(LIB_OBJ) $$(LIB_ANDROID)
 endef
 $(foreach p,$(ANDROID_PROGS),$(eval $(call android-prog-rule,$(p))))

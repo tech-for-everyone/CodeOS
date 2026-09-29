@@ -96,10 +96,14 @@ static int read_file(const char *path, char *buf, int max) {
 }
 
 static int write_file(const char *path, const char *data) {
-    int fd = sys_open(path, 1);
-    if (fd < 0) fd = sys_open(path, 2);
+    /* O_CREAT matters: .pid/.exit/.sup are the launcher's own output, so
+     * nothing else has created them.  The previous `sys_open(path, 1)`
+     * would fail with -ENOENT for exactly those. */
+    int fd = sys_open(path, O_WRONLY | O_CREAT);
     if (fd < 0) return -1;
-    int n = sys_write(data, strlen(data));
+    /* pwrite, not write: sys_write() takes no fd and goes to stdout, which
+     * sent every feedback file to the console instead of to disk. */
+    int n = sys_pwrite(fd, data, strlen(data));
     sys_close(fd);
     return n;
 }
@@ -107,7 +111,7 @@ static int write_file(const char *path, const char *data) {
 /* Supervisor child: waits for the VM process and records the exit status so
  * both the daemon and the kernel can observe VM termination. Runs in its own
  * process, so the daemon's poll loop is never blocked by a running VM. */
-static int run_supervisor(const char *name, char *cmd) {
+static void run_supervisor(const char *name, char *cmd) {
     char *argv[MAX_ARGS];
     int argc = tokenize(cmd, argv, MAX_ARGS);
     if (argc <= 0) sys_exit(1);
@@ -295,9 +299,10 @@ int main(int argc, char **argv) {
     for (;;) {
         /* Poll the command directory */
         char names[MAX_POLL];
+        /* sys_readdir fills the buffer with NUL-separated entry names and
+         * returns the byte count, so `n` bounds the walk below. */
         int n = sys_readdir(CMD_DIR, names, sizeof(names));
         if (n > 0) {
-            /* sys_readdir returns NUL-separated entries; walk them */
             int off = 0;
             while (off < n) {
                 const char *entry = names + off;

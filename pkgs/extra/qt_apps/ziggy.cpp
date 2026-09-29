@@ -177,7 +177,7 @@ void QtZiggyWidget::submitText() {
             m_messages.append({true, answer});
         }
     } else {
-        m_messages.append({true, "I couldn't answer that yet. Try 'help' or ask about CodeOS."});
+        m_messages.append({true, "Ziggy's Python brain isn't answering — is backend/server.py running on the host? Try 'help' or ask about CodeOS."});
     }
     m_transcript = QString("You said: %1").arg(prompt);
     update();

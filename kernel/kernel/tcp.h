@@ -1,6 +1,12 @@
 #ifndef TCP_H
 #define TCP_H
 #include "types.h"
+/* The TCP flag bits live in net.h, which is the shared wire-format header:
+ * the kernel's TCP stack and the panel net code both need them and the two
+ * copies had already drifted into a redefinition warning.  It is
+ * self-contained (stdint.h plus packet structs), so pulling it in here is
+ * free. */
+#include "net.h"
 
 #define TCP_MAX_SOCKETS 32
 #define TCP_MAX_BACKLOG 16
@@ -10,11 +16,7 @@
 #define TCP_TIMEOUT_MS 3000
 #define TCP_BUF_SIZE 4096
 
-#define TCP_FIN 0x01
-#define TCP_SYN 0x02
-#define TCP_RST 0x04
-#define TCP_PSH 0x08
-#define TCP_ACK 0x10
+/* TCP_FIN/SYN/RST/PSH/ACK are defined by net.h -- do not redefine them here. */
 
 typedef enum {
     TCP_CLOSED, TCP_LISTEN, TCP_SYN_SENT, TCP_SYN_RECEIVED,

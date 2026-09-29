@@ -48,7 +48,12 @@ static uint64_t saved_override;
 static uint64_t saved_user_rsp_saved;
 static uint64_t saved_rbx, saved_rbp, saved_r12, saved_r13, saved_r14, saved_r15;
 
-void user_mode_preserve(void) {
+/* Returns non-zero if there was a live enclosing session to preserve, i.e. if
+ * a caller that then re-enters user mode has something to unwind back to.
+ * A caller with no enclosing session (first entry, nothing to return to) gets
+ * 0 and must not try to re-enter the enclosing leaf. */
+int user_mode_preserve(void) {
+    int had_session = (user_mode_return_rip != 0);
     saved_return_rip = user_mode_return_rip;
     saved_kernel_rsp = user_mode_kernel_rsp;
     saved_override = (uint64_t)user_mode_return_override;
@@ -59,6 +64,7 @@ void user_mode_preserve(void) {
     saved_r13 = umode_saved_r13;
     saved_r14 = umode_saved_r14;
     saved_r15 = umode_saved_r15;
+    return had_session;
 }
 
 void user_mode_restore(void) {

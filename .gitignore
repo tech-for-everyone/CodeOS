@@ -6,6 +6,10 @@
 *.bin
 *.iso
 *.img
+# disk.img-legacy (kernel/Makefile) does not match *.img -- the suffix breaks
+# the glob -- so the legacy build artifact would show up as untracked.
+disk.img-legacy
+kernel/disk.img-legacy
 *.raw
 *.elf
 *.ftech
@@ -32,6 +36,8 @@ kernel/userspace/linux-runner
 kernel/userspace/ld-codeos
 kernel/userspace/terminal
 kernel/userspace/syscall_test
+kernel/userspace/leveltest
+kernel/userspace/leveltest.o
 kernel/userspace/android-launcher
 kernel/userspace/android-clock
 kernel/userspace/android-calculator
@@ -43,7 +49,7 @@ kernel/userspace/android-camera
 kernel/userspace/android-calendar
 kernel/userspace/android-keyboard
 codeos-1-kernel.bin
-codeos-1-kernel.iso
+codeos-1.0.iso
 
 # Build directories
 Zircon/build/
@@ -55,6 +61,16 @@ qt6/sysroot/
 # Rust
 **/target/
 **/Cargo.lock
+
+# Python (kernel/scripts/*.py are imported by each other, so importing one
+# drops a __pycache__ next to it)
+__pycache__/
+*.pyc
+
+# Scratch header/source variants kept alongside the real ones while working out
+# an alignment (ncvm.h.align740 is ncvm.h with IOBASE 0x630 instead of 0x740).
+# Nothing in the tree references them and no rule generates them.
+*.align740
 
 # Logs & serial capture
 *.log

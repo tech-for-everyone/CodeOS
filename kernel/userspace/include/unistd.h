@@ -111,6 +111,63 @@ static inline int sys_set_personality(int personality) {
     return ret;
 }
 
+/* ── Terminal attributes (termios) ──
+ * `ioctl` is a Linux-compat syscall, so it is only reachable while the
+ * process has PERSONALITY_LINUX. These helpers set the personality for the
+ * duration of the one call and restore it afterwards, so a program can keep
+ * using CodeOS-native syscall numbers (read, open, SYSCALL_WEB, ...) for
+ * everything else. Leaving the personality set would route those into the
+ * Linux translation table and break them.
+ *
+ * There is no syscall to read the current personality back, so the restore
+ * assumes the native value 0. That is correct for programs like the openweb
+ * app, which never leave native mode. A program that runs under
+ * PERSONALITY_LINUX for its whole life (linux-runner, crosvm-launcher) must
+ * not use these helpers -- it can call ioctl directly at its own numbers. */
+#define LINUX_IOCTL   16
+#define TCGETS        0x5401
+#define TCSETS        0x5402
+#define TCSETSW       0x5403
+#define TCSETSF       0x5404
+#define TCSANOW       0
+
+/* Bit masks in c_lflag. The kernel honours ICANON only: the serial input
+ * path does no echoing and has no signal or flow-control handling, so ECHO
+ * and ISIG are accepted and stored in the struct but change nothing. */
+#define ISIG          0x0001
+#define ICANON        0x0002
+#define ECHO          0x0008
+
+/* Exactly the x86-64 Linux layout, and exactly the 44 bytes the kernel
+ * exchanges (LINUX_TERMIOS_SIZE). The size must not be smaller: the kernel
+ * copies 44 bytes unconditionally, which would run past a short struct. */
+typedef struct {
+    unsigned int  c_iflag, c_oflag, c_cflag, c_lflag;
+    unsigned char c_line;
+    unsigned char c_cc[19];
+    unsigned int  c_ispeed, c_ospeed;
+} termios_t;
+
+static inline int sys_ioctl_linux(int fd, unsigned long request, void *arg) {
+    int ret;
+    sys_set_personality(PERSONALITY_LINUX);
+    __asm__ volatile("int $0x80" : "=a"(ret)
+                     : "a"((uint64_t)LINUX_IOCTL), "D"((uint64_t)fd),
+                       "S"((uint64_t)request), "d"((uint64_t)arg)
+                     : "memory");
+    sys_set_personality(0);
+    return ret;
+}
+
+static inline int tcgetattr(int fd, termios_t *t) {
+    return sys_ioctl_linux(fd, TCGETS, t);
+}
+
+static inline int tcsetattr(int fd, int action, const termios_t *t) {
+    (void)action;
+    return sys_ioctl_linux(fd, TCSETS, (void *)t);
+}
+
 typedef struct {
     uint64_t addr;
     uint32_t width;
@@ -330,6 +387,9 @@ static inline void *sys_shm_map(int fd) {
 #define WEB_GET_INFO       8
 #define WEB_GET_CONTENT    9
 #define WEB_TAB_USED       10
+#define WEB_GO_BACK        11
+#define WEB_GO_FORWARD     12
+#define WEB_STOP_LOADING   13
 
 typedef struct {
     char url[512];
@@ -358,6 +418,9 @@ static inline int sys_web_tab_progress(void) { return sys_web(WEB_TAB_PROGRESS, 
 static inline int sys_web_get_info(web_state_t *st) { return sys_web(WEB_GET_INFO, (uint64_t)st, sizeof(web_state_t), 0); }
 static inline int sys_web_get_content(void *buf, int max) { return sys_web(WEB_GET_CONTENT, (uint64_t)buf, (uint64_t)max, 0); }
 static inline int sys_web_tab_used(void) { return sys_web(WEB_TAB_USED, 0, 0, 0); }
+static inline int sys_web_go_back(void) { return sys_web(WEB_GO_BACK, 0, 0, 0); }
+static inline int sys_web_go_forward(void) { return sys_web(WEB_GO_FORWARD, 0, 0, 0); }
+static inline int sys_web_stop(void) { return sys_web(WEB_STOP_LOADING, 0, 0, 0); }
 
 /* ── Filesystem syscalls (38-47) ── */
 
@@ -408,9 +471,12 @@ static inline int sys_rename(const char *oldpath, const char *newpath) {
     return ret;
 }
 
-static inline int sys_readdir(const char *path, char *names, int max_entries) {
+/* Fills `names` with NUL-separated entry names and returns the number of
+ * bytes written, or <= 0.  `max_bytes` is the buffer capacity in bytes, not
+ * an entry count. */
+static inline int sys_readdir(const char *path, char *names, int max_bytes) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_READDIR), "D"(path), "S"(names), "d"(max_entries) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_READDIR), "D"(path), "S"(names), "d"(max_bytes) : "memory");
     return ret;
 }
 

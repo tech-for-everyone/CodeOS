@@ -85,9 +85,6 @@ int android_container_list(char names[][ANDROID_NAME_MAX], int max);
 int android_container_get_state(int id);
 const char *android_container_state_str(android_container_state_t state);
 
-/* ─── Container exec ─── */
-int android_container_exec(int id, const char *path, int argc, char **argv);
-
 /* ─── Container info ─── */
 int android_container_inspect(int id, char *buf, int max);
 int android_container_logs(int id, char *buf, int max);

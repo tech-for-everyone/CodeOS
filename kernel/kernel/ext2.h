@@ -52,7 +52,7 @@ typedef struct {
 } ext2_dirent_t;
 
 int  ext2_mount(int part_idx);
-int  ext2_read_inode(int inode, void *buf);
+int  ext2_read_inode(int inode, volatile struct ext2_inode *buf);
 int  ext2_read_file(int inode, void *buf, int max, int offset);
 int  ext2_list_root(void);
 int  ext2_find(const char *path, ext2_dirent_t *ent);
@@ -64,5 +64,22 @@ int  ext2_mkdir(const char *path);
 int  ext2_creat(const char *path);
 int  ext2_unlink(const char *path);
 int  ext2_rmdir(const char *path);
+int  ext2_write_inode(int inode_num, const volatile struct ext2_inode *buf);
+
+/* Close the filesystem cleanly: commit any open journal transaction, persist
+ * the log position, and clear the not-clean flag. */
+int  ext2_unmount(void);
+
+/* Raw block access, used by jbd2.c. These move bytes without touching the
+ * shared block buffer, which callers still hold across the call. */
+int  ext2_read_block_from(uint32_t block_num, void *dst);
+int  ext2_write_block_from(uint32_t block_num, const void *src);
+
+/* Physical block for a logical index of an inode's data, 0 if unallocated.
+ * The journal is a normal file and may need indirection. */
+uint32_t ext2_inode_phys_block(int inode_num, int block_idx);
+
+uint32_t ext2_block_count(void);
+uint32_t ext2_block_size(void);
 
 #endif

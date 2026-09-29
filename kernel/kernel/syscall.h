@@ -63,6 +63,9 @@
  * @WEB_GET_INFO:       Get the active-tab state snapshot.
  * @WEB_GET_CONTENT:    Copy tab content buffer to userspace.
  * @WEB_TAB_USED:       Count non-empty tabs.
+ * @WEB_GO_BACK:        Move the active tab back in its history.
+ * @WEB_GO_FORWARD:     Move the active tab forward in its history.
+ * @WEB_STOP_LOADING:   Cancel an in-flight load in the active tab.
  */
 /* SYSCALL_WEB commands (drives the in-kernel ow_* HTTP backend) */
 #define WEB_NAVIGATE       0
@@ -76,6 +79,9 @@
 #define WEB_GET_INFO       8
 #define WEB_GET_CONTENT    9
 #define WEB_TAB_USED       10
+#define WEB_GO_BACK        11
+#define WEB_GO_FORWARD     12
+#define WEB_STOP_LOADING   13
 
 /* Active-tab state snapshot for WEB_GET_INFO (ABI shared with userspace) */
 typedef struct {

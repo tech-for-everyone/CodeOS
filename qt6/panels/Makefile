@@ -16,11 +16,14 @@ PLATFORM_DIR = $(abspath ../platform)
 THIS_DIR = $(abspath .)
 
 # Host C++ standard library headers (x86_64-elf cross-compiler lacks libstdc++)
+# The cross compiler's bundled include dir is auto-detected below instead of
+# hardcoding a versioned path (e.g. /usr/lib/gcc/x86_64-elf/16.1.0) that
+# breaks on other machines.
 HOST_CXX_INCLUDES = \
     -isystem /usr/include/c++/16 \
     -isystem /usr/include/c++/16/x86_64-pc-linux-gnu \
     -isystem $(QTDIR)/include/stubs \
-    -isystem /usr/lib/gcc/x86_64-elf/16.1.0/include
+    -isystem $(shell $(CXX) -print-file-name=include 2>/dev/null)
 
 QT6_INCLUDES = \
     -I$(QTDIR)/include \
@@ -44,8 +47,7 @@ KERNEL_INCLUDES = \
     -I$(ARCH_DIR) \
     -I$(PACKAGE_DIR) \
     -I$(KERNEL_DIR)/lvgl \
-    -I$(abspath ../../include) \
-    -I/home/codeosuser/Openweb/litehtml/include
+    -I$(abspath ../../include)
 
 BASE_FLAGS = \
     -ffreestanding \

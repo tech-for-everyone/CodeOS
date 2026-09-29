@@ -37,7 +37,7 @@ static void compat_probe_thread(void) {
     }
 
     current_process = 0;
-    proc_create("/bin/linux-probe", entry, stack);
+    proc_create("/bin/linux-probe", entry, stack, LEVEL_USER);
     if (current_process)
         current_process->personality = PERSONALITY_LINUX;
 

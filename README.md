@@ -46,7 +46,7 @@ You also need **Rust** (`cargo`) for the OpenWeb HTTP backend (`kernel/rust_ow`)
 
 # Or use Make directly:
 make -C kernel all              # kernel + userspace ELFs
-make -C kernel codeos-1-kernel.iso
+make -C kernel codeos-1.0.iso
 make -C kernel run              # QEMU with KVM (needs disk.img)
 make -C kernel run-iso          # boot the ISO in QEMU
 ```

@@ -520,6 +520,52 @@ const MONTHS: [[u8; 3]; 12] = [
     *b"JUL", *b"AUG", *b"SEP", *b"OCT", *b"NOV", *b"DEC",
 ];
 
+const BAR_ANCHOR: i64 = 62; // x of the first workspace dot; the app name
+                            // starts immediately after the divider.
+
+/// Title of the frontmost focused application, X11 taking precedence.
+///
+/// The compositor deliberately draws the X11 stack *after* (on top of)
+/// the lvgl/Qt stack, so a focused X11 window is the frontmost app and
+/// its name belongs in the menu bar.  `render_bar` and
+/// `hyperde_shell_bar_hit` both call this, so the workspace area is
+/// computed identically in the paint and in the hit-test.  That identity
+/// is the invariant: if one drifts, the click misses the dot and the
+/// dot is no longer where the checker expects it.
+fn focused_app_title(wm: *const c_void) -> ([u8; 64], usize) {
+    let mut xwins = [PRS_WIN_ZERO; PRS_WIN_MAX];
+    let nc = unsafe { prs_desktop_windows(xwins.as_mut_ptr(),
+                                           PRS_WIN_MAX as c_int) } as usize;
+    for i in 0..nc {
+        let win = xwins[i];
+        if win.mapped != 0 && win.focused != 0 {
+            let mut s = [0u8; 64];
+            let mut n = 0usize;
+            for &cc in &win.title {
+                if n >= 64 { break; }
+                if cc == 0 { break; }
+                s[n] = cc; n += 1;
+            }
+            return (s, n);
+        }
+    }
+    let (list, lcount) = unsafe { window_overview(wm) };
+    for t in 0..lcount as usize {
+        let w2 = unsafe { lvgl_wm_window_at(wm, list[t] as c_int) };
+        if !w2.is_null() && unsafe { (*w2).focused != 0 } {
+            let mut s = [0u8; 64];
+            let mut n = 0usize;
+            for &cc in &unsafe { (*w2).title } {
+                if n >= 64 { break; }
+                if cc == 0 { break; }
+                s[n] = cc; n += 1;
+            }
+            return (s, n);
+        }
+    }
+    ([0u8; 64], 0)
+}
+
 unsafe fn render_bar(buf: *mut u32, stride: u32, w: u32, h: u32) {
     let mid = (pal().bar_h / 2) as i64;
 
@@ -558,17 +604,27 @@ unsafe fn render_bar(buf: *mut u32, stride: u32, w: u32, h: u32) {
             fill_circle(buf, stride, w, h, lc + gx * 6, mid + gy * 6, 2, pal().accent, 0xFF);
         }
     }
-    /* divider */
+    /* divider between the launcher and the menu bar */
     for y in mid - 10..mid + 10 {
         glass_px(buf, stride, w, h, 54, y, 0x00FFFFFF, 0x18);
     }
 
-    /* ── workspace indicator (COSMIC: stacked bars right of the divider) ── */
+    /* ── bold focused app name (macOS: the frontmost app far left
+     * of the divider, before the workspaces) ── */
+    let wm = CM_WM.load(RELAX);
+    let (title, tn) = focused_app_title(wm);
+    let app_reserve = if tn > 0 { (tn * 16 + 24) as i64 } else { 0 };
+    if tn > 0 {
+        draw_text(buf, stride, w, h, BAR_ANCHOR, mid - 8,
+                  &title[..tn], pal().text, 2, 0xFF);
+    }
+
+    /* ── workspace indicator, starting after the app name ── */
     let ws_num = WS_NUM.load(RELAX).clamp(1, 9) as i64;
     let ws_cur = (WS_CUR.load(RELAX) as i64).clamp(0, ws_num - 1);
     let wbar_w = 14i64;
     let wbar_h = 4i64;
-    let ws_start = 62i64;
+    let ws_start = BAR_ANCHOR + app_reserve;
     for i in 0..ws_num {
         let wx = ws_start + i * 22;
         let wy = mid - wbar_h / 2;
@@ -582,7 +638,7 @@ unsafe fn render_bar(buf: *mut u32, stride: u32, w: u32, h: u32) {
     /* task pills from the window manager (cap before the center clock) */
     let wm = CM_WM.load(RELAX);
     let (list, lcount) = window_overview(wm);
-    let mut x = 62 + ws_num * 22;
+    let mut x = ws_start + ws_num * 22;
     let mut k = 0usize;
     while k < lcount {
         if x > (w as i64) / 2 - 150 {
@@ -725,12 +781,12 @@ unsafe fn render_bar(buf: *mut u32, stride: u32, w: u32, h: u32) {
 
 /* ───────────────────── window compositor ─────────────────────
  * HyperDE owns the window chrome: for every visible WM window it
- * composites a COSMIC-style title band (rounded, glass), centered
- * title, window controls on the RIGHT of the band and a focus
+ * composites a macOS title band (rounded, glass), traffic-light
+ * controls on the LEFT of the band, a left-aligned title and a focus
  * accent in the accent color, over whatever Qt painted. Qt stays
  * in charge of the window content area and input; this layer simply
  * re-skins the decorations so the compositor and the panel read as
- * one COSMIC slab.
+ * one slab.
  */
 
 const WIN_TB: i64 = 30; /* title band height (matches QtAppWindow tb) */
@@ -809,7 +865,8 @@ unsafe fn render_windows(buf: *mut u32, stride: u32, w: u32, h: u32) {
 /* macOS-style chrome for one window body, shared by the lvgl/Qt pass and
  * the X11/GNUstep pass so both window families look identical: layered
  * drop shadow, glass title band with rounded top corners + specular edge,
- * COSMIC traffic-light controls, centered title, accent focus ring. */
+ * macOS traffic-light controls on the left, left-aligned title, accent
+ * focus ring. */
 unsafe fn draw_window_chrome(
     buf: *mut u32, stride: u32, w: u32, h: u32,
     rx: i64, ry: i64, rw: i64, rh: i64,
@@ -864,27 +921,36 @@ unsafe fn draw_window_chrome(
         }
     }
 
-    /* window controls on the RIGHT of the band (COSMIC style) */
+    /* Window controls on the LEFT of the band, in macOS order -- close,
+     * minimize, zoom, left to right.  This is the single most recognisable
+     * thing about a macOS window; the COSMIC arrangement (close rightmost)
+     * is exactly what made these read as Linux windows.  Unfocused windows
+     * go grey, which is also macOS: the colour is the only cue that the
+     * window is live. */
     let dot_y = by0 + (WIN_TB - 12) / 2;
     let gap = 20i64;
-    let close_x = rx + rw - WIN_SH - 18; /* rightmost = close */
+    let close_x = x0 + 14; /* leftmost = close */
     let (dc, dm, dx) = if focused {
         (CLOSE_DOT, MIN_DOT, MAX_DOT)
     } else {
         (0x005A5A5E, 0x005A5A5E, 0x005A5A5E)
     };
     fill_circle(buf, stride, w, h, close_x, dot_y + 6, 6, dc, 0xFF);
-    fill_circle(buf, stride, w, h, close_x - gap, dot_y + 6, 6, dm, 0xFF);
-    fill_circle(buf, stride, w, h, close_x - gap * 2, dot_y + 6, 6, dx, 0xFF);
+    fill_circle(buf, stride, w, h, close_x + gap, dot_y + 6, 6, dm, 0xFF);
+    fill_circle(buf, stride, w, h, close_x + gap * 2, dot_y + 6, 6, dx, 0xFF);
 
-    /* centered title between the left inset and the controls */
-    let tw = title.len() as i64 * 10;
-    let tcx = (x0 + close_x - gap * 2) / 2;
+    /* Title left-aligned just past the lights, as macOS does.  Clamped to
+     * the band so a long window name cannot run off the right edge -- the
+     * centred layout had the same overflow but a centred title that
+     * overflows hides the title's start, which is worse. */
+    let tx = close_x + gap * 2 + 16;
+    let room = if x1 - tx > 0 { (x1 - tx) / 10 } else { 0 };
+    let n = core::cmp::min(title.len() as i64, room) as usize;
     draw_text(
         buf, stride, w, h,
-        tcx - tw / 2,
+        tx,
         by0 + (WIN_TB - 8) / 2 - 1,
-        title,
+        &title[..n],
         if focused { pal().text } else { pal().sub },
         1, 0xFF,
     );
@@ -1104,7 +1170,9 @@ pub unsafe extern "C" fn hyperde_shell_bar_hit(mx: c_int, my: c_int) -> c_int {
 
     /* ── workspace indicator bars → 920+i; task pills shift right ── */
     let ws_num = WS_NUM.load(RELAX).clamp(1, 9) as i64;
-    let ws_start = 62i64;
+    let (title, tn) = focused_app_title(CM_WM.load(RELAX));
+    let app_reserve = if tn > 0 { (tn * 16 + 24) as i64 } else { 0 };
+    let ws_start = BAR_ANCHOR + app_reserve;
     if x >= ws_start && x < ws_start + ws_num * 22 {
         let idx = ((x - ws_start) / 22) as c_int;
         if idx >= 0 && idx < ws_num as c_int {

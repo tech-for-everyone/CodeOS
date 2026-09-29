@@ -279,18 +279,34 @@ void QtAppWindow::paintEvent(QPaintEvent *) {
     p.setBrush(QColor(0,0,0,40));
     p.drawRect(m_titleBarRect.x()+cr, m_titleBarRect.bottom(), m_titleBarRect.width()-cr*2, 1);
 
-    /* ── Window controls — right side of the band (COSMIC style) ── */
+    /* ── Window controls — LEFT side of the band, macOS order ──
+     * close, minimize, zoom, left to right.  Mirrors draw_window_chrome()
+     * in hyperde exactly: same inset, same 20px pitch, same 12px dots,
+     * same grey-when-unfocused, so the lvgl/Qt and X11 window families are
+     * pixel-identical rather than merely similar.
+     *
+     * The inset is sh+14 and NOT cr+sh+14.  The Rust painter's band starts
+     * at x0 = rx+WIN_SH and puts its close light at x0+14; the rounded
+     * corner radius is applied *inside* the band, not by insetting from it.
+     * Adding cr here pushed these 12px further right than the lights the
+     * compositor actually draws on top, so these rects -- which are what the
+     * click handler hit-tests against -- would not have lined up with the
+     * lights the user can see. */
     int dotY = sh+(tb-12)/2, gap = 20;
-    int closeX = width()-sh-18;
+    int closeX = sh+14;
     m_closeRect = QRect(closeX-6, dotY, 12, 12);
-    m_minRect   = QRect(closeX-6-gap, dotY, 12, 12);
-    m_maxRect   = QRect(closeX-6-gap*2, dotY, 12, 12);
+    m_minRect   = QRect(closeX-6+gap, dotY, 12, 12);
+    m_maxRect   = QRect(closeX-6+gap*2, dotY, 12, 12);
     p.setPen(Qt::NoPen);
-    /* Traffic lights: dim when window not focused, vivid when active */
+    /* Traffic lights: grey when the window is not focused, vivid when it is
+     * (macOS keeps the colour as the "this window is live" cue). */
     bool focused = isActiveWindow();
-    int closeAlpha = focused ? 255 : 60;
-    int minAlpha   = focused ? 255 : 60;
-    int maxAlpha   = focused ? 255 : 60;
+    QColor dc(0x5A,0x5A,0x5E), dm(0x5A,0x5A,0x5E), dx(0x5A,0x5A,0x5E);
+    if (focused) {
+        dc = QColor(0xFF,0x5F,0x57);
+        dm = QColor(0xFF,0xBD,0x2E);
+        dx = QColor(0x28,0xC8,0x40);
+    }
     /* Check hover for each button */
     QPoint gp = mapFromGlobal(cursor().pos());
     bool closeHover = m_closeRect.contains(gp);
@@ -301,15 +317,15 @@ void QtAppWindow::paintEvent(QPaintEvent *) {
     if (focused && minHover)   { p.setBrush(QColor(0xFE,0xBC,0x2E,40)); p.drawEllipse(m_minRect.adjusted(-4,-4,4,4)); }
     if (focused && maxHover)   { p.setBrush(QColor(0x28,0xC8,0x40,40)); p.drawEllipse(m_maxRect.adjusted(-4,-4,4,4)); }
     /* Button bodies */
-    p.setBrush(QColor(0xFF,0x5F,0x57, closeAlpha)); p.drawEllipse(m_closeRect);
-    p.setBrush(QColor(0xFE,0xBC,0x2E, minAlpha));   p.drawEllipse(m_minRect);
-    p.setBrush(QColor(0x28,0xC8,0x40, maxAlpha));   p.drawEllipse(m_maxRect);
+    p.setBrush(dc); p.drawEllipse(m_closeRect);
+    p.setBrush(dm); p.drawEllipse(m_minRect);
+    p.setBrush(dx); p.drawEllipse(m_maxRect);
     /* Inner specular highlight on each dot */
     p.setBrush(QColor(255,255,255, focused ? 50 : 15));
     p.drawEllipse(m_closeRect.adjusted(1,1,-2,-2));
     p.drawEllipse(m_minRect.adjusted(1,1,-2,-2));
     p.drawEllipse(m_maxRect.adjusted(1,1,-2,-2));
-    /* Hover glyphs (shown when hovered) */
+    /* Hover glyphs (shown when hovered, as macOS does) */
     if (focused) {
         QFont sym("monospace"); sym.setPixelSize(9); sym.setBold(true); p.setFont(sym);
         if (closeHover) {
@@ -326,19 +342,27 @@ void QtAppWindow::paintEvent(QPaintEvent *) {
         }
     }
 
-    /* ── Title text (centered between left inset and right controls) ── */
+    /* ── Title text — left-aligned just past the lights, as macOS does ── */
     QFont f = font(); f.setPointSize(11); f.setBold(true); p.setFont(f);
     p.setPen(c_text);
     QFontMetrics fm(f);
     int tw = fm.horizontalAdvance(m_title);
+    int titleX = m_maxRect.right() + 16;
 
-    /* Small icon to left of title */
-    int freeL = sh+20, freeR = m_minRect.left()-14;
-    int titleCx = freeL + (freeR-freeL)/2;
-    QRect titleIconR(titleCx-tw/2-18, sh+(tb-14)/2, 14, 14);
+    /* Small icon to the left of the title */
+    QRect titleIconR(titleX, sh+(tb-14)/2, 14, 14);
     drawAppIcon(p, titleIconR, m_title, 14);
 
-    p.drawText(titleCx-tw/2+2, sh+(tb+fm.ascent())/2, m_title);
+    /* Elide rather than overflow the band, and drop the title entirely
+     * once there is no room left for it. */
+    int room = width()-sh-cr-titleX;
+    QString shown = m_title;
+    if (room < tw) {
+        if (room < 40) shown.clear();
+        else shown = fm.elidedText(m_title, Qt::ElideRight, room);
+        tw = fm.horizontalAdvance(shown);
+    }
+    p.drawText(titleX+18, sh+(tb+fm.ascent())/2, shown);
 
     /* ── Content area ── */
     QRect cr2(cr+sh, tb+sh+2, width()-cr*2-sh*2, height()-tb-cr-sh*2);

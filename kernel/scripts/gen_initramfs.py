@@ -89,6 +89,8 @@ for name, cname in files:
         dest = '/lib/ld-codeos.so'
     elif name == 'init':
         dest = '/init'
+    elif name == 'zircon_init' or name == 'zircond':
+        dest = f'/sbin/{name}'
     elif name.endswith('.svg') or name.endswith('.rgba') or name.endswith('.png'):
         dest = f'/usr/share/icons/{name}'
     else:
@@ -101,6 +103,7 @@ sys.stdout.write('void initramfs_populate(void) {\n')
 sys.stdout.write('  /* create directories */\n')
 sys.stdout.write('  fs_mkdir("/lib");\n')
 sys.stdout.write('  fs_mkdir("/bin");\n')
+sys.stdout.write('  fs_mkdir("/sbin");\n')
 sys.stdout.write('  fs_mkdir("/usr");\n')
 sys.stdout.write('  fs_mkdir("/usr/share");\n')
 sys.stdout.write('  fs_mkdir("/usr/share/icons");\n')

@@ -128,7 +128,11 @@ static void apphost_thread_main(void) {
     kprintf("apphost: starting '%s' entry=0x%lx rsp=0x%lx\n", ah_path, entry, rsp);
 
     current_process = 0;
-    proc_create(ah_path, entry, stack);
+    /* apphost *is* the window protocol: it is the kernel-side process that
+     * owns the X11/WM pipe and hosts app windows.  Level 3 (kernel app), not
+     * level 2 -- a level-2 program must not be able to signal the thing that
+     * owns its own windows. */
+    proc_create(ah_path, entry, stack, LEVEL_KERNEL);
 
     /* If requested, run the app inside the container's namespaces/cgroup so
      * its view of the world matches a normal container exec. */

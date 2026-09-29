@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-ISO="${SRC}/kernel/codeos-1-kernel.iso"
+ISO="${SRC}/kernel/codeos-1.0.iso"
 DISK="${SRC}/disk.img"
 
 # Source color helpers
@@ -54,7 +54,7 @@ done
 # ISO target explicitly; it depends on the kernel binary and its objects.
 if [ "$SKIP_BUILD" -eq 0 ]; then
     step "Building fresh Limine ISO..."
-    make -j kernel codeos-1-kernel.iso
+    make -j kernel codeos-1.0.iso
 else
     if [ ! -f "$ISO" ]; then
         error "ISO not found: $ISO (run without -s to build it)"
@@ -62,6 +62,14 @@ else
     fi
     info "Using existing ISO: $ISO"
 fi
+
+# Run the ncvm host test harness before booting. This gates: `set -e` above
+# means a failing check aborts the run rather than booting on top of a broken
+# backend. Do not add `|| true` here -- the ncvm in-guest backend is exercised
+# for real at boot (ncvm_probe runs `ncvm --selftest`), so a green boot with a
+# red host check would be exactly the failure this is here to catch.
+step "Running ncvm host checks..."
+make ncvm-check
 
 # Build QEMU command
 if ! command -v qemu-system-x86_64 &>/dev/null; then
@@ -76,6 +84,7 @@ QEMU_ARGS=(
     -m "$MEM"
     -smp "$CPUS"
     -serial stdio
+    -enable-kvm
 )
 
 # USB devices

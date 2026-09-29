@@ -28,6 +28,7 @@
 #include "ai.h"
 #include "apphost.h"
 #include "user_wm.h"
+#include "systemm.h"
 #include "ow_http.h"
 #include "socket.h"
 #include "../arch/x86_64/fb.h"
@@ -86,7 +87,6 @@ extern void user_mode_force_return(void);
 #define LINUX_SCHED_YIELD 24
 #define LINUX_GETDENTS    78
 #define LINUX_OPENAT      257
-#define LINUX_NEWFSTAT    137
 #define LINUX_FACCESSAT   269
 #define LINUX_READLINK    89
 #define LINUX_READLINKAT  267
@@ -100,8 +100,12 @@ extern void user_mode_force_return(void);
 #define LINUX_FCNTL        72
 #define LINUX_GETTID       186
 #define LINUX_FUTEX        202
-#define LINUX_MADVISE      233
-#define LINUX_GETRUSAGE    165
+/* x86-64 numbers, NOT the aarch64/generic ones these were originally taken
+ * from: madvise is 28 (233 is aarch64 epoll_ctl) and getrusage is 98
+ * (165 is x86-64 mount).  With the wrong numbers the handler sat on an
+ * unrelated syscall and the real one fell through to ENOSYS. */
+#define LINUX_MADVISE      28
+#define LINUX_GETRUSAGE    98
 #define LINUX_PRCTL        157
 #define LINUX_SET_TID_ADDRESS 218
 #define LINUX_SET_ROBUST_LIST   273
@@ -110,12 +114,13 @@ extern void user_mode_force_return(void);
 #define LINUX_PIPE2        293
 #define LINUX_PREAD64      17
 #define LINUX_PWRITE64     18
-#define LINUX_READLINKAT   267
 #define LINUX_STATX        332
 
 /* Additional Linux syscalls used by real glibc/musl binaries */
 #define LINUX_KILL        62
-#define LINUX_GETPPID     64
+/* x86-64 getppid is 110; 64 is x86-64 semget, so this used to hand the
+ * getppid handler to semget and leave the real getppid at ENOSYS. */
+#define LINUX_GETPPID     110
 #define LINUX_GETEUID     107
 #define LINUX_GETEGID     108
 #define LINUX_TGKILL      234
@@ -191,6 +196,7 @@ static void ltx_kernel_to_addr(const sockaddr_t *ks, uint8_t *uaddr) {
 /* Linux errno values returned as negative from syscalls */
 #define LINUX_EPERM    1
 #define LINUX_ENOENT   2
+#define LINUX_ESRCH    3
 #define LINUX_EIO      5
 #define LINUX_ENOMEM   12
 #define LINUX_EACCES   13
@@ -271,6 +277,65 @@ static int fd_verify(int fd) {
 }
 
 #define FD_CHECK(fd) do { if (!fd_verify(fd)) return -LINUX_EINVAL; } while(0)
+
+/* ── Level-gated signalling ──
+ * Every syscall that acts on another task funnels through here, so systemm
+ * is the only thing that decides whether the call is allowed.  Routing
+ * through the `systemm` shell builtin is not what enforces the level rule --
+ * it is enforced here, where a program cannot avoid it.  Before this existed
+ * a program could call kill(2) directly and skip the check entirely.
+ *
+ * The caller's level comes from current_process, not from a syscall argument,
+ * so it cannot be forged by the caller.
+ *
+ * A task may act on anything at or below its own level, which includes its
+ * own level, so kill(getpid(), SIGKILL) still works: systemm_may_act()
+ * compares with >= and proc_kill() handles the self case. */
+static int64_t gated_kill(int pid, int sig) {
+    if (pid <= 0) return -LINUX_EINVAL;
+    /* systemm_level_of() is -1 for a pid that is not a live task, which is
+     * ESRCH rather than a permission problem -- the two are different
+     * answers and a caller may act on them differently. */
+    if (systemm_level_of(pid) < 0) return -LINUX_ESRCH;
+    if (!systemm_caller_may_act(pid)) return -LINUX_EPERM;
+    return proc_kill(pid, sig);
+}
+
+/* level_gate returns 0 if the caller may perform an operation that
+ * creates or manages objects at required_level, or -EPERM if not.
+ * A caller with no process_t (kernel context, e.g. waydroid, the
+ * android session, VM boot) has full authority — those paths set
+ * current_process to NULL deliberately and are trusted.  This keeps
+ * the gate from breaking the only callers of container_create() and
+ * vm_create() that are not already gated elsewhere. */
+static int level_gate(int required_level) {
+    int actor = systemm_caller_level();
+    if (actor < 0) return 0;
+    if (actor < required_level) return -LINUX_EPERM;
+    return 0;
+}
+
+/* Terminal line discipline. The serial input path has always been canonical:
+ * sys_read() on fd 0 spins until a full line (up to \n or \r) has arrived,
+ * which is what the shell wants. A process can now opt out per-keypress by
+ * clearing ICANON through TCSETS, which is how a full-screen app receives
+ * hotkeys without an Enter after each one.
+ *
+ * The state lives in process_t rather than in a global so it cannot outlive
+ * the process that asked for it: fd 0 is shared by every process on the
+ * machine, so a global would let an app that exits in raw mode strand the
+ * shell in raw mode, with no visible echo and no line buffering at all. */
+static int tty_raw_mode(void) {
+    process_t *p = current_process;
+    return p ? p->tty_raw : 0;
+}
+
+static int tty_set_raw_mode(int raw) {
+    process_t *p = current_process;
+    if (!p) return 0;
+    p->tty_raw = raw;
+    return 1;
+}
 
 static int copy_from_user(void *dst, uint64_t user_src, uint64_t len) {
     if (!access_ok(user_src, len)) return -1;
@@ -442,11 +507,25 @@ static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
         uint8_t buf[256];
         int max_read = count > sizeof(buf) ? sizeof(buf) : count;
         int i = 0;
-        for (; i < max_read; i++) {
-            int c = serial_readchar();
-            if (c < 0) break;
-            buf[i] = (uint8_t)c;
-            if (c == '\n' || c == '\r') { i++; break; }
+        if (tty_raw_mode()) {
+            /* Raw mode: return keystrokes as they arrive rather than waiting
+             * for a whole line. The first byte is still waited for, so an app
+             * that polls in a sleep loop does not spin the CPU between keys.
+             * Unlike the canonical path this does not filter on `c < 0`:
+             * serial_readchar() returns a signed char, so a key with the high
+             * bit set would otherwise be dropped as if it were an error. */
+            if (!serial_available()) {
+                buf[i++] = (uint8_t)serial_readchar();
+            }
+            while (i < max_read && serial_available())
+                buf[i++] = (uint8_t)serial_readchar();
+        } else {
+            for (; i < max_read; i++) {
+                int c = serial_readchar();
+                if (c < 0) break;
+                buf[i] = (uint8_t)c;
+                if (c == '\n' || c == '\r') { i++; break; }
+            }
         }
         if (i > 0 && copy_to_user(user_buf, buf, i) < 0)
             return -1;
@@ -484,11 +563,20 @@ int64_t kernel_read(int fd, void *buf, int count) {
             return r;
         }
         int i = 0;
-        for (; i < count && i < 255; i++) {
-            int c = serial_readchar();
-            if (c < 0) break;
-            ((uint8_t *)buf)[i] = (uint8_t)c;
-            if (c == '\n' || c == '\r') { i++; break; }
+        if (tty_raw_mode()) {
+            /* Same raw-mode rule as the syscall path above. */
+            if (!serial_available()) {
+                ((uint8_t *)buf)[i++] = (uint8_t)serial_readchar();
+            }
+            while (i < count && i < 255 && serial_available())
+                ((uint8_t *)buf)[i++] = (uint8_t)serial_readchar();
+        } else {
+            for (; i < count && i < 255; i++) {
+                int c = serial_readchar();
+                if (c < 0) break;
+                ((uint8_t *)buf)[i] = (uint8_t)c;
+                if (c == '\n' || c == '\r') { i++; break; }
+            }
         }
         return i;
     }
@@ -580,6 +668,18 @@ static void linux_handle_exit_group(int status) {
 #define LINUX_DT_REG      8
 #define LINUX_AT_FDCWD   (-100)
 #define LINUX_TCGETS      0x5401
+#define LINUX_TCSETS      0x5402
+#define LINUX_TCSETSW     0x5403
+#define LINUX_TCSETSF     0x5404
+
+/* Layout of the Linux `struct termios` exchanged here (44 bytes):
+ *   c_iflag 0, c_oflag 4, c_cflag 8, c_lflag 12, c_line 16, c_cc[19] 17,
+ *   c_ispeed 36, c_ospeed 40. Only c_lflag is interpreted, and within it
+ * only ICANON — the serial input path has no echo and no signal or
+ * flow-control handling to configure. */
+#define LINUX_TERMIOS_SIZE 44
+#define LINUX_C_LFLAG_OFF  12
+#define LINUX_ICANON       0x0002
 
 struct linux_dirent64 {
     uint64_t  d_ino;
@@ -1005,25 +1105,6 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         if (copy_to_user(a2, stbuf, LINUX_STAT_SZ) < 0) return -LINUX_ENOMEM;
         return 0;
     }
-    case LINUX_NEWFSTAT: {
-        /* newfstatat: dirfd, path, statbuf, flags */
-        int dirfd = (int)a1;
-        char path[FS_PATH_MAX];
-        if (a2) {
-            if (copy_from_user(path, a2, FS_PATH_MAX - 1) < 0) return -LINUX_EINVAL;
-            path[FS_PATH_MAX - 1] = 0;
-        } else {
-            if (dirfd != LINUX_AT_FDCWD && fd_verify(dirfd)) {
-                strcpy(path, fd_table[dirfd].path);
-            } else {
-                path[0] = '/'; path[1] = 0;
-            }
-        }
-        uint8_t stbuf[LINUX_STAT_SZ];
-        if (do_stat_fill(path, stbuf) < 0) return -LINUX_ENOENT;
-        if (copy_to_user(a3, stbuf, LINUX_STAT_SZ) < 0) return -LINUX_ENOMEM;
-        return 0;
-    }
     case LINUX_LSEEK: {
         int fd = (int)a1;
         int64_t off = (int64_t)a2;
@@ -1043,17 +1124,37 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     case LINUX_IOCTL: {
         int fd = (int)a1;
         unsigned long request = a2;
-        (void)a3;
-        FD_CHECK(fd);
+        /* The console fds are special-cased everywhere else: sys_read() and
+         * sys_write() handle fd 0-2 directly and never consult fd_table. They
+         * are not in fd_table either, because only the Linux-compat open path
+         * calls fd_alloc() -- a process started by the kernel shell via
+         * proc_create() has no fd_table entries at all. So FD_CHECK() would
+         * reject the console for exactly the programs that want to set the
+         * terminal mode, and would have made TCGETS fail for every app. */
+        if (fd != 0 && fd != 1 && fd != 2) FD_CHECK(fd);
         if (request == LINUX_TCGETS) {
             /* Return a minimal termios that looks like a TTY */
-            uint8_t termios[44];
+            uint8_t termios[LINUX_TERMIOS_SIZE];
             memset(termios, 0, sizeof(termios));
             /* Set c_cflag: B38400 | CS8 | CREAD | CLOCAL */
             *(unsigned int*)(termios + 8) = 0x000010bf;
             /* Set c_lflag: ECHO | ICANON | ISIG */
-            *(unsigned int*)(termios + 12) = 0x0000038b;
-            if (copy_to_user(a3, termios, 44) < 0) return -LINUX_ENOMEM;
+            unsigned int lflag = 0x0000038b;
+            /* Report the mode actually in force, so the usual
+             * tcgetattr -> tweak -> tcsetattr round trip keeps working. */
+            if (tty_raw_mode()) lflag &= ~(unsigned int)LINUX_ICANON;
+            *(unsigned int*)(termios + LINUX_C_LFLAG_OFF) = lflag;
+            if (copy_to_user(a3, termios, LINUX_TERMIOS_SIZE) < 0) return -LINUX_ENOMEM;
+            return 0;
+        }
+        if (request == LINUX_TCSETS || request == LINUX_TCSETSW ||
+            request == LINUX_TCSETSF) {
+            uint8_t termios[LINUX_TERMIOS_SIZE];
+            if (copy_from_user(termios, a3, LINUX_TERMIOS_SIZE) < 0)
+                return -LINUX_EFAULT;
+            unsigned int lflag = *(const unsigned int *)(termios + LINUX_C_LFLAG_OFF);
+            if (!tty_set_raw_mode((lflag & LINUX_ICANON) == 0))
+                return -LINUX_ENOSYS;
             return 0;
         }
         return -LINUX_ENOSYS;
@@ -1395,16 +1496,28 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     case LINUX_KILL: {
         int pid = (int)a1;
         int sig = (int)a2;
-        return proc_kill(pid, sig);
+        return gated_kill(pid, sig);
     }
     /* ── TGKILL (234) ── */
     case LINUX_TGKILL: {
-        /* tgkill(tgid, tid, sig) */
-        int pid = (int)a2;
-        int sig = (int)a3;
-        return proc_kill(pid, sig);
+        /* tgkill(tgid, tid, sig).  A zero tgid or tid means "the caller's",
+         * so tgkill(0, 0, sig) is how a thread signals itself.  Resolving
+         * that to the caller's pid is what keeps self-signalling working now
+         * that the target goes through the level check -- a task may always
+         * act on its own level, so this is permitted, but only if the pid is
+         * a real one rather than the 0 that gated_kill() rejects. */
+        int tgid = (int)a1;
+        int tid  = (int)a2;
+        int sig  = (int)a3;
+        int pid  = tid ? tid : tgid;
+        if (pid == 0) {
+            process_t *me = proc_current();
+            if (!me) return -LINUX_ESRCH;
+            pid = me->pid;
+        }
+        return gated_kill(pid, sig);
     }
-    /* ── GETPPID (64) ── */
+    /* ── GETPPID (110) ── */
     case LINUX_GETPPID:
         return (uint64_t)proc_getppid();
     /* ── GETEUID (107) / GETEGID (108) ── */
@@ -1559,9 +1672,6 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         }
         return (uint64_t)pid;
     }
-    /* ── GETPPID ── */
-    case 110:
-        return (uint64_t)proc_getppid();
     /* ── SELECT (stub: return ready on stdin) ── */
     case 23: {
         int nfds = (int)a1;
@@ -1706,21 +1816,45 @@ static int64_t sys_rename(const char *user_old, const char *user_new) {
     return 0;
 }
 
-static int64_t sys_readdir(const char *user_path, char *user_names, int max_entries) {
-    if (max_entries <= 0) return -1;
+/* Directory listing for userspace.
+ *
+ * Contract, which every caller in the tree already assumes:
+ *   - the buffer is filled with NUL-separated entry names, packed
+ *     (no fixed-stride padding between entries);
+ *   - max_bytes is the *byte* capacity of the caller's buffer;
+ *   - the return value is the number of bytes written, i.e. the caller's
+ *     loop bound, or <= 0 on error.
+ *
+ * This used to copy a fixed-stride names[count][FS_NAME_MAX] array and
+ * return the *entry count*, which is a different contract: callers treated
+ * the count as a byte length, so a directory of 10 files reported 10 and
+ * they scanned 10 bytes of a 320-byte buffer -- the last entry was cut off
+ * mid-name and the padding between entries was walked as if it were data.
+ * ncvm.c and crosvm-launcher.c both did this, and both were reading
+ * uninitialised stack past each NUL. */
+static int64_t sys_readdir(const char *user_path, char *user_names, int max_bytes) {
+    if (max_bytes <= 0) return -1;
     char path[FS_PATH_MAX];
     if (copy_from_user(path, (uint64_t)user_path, FS_PATH_MAX - 1) < 0)
         return -1;
     path[FS_PATH_MAX - 1] = 0;
 
-    char names[128][FS_NAME_MAX];
-    int count = fs_listdir(path, names, 128);
-    if (count < 0) return -1;
-
-    int total = count * FS_NAME_MAX;
-    if (copy_to_user((uint64_t)user_names, names, total > max_entries * FS_NAME_MAX ? max_entries * FS_NAME_MAX : total) < 0)
+    /* Fill a kernel buffer via fs_dir_list(), so this and vmd_dir_scan() are
+     * one implementation of the contract rather than two that can drift, then
+     * copy out -- a user pointer must not be written directly.
+     *
+     * 4096 is the capacity every caller in the tree passes (MAX_POLL in
+     * ncvm.c and crosvm-launcher.c, and shell.c's ls), and the previous
+     * fs_listdir(…, 128) capped the listing at 128 *entries* regardless of
+     * buffer size, so nothing regresses.  A directory larger than this is
+     * truncated to a whole number of names; no caller paginates today. */
+    char buf[4096];
+    int total = fs_dir_list(path, buf, (int)sizeof(buf));
+    if (total < 0) return -1;
+    if (total > max_bytes) total = max_bytes;
+    if (total > 0 && copy_to_user((uint64_t)user_names, buf, (size_t)total) < 0)
         return -1;
-    return count;
+    return total;
 }
 
 static int64_t sys_chmod(const char *user_path, int mode) {
@@ -2084,8 +2218,10 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     }
 
     case SYSCALL_CONTAINER_CREATE:
+        if (int r = level_gate(LEVEL_KERNEL); r) return r;
         return container_create((const char *)a1, (const char *)a2);
     case SYSCALL_CONTAINER_START:
+        if (int r = level_gate(LEVEL_KERNEL); r) return r;
         return container_start((int)a1);
     case SYSCALL_CONTAINER_EXEC: {
         int id = (int)a1;
@@ -2125,6 +2261,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         return ret;
     }
     case SYSCALL_CONTAINER_DESTROY:
+        if (int r = level_gate(LEVEL_KERNEL); r) return r;
         return container_destroy((int)a1);
     case SYSCALL_CONTAINER_LIST: {
         char names[CONTAINER_MAX][CONTAINER_NAME_MAX];
@@ -2341,6 +2478,15 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             if (max > 0 && copy_to_user(user_ptr, t->content, max) < 0) return -1;
             return max;
         }
+        case WEB_GO_BACK:
+            ow_go_back();
+            return 0;
+        case WEB_GO_FORWARD:
+            ow_go_forward();
+            return 0;
+        case WEB_STOP_LOADING:
+            ow_stop_loading();
+            return 0;
         default:
             return -1;
         }
@@ -2432,7 +2578,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     case SYSCALL_KILL: {
         int pid = (int)a1;
         int sig = (int)a2;
-        return proc_kill(pid, sig);
+        return gated_kill(pid, sig);
     }
     case SYSCALL_VM: {
         int cmd = (int)a1;
@@ -2460,11 +2606,13 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return n;
         }
         case VM_CMD_CREATE: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             vm_config_t cfg;
             if (copy_from_user(&cfg, (uint64_t)str, sizeof(cfg)) < 0) return -1;
             return vm_create(&cfg);
         }
         case VM_CMD_START: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             char name[VM_NAME_MAX];
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
@@ -2473,6 +2621,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return vm_start(vm->id);
         }
         case VM_CMD_STOP: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             char name[VM_NAME_MAX];
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
@@ -2481,6 +2630,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return vm_stop(vm->id);
         }
         case VM_CMD_DESTROY: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             char name[VM_NAME_MAX];
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
@@ -2489,6 +2639,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return vm_destroy(vm->id);
         }
         case VM_CMD_PAUSE: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             char name[VM_NAME_MAX];
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
@@ -2497,6 +2648,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return vm_pause(vm->id);
         }
         case VM_CMD_RESUME: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             char name[VM_NAME_MAX];
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
@@ -2596,10 +2748,12 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             return 0;
         }
         case VM_CMD_CONTAINER_START: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             /* a2 = container_id — launch with console I/O bridge */
             return container_launch_console((int)a2);
         }
         case VM_CMD_CONTAINER_STOP: {
+            if (int r = level_gate(LEVEL_KERNEL); r) return r;
             /* a2 = container_id */
             return container_stop((int)a2);
         }

@@ -446,11 +446,11 @@ const pkg_repo_t pkg_repo_core[] = {
 const pkg_repo_t pkg_repo_extra[] = {
     {"nano", "2.9.8", "Tiny friendly text editor", "", "GPLv3", 248576, 0, 0, 0, (const char*[]){"vim", 0}, 1, 0, 0, 6},
     {"vim", "8.2", "Advanced text editor", "", "Vim", 2097152, 0, 0, 0, (const char*[]){"nano", 0}, 1, 0, 0, 6},
-    {"curl", "7.85.0", "Data transfer tool (HTTP/FTP/etc)", "", "MIT", 786432, 0, 0, 0, 0, 0, 0, 0, 4},
-    {"wget", "1.21.2", "File downloader", "", "GPLv3", 921600, 0, 0, 0, 0, 0, 0, 0, 4},
+    {"curl", "7.85.0", "Data transfer tool (HTTP/FTP/etc)", "", "MIT", 786432, 0, 0, 0, 0, 0, 0, 0, 3},
+    {"wget", "1.21.2", "File downloader", "", "GPLv3", 921600, 0, 0, 0, 0, 0, 0, 0, 3},
     {"less", "590", "Terminal file pager", "", "GPLv3", 147456, 0, 0, 0, 0, 0, 0, 0, 6},
-    {"openssh", "9.0", "Secure shell client/server", "", "BSD", 1572864, (const char*[]){"zlib", 0}, 1, 0, 0, 0, 0, 0, 4},
-    {"telnet", "0.17", "Telnet client", "", "BSD", 114688, 0, 0, 0, 0, 0, 0, 0, 4},
+    {"openssh", "9.0", "Secure shell client/server", "", "BSD", 1572864, (const char*[]){"zlib", 0}, 1, 0, 0, 0, 0, 0, 3},
+    {"telnet", "0.17", "Telnet client", "", "BSD", 114688, 0, 0, 0, 0, 0, 0, 0, 3},
     {"rsync", "3.2.5", "File synchronization tool", "", "GPLv3", 819200, (const char*[]){"zlib", 0}, 1, 0, 0, 0, 0, 0, 6},
     {"screen", "4.9.0", "Terminal multiplexer", "", "GPLv2", 524288, 0, 0, 0, 0, 0, 0, 0, 6},
     {"htop", "3.2.1", "Interactive process viewer", "", "GPLv2", 262144, 0, 0, 0, 0, 0, 0, 0, 6},
@@ -545,13 +545,25 @@ const pkg_repo_t pkg_repo_ccp[] = {
     {"fish",        "3.6.0",    "Friendly interactive shell", "https://fishshell.com", "GPLv2", 5242880, 0, 0, 0, 0, 0, 0, 0, 1},
     {"docker",      "24.0.2",   "Container runtime and image manager", "https://docker.com", "Apache2", 41943040, ccp_dep_docker, 1, 0, 0, 0, 0, 0, 2},
     {"podman",      "4.6.0",    "Daemonless container engine", "https://podman.io", "Apache2", 31457280, 0, 0, 0, 0, 0, (const char*[]){"docker", 0}, 1, 2},
-    {"nginx",       "1.25.0",   "High-performance web server", "https://nginx.org", "BSD", 2097152,      ccp_dep_nginx, 2, 0, 0, 0, 0, 0, 4},
-    {"apache",      "2.4.57",   "Apache HTTP Server", "https://httpd.apache.org", "Apache2", 5242880,   ccp_dep_apache, 1, 0, 0, 0, 0, 0, 4},
+    {"nginx",       "1.25.0",   "High-performance web server", "https://nginx.org", "BSD", 2097152,      ccp_dep_nginx, 2, 0, 0, 0, 0, 0, 3},
+    {"apache",      "2.4.57",   "Apache HTTP Server", "https://httpd.apache.org", "Apache2", 5242880,   ccp_dep_apache, 1, 0, 0, 0, 0, 0, 3},
     {"mariadb",     "10.11.2",  "MySQL-compatible RDBMS", "https://mariadb.org", "GPLv2", 20971520,     0, 0, 0, (const char*[]){"postgresql", 0}, 1, 0, 0, 2},
     {"postgresql",  "15.3",     "Advanced relational database", "https://postgresql.org", "PostgreSQL", 31457280, ccp_dep_postgres, 1, 0, (const char*[]){"mariadb", 0}, 1, 0, 0, 2},
     {"redis",       "7.0.11",   "In-memory key-value data store", "https://redis.io", "BSD", 6291456,   0, 0, 0, 0, 0, 0, 0, 2},
     {"sqlite",      "3.42.0",   "Self-contained SQL database engine", "https://sqlite.org", "PublicDomain", 2097152, 0, 0, 0, 0, 0, 0, 0, 3},
-    {"mesa",        "23.1.2",   "OpenGL/Vulkan graphics library", "https://mesa3d.org", "MIT", 41943040, 0, 0, 0, 0, 0, 0, 0, 3},
+    /* mesa is the graphics driver's implementation library, not a network
+     * tool.  It sat in category 3 ("Network"), which put the one package the
+     * whole display stack depends on under a heading that has nothing to do
+     * with it, and `pkg list` grouped it there.  Category 2 ("Development") is
+     * what the rest of the graphics/windowing infrastructure uses -- see
+     * wayland-protocol and xws below -- so this matches its siblings.
+     * Categories are positional: PKG_CATEGORY_COUNT indexes cat_names[], so
+     * adding a "Graphics" category would renumber every row in every table.
+     * That is a deliberate change to make once, not a side effect of fixing
+     * one row. */
+    {"mesa",        "23.1.2",   "OpenGL/Vulkan graphics library", "https://mesa3d.org", "MIT", 41943040, 0, 0, 0, 0, 0, 0, 0, 2},
+    {"wayland-protocol", "1.49", "Wayland interface definitions for clients and compositors", "https://wayland.freedesktop.org", "MIT", 393216, 0, 0, 0, 0, 0, (const char*[]){"wayland", 0}, 1, 2},
+    {"xws",           "2025.1",  "X Window System (X11) core protocol and extension definitions", "https://www.x.org", "MIT/BSD-2-Clause", 249856, 0, 0, 0, 0, 0, (const char*[]){"x11", "xorg", 0}, 2, 2},
     {"neovim",      "0.9.1",    "Modern extensible Vim-based editor", "https://neovim.io", "Apache2", 14680064, ccp_dep_neovim, 1, 0, (const char*[]){"vim", "emacs", 0}, 2, 0, 0, 6},
     {"emacs",       "28.2",     "Extensible, customizable text editor", "https://gnu.org/emacs", "GPLv3", 41943040, 0, 0, 0, (const char*[]){"vim", "neovim", 0}, 2, 0, 0, 6},
     {"btop",        "1.2.13",   "Resource monitor with GPU and disk stats", "", "Apache2", 262144,       0, 0, 0, 0, 0, 0, 0, 6},
@@ -566,7 +578,7 @@ const pkg_repo_t pkg_repo_ccp[] = {
     {"dust",        "0.8.6",    "More intuitive du (disk usage)", "", "Apache2", 98304,                 0, 0, 0, 0, 0, 0, 0, 6},
     {"duf",         "0.8.1",    "Disk usage/free utility with better output", "", "MIT", 131072,         0, 0, 0, 0, 0, 0, 0, 6},
     {"procs",       "0.14.0",   "Modern ps replacement (process viewer)", "", "MIT", 163840,            0, 0, 0, 0, 0, 0, 0, 6},
-    {"bandwhich",   "0.21.0",   "Terminal bandwidth utilization tool", "", "MIT", 114688,               0, 0, 0, 0, 0, 0, 0, 4},
+    {"bandwhich",   "0.21.0",   "Terminal bandwidth utilization tool", "", "MIT", 114688,               0, 0, 0, 0, 0, 0, 0, 3},
     {"grex",        "1.4.3",    "Generate regex from test cases", "", "MIT", 98304,                     0, 0, 0, 0, 0, 0, 0, 2},
     {"hyperfine",   "1.17.0",   "Command-line benchmarking tool", "", "MIT", 131072,                    0, 0, 0, 0, 0, 0, 0, 2},
     {"hexyl",       "0.13.1",   "Hex viewer with colored output", "", "MIT", 98304,                     0, 0, 0, 0, 0, 0, 0, 6},
