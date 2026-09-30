@@ -78,6 +78,22 @@ void lgame_quit(void) {
         return;
     lgame.running = 0;
     lgame.initialized = 0;
+
+    /* Hand the display back to the shell.
+     *
+     * Without this the last game frame simply stays on screen: the shell
+     * resumes drawing its prompt and menu *over* the frozen game, so the user
+     * is left looking at a half-covered playfield they cannot get rid of. The
+     * pixels are not merely stale, they are wrong -- nothing redraws them.
+     *
+     * Order matters. fb_backbuffer_end() first, to flush a frame that was
+     * begun but never presented, so the front buffer is not left showing a
+     * half-drawn scene. Then fb_clear(), which paints the console background
+     * and resets the text cursor, so the shell starts from a known position on
+     * a known surface -- and resets the cursor as a side effect, so there is no
+     * separate fb_move_cursor() call here to forget. */
+    fb_backbuffer_end();
+    fb_clear();
 }
 
 int lgame_running(void) {

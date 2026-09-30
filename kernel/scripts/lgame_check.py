@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import collections
 import os
 import socket
 import subprocess
@@ -110,6 +111,33 @@ class Serial:
                 return True
             time.sleep(0.2)
         return False
+
+
+def modal_colour(rgb):
+    """Most common colour in a frame, and how many pixels it covers.
+
+    A fullscreen game clears its whole surface, so its clear colour dominates.
+    That makes it a reliable thing to track across the quit, without any title
+    having to declare what colour it clears to.
+    """
+    counts = collections.Counter()
+    for i in range(0, len(rgb), 3):
+        counts[(rgb[i], rgb[i + 1], rgb[i + 2])] += 1
+    (colour, n), = counts.most_common(1)
+    return colour, n
+
+
+def count_colour(rgb, colour):
+    """How many pixels of `rgb` are exactly `colour`. Pixel-aligned by
+    construction: it steps 3 bytes at a time, so it cannot match a colour that
+    straddles two pixels -- the bug that made the first find_colour() report
+    1418 hits where there were 418."""
+    r, g, b = colour
+    n = 0
+    for i in range(0, len(rgb), 3):
+        if (rgb[i], rgb[i + 1], rgb[i + 2]) == (r, g, b):
+            n += 1
+    return n
 
 
 def read_ppm(path):
@@ -590,7 +618,11 @@ def main():
         # Double-buffered, and the game is mid-animation, so poll for a frame
         # that satisfies every assertion rather than trusting one dump.
         deadline = time.time() + args.capture_timeout
+        # `ok` is the game's pixel verdict; `restore_ok` belongs to the
+        # quit-restore phase below. Both start false so a phase that never runs
+        # cannot be mistaken for one that passed.
         tries, ok, fails = 0, False, []
+        restore_ok = False
         while time.time() < deadline:
             tries += 1
             q.screendump(PPM)
@@ -604,6 +636,67 @@ def main():
             if ok:
                 break
         shot.ppm_to_png(PPM, out)
+
+        # ── quit-restore ────────────────────────────────────────────────
+        # ESC leaves the game, and lgame_quit() is supposed to hand the display
+        # back. Judged after the game assertions, because a frame that is still
+        # the game means the game is still up, not that the restore failed.
+        #
+        # ESC goes out on the SERIAL line, the console the command was typed at.
+        # Sending it over QMP would reach the emulated PS/2 keyboard and prove
+        # only that a keyboard can stop a game; the serial path is the one a
+        # user of this boot entry actually has.
+        quitting = ser.mark()
+        ser.send("\x1b")
+        if not ser.wait_for("root#", 20.0, since=quitting):
+            raise SystemExit(
+                f"ESC did not return to the shell (no NEW 'root#' after "
+                f"quitting {args.game!r}). Serial: {args.dump_serial}")
+        print("lgame: ESC returned to the shell")
+
+        # A short settle: fb_clear() and the prompt are immediate, but the
+        # screendump races the compositor's own present, and capturing too early
+        # would read the pre-clear surface and report a false failure.
+        time.sleep(1.5)
+        q.screendump(PPM)
+        time.sleep(0.5)
+        w2, h2, rgb2 = read_ppm(PPM)
+        if (w2, h2) != (W, H):
+            raise SystemExit(f"post-quit frame is {w2}x{h2}, expected {W}x{H}")
+
+        # What is asserted is that the game's own pixels are GONE -- not merely
+        # that the frame changed. "rgb2 != rgb" is the obvious formulation and
+        # it is worthless here: the shell drawing a prompt over a game that
+        # never quit changes plenty of bytes, so it reports "display restored"
+        # while the whole playfield is still on screen underneath. Tracking the
+        # game frame's dominant colour and requiring it to collapse cannot be
+        # satisfied by anything drawn on top.
+        #
+        # The specific colour is deliberately not pinned to a constant: it is
+        # read out of the frame the game actually drew, so this works for every
+        # title without each one having to declare its clear colour. A frame
+        # with no dominant colour is rejected rather than passed -- a check that
+        # cannot judge should say so, not succeed quietly.
+        dom, n_game = modal_colour(rgb)
+        if n_game < (W * H) * 0.05:
+            restore_ok = False
+            fails = list(fails) + [
+                f"the game frame has no dominant colour to track (best was "
+                f"rgb{dom} at {n_game} px of {W * H}), so this frame cannot "
+                f"be used to judge a restore"]
+        else:
+            n_after = count_colour(rgb2, dom)
+            ratio = n_after / n_game
+            if ratio > 0.10:
+                restore_ok = False
+                fails = list(fails) + [
+                    f"after ESC the game's own colour rgb{dom} still covers "
+                    f"{n_after} of its {n_game} px (ratio {ratio:.4f}) -- "
+                    f"lgame_quit() did not hand the display back"]
+            else:
+                restore_ok = True
+                print(f"lgame: display restored -- rgb{dom} collapsed from "
+                      f"{n_game} px to {n_after} px")
     finally:
         with open(args.dump_serial, "w") as f:
             try:
@@ -618,8 +711,12 @@ def main():
 
     print(f"{out}  {W}x{H}  ({tries} capture(s))")
     print(f"serial: {args.dump_serial}")
-    if ok:
-        print(f"PASS {args.game}: frame satisfied every pixel assertion")
+    # `ok` is only the game's own pixel verdict; the quit-restore is a separate
+    # phase with its own answer, and both must hold. An earlier draft tested
+    # `ok` alone here, so a failed restore was reported as a pass.
+    if ok and restore_ok:
+        print(f"PASS {args.game}: frame satisfied every pixel assertion, and "
+              f"ESC restored the display")
         return 0
     print(f"FAIL {args.game}: {len(fails)} assertion(s) failed")
     for f in fails:
