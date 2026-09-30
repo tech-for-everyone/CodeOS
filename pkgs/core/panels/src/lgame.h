@@ -119,6 +119,11 @@ void lgame_audio_error(void);
 void lgame_audio_success(void);
 
 /* ── Input ── */
+/* Keys are raw byte values, not scan codes: the PS/2 layer maps to ASCII
+ * before lgame sees it, and the serial drain delivers bytes as they arrive.
+ * Both paths therefore agree on 27 for ESC, which is what every title polls. */
+#define LGAME_KEY_ESC 27
+
 void lgame_input_poll(void);
 int  lgame_key_down(int key);
 int  lgame_key_pressed(int key);

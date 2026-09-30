@@ -85,10 +85,28 @@ class Serial:
     def text(self):
         return self.buf.decode("latin-1", "replace")
 
-    def wait_for(self, needle, timeout):
+    def mark(self):
+        """Remember how much has arrived, for since()."""
+        return len(self.buf)
+
+    def since(self, mark):
+        return self.buf[mark:].decode("latin-1", "replace")
+
+    def wait_for(self, needle, timeout, since=None):
+        """Wait for `needle` in text that arrived AFTER `since` (default: all).
+
+        Scanning the whole buffer is wrong, and was: `root#` is in the log from
+        the prompt that launched the game, so asking for `root#` after pressing
+        ESC returned instantly on that stale match -- and the check then
+        reported a clean return to the shell while the game was still running.
+        Every caller that waits for something the shell printed *before* the
+        thing under test must pass a mark; the boot-entry and first-prompt
+        waits are the only ones legitimately allowed to search history.
+        """
         end = time.time() + timeout
         while time.time() < end:
-            if needle in self.text():
+            text = self.text() if since is None else self.since(since)
+            if needle in text:
                 return True
             time.sleep(0.2)
         return False
@@ -540,6 +558,16 @@ def main():
         # rps, math, reflex) and returns. The graphical titles are separate
         # top-level builtins -- see the `strcmp(cmd, "pong")` arm in
         # kernel/kernel/shell.c.
+        #
+        # Everything below waits on text that can only appear AFTER the command
+        # is typed, so each wait is anchored to a mark taken BEFORE the send.
+        # Without this, `root#` from the prompt that launched the game satisfies
+        # the post-ESC wait instantly -- the check passed while the game ran on.
+        # The mark has to precede the send, not follow it: anything the game
+        # prints in the window between write() and mark() would then be missed
+        # and the wait would run to its timeout on a marker that was already in
+        # the log.
+        launched = ser.mark()
         if args.game == "selftest":
             ser.send("lgame-selftest\n")
             marker = "lgame: selftest frame drawn"
@@ -551,7 +579,7 @@ def main():
         # reason the boot entry is read back off the wire: a screen full of
         # the shell/bootsplash would otherwise be reported as a game frame
         # that merely has the wrong colours.
-        if not ser.wait_for(marker, 20.0):
+        if not ser.wait_for(marker, 20.0, since=launched):
             with open(args.dump_serial, "w") as f:
                 f.write(ser.text())
             raise SystemExit(

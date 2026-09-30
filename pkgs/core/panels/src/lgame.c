@@ -8,12 +8,18 @@
 #include "timer.h"
 #include "mm.h"
 #include "string.h"
+#include "serial.h"
+#include "kprintf.h"
 
 lgame_context_t lgame;
 
 /* Internal state */
 static uint8_t lgame_keys[LGAME_MAX_KEYS];
 static uint8_t lgame_keys_prev[LGAME_MAX_KEYS];
+/* Keys read from the serial line, latched for exactly one frame each: a serial
+ * byte has no release event to clear it, unlike a PS/2 key. See
+ * lgame_input_poll(). */
+static uint8_t lgame_serial_keys[LGAME_MAX_KEYS];
 static int lgame_mouse_btn_state[3];
 static int lgame_mouse_btn_prev[3];
 static uint32_t lgame_rand_seed = 12345;
@@ -574,6 +580,14 @@ void lgame_audio_success(void) {
 /* ── Input ── */
 void lgame_input_poll(void) {
     if (!lgame.initialized) return;
+
+    /* Release the keys that the serial drain latched last frame (see below)
+     * BEFORE polling the keyboard, so a key held on the PS/2 port at the same
+     * time still reports as down. */
+    for (int k = 0; k < LGAME_MAX_KEYS; k++)
+        if (lgame_serial_keys[k]) lgame_keys[k] = 0;
+    memset(lgame_serial_keys, 0, sizeof(lgame_serial_keys));
+
     keyboard_poll();
 
     key_event_t ev;
@@ -581,6 +595,28 @@ void lgame_input_poll(void) {
         int key = ev.keycode;
         if (key >= 0 && key < LGAME_MAX_KEYS) {
             lgame_keys[key] = ev.pressed ? 1 : 0;
+        }
+    }
+
+    /* Drain the serial console as well.
+     *
+     * The graphical titles are reachable *only* as fullscreen shell builtins,
+     * because qt_desktop_run() never returns to a shell, so on the `no-desktop`
+     * boot entry the serial line is the user's sole input device. Without this,
+     * a key typed there never reached the game: ESC could not quit it and the
+     * session had to be reset from outside the machine.
+     *
+     * The byte is latched for exactly one frame. lgame_frame_begin() copies
+     * lgame_keys into lgame_keys_prev, and lgame_key_pressed() is
+     * `down && !prev`. A PS/2 key is cleared by its own release event, but a
+     * serial byte has no release, so without the latch it would read as held
+     * for the rest of the session -- lgame_key_pressed() true forever, and a
+     * game polling a movement key would walk off the board. */
+    while (serial_available()) {
+        int key = (unsigned char)serial_readchar();
+        if (key > 0 && key < LGAME_MAX_KEYS) {
+            lgame_serial_keys[key] = 1;
+            lgame_keys[key] = 1;
         }
     }
 
@@ -724,6 +760,27 @@ int lgame_selftest(void) {
     lgame_draw_texture(tex, SELFTEST_BLOCK * 6, 0);
 
     lgame_present();
+
+    /* Hold the frame until ESC.
+     *
+     * Without this the frame is presented and the function returns in the same
+     * breath, so the shell repaints over it before scripts/lgame_check.py can
+     * screendump. The check would then be judging whatever the shell happened
+     * to draw, or a frame already cleared by lgame_quit(). Holding is also
+     * what gives the check something real to assert: the surface stays exactly
+     * as presented for as long as it takes.
+     *
+     * The marker is printed here, at present time, rather than by the caller
+     * after the return: by the time the caller runs, lgame_quit() has already
+     * cleared the screen, so a line printed then would vouch for a frame
+     * nobody can see. */
+    kprintf("lgame: selftest frame drawn\n");
+
+    while (lgame.running) {
+        lgame_input_poll();
+        if (lgame_key_pressed(LGAME_KEY_ESC)) lgame.running = 0;
+        timer_sleep_ms(16);
+    }
 
     lgame_free_texture(tex);
     lgame_quit();

@@ -2230,10 +2230,16 @@ static void cmd_lgame_game(int argc, char **argv) {
 }
 
 /* `lgame-selftest` -- draws the fixed probe frame from lgame_selftest() and
- * leaves it on screen. scripts/lgame_check.py asserts the pixels, which is
- * the only way the texture path gets exercised: nothing else in the binary
- * calls it, so without this --gc-sections drops it and any fix to it would
- * be build-verified only. */
+ * holds it on screen until ESC. scripts/lgame_check.py asserts the pixels,
+ * which is the only way the texture path gets exercised: nothing else in the
+ * binary calls it, so without this --gc-sections drops it and any fix to it
+ * would be build-verified only.
+ *
+ * lgame_selftest() does not return until ESC, and it prints its own
+ * "lgame: selftest frame drawn" line at present time -- so the return value
+ * only distinguishes a clean exit from a setup failure, not success from
+ * failure of the draw. Printing the marker here instead would vouch for a
+ * frame that lgame_quit() has already cleared. */
 static void cmd_lgame_selftest(void) {
     extern int lgame_selftest(void);
     if (!fb_available()) {
@@ -2241,9 +2247,7 @@ static void cmd_lgame_selftest(void) {
         return;
     }
     int rc = lgame_selftest();
-    if (rc == 0)
-        kprintf("lgame: selftest frame drawn\n");
-    else
+    if (rc != 0)
         kprintf("lgame: selftest FAILED rc=%d\n", rc);
 }
 

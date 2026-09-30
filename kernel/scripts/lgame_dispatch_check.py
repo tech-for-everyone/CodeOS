@@ -98,10 +98,19 @@ def main():
                 buf[0] += d
         threading.Thread(target=pump, daemon=True).start()
 
-        def wait_for(needle, timeout):
+        def wait_for(needle, timeout, since=0):
+            """Wait for `needle` in buf[since:] rather than the whole buffer.
+
+            Anchoring matters here: `root#` is already in the log from the
+            prompt that launched the game, so an unanchored wait after ESC
+            returns instantly on that stale match and the check reports a
+            clean return to the shell while the game is still running. The
+            two boot-time waits legitimately search history, so the default
+            is 0 and the per-case waits pass a mark.
+            """
             e = time.time() + timeout
             while time.time() < e:
-                if needle in buf[0].decode("latin-1", "replace"):
+                if needle in buf[0][since:].decode("latin-1", "replace"):
                     return True
                 time.sleep(0.2)
             return False
@@ -145,10 +154,19 @@ def main():
                 verdict = "launched a game" if takes_over else "stayed in the shell"
                 print(f"  {cmd:<10} {verdict}")
 
-            if takes_over and not wait_for("root#", 20.0):
-                fails.append(f"after `{cmd}` the shell prompt never came "
-                             f"back -- the game did not return")
-            if not takes_over and not wait_for("root#", 15.0):
+            if takes_over:
+                # ESC goes out on the SERIAL line, the same console the command
+                # was typed at -- not over QMP, which would reach the emulated
+                # PS/2 keyboard and prove only that a keyboard can stop a game.
+                # The graphical titles are reachable *only* as fullscreen shell
+                # builtins (qt_desktop_run() never returns), so on this boot
+                # entry the serial line is the user's only input device.
+                quitting = len(buf[0])
+                s.sendall(b"\x1b")
+                if not wait_for("root#", 20.0, since=quitting):
+                    fails.append(f"after `{cmd}` the shell prompt never came "
+                                 f"back -- the game did not return")
+            elif not wait_for("root#", 15.0, since=before):
                 fails.append(f"after `{cmd}` the shell prompt never came back")
             # Drain so the next case's `before` is a clean boundary.
             time.sleep(0.5)
