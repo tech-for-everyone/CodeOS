@@ -563,6 +563,560 @@ lgame_color_t lgame_texture_get_pixel(lgame_texture_t *tex, int x, int y) {
     return c;
 }
 
+/* ── 3D ── */
+/* Software triangle rasteriser with a depth buffer, 16.16 fixed point
+ * throughout. Depth is stored as 1/z so that a larger value is nearer, which
+ * makes the test a plain ">" and puts the precision where it is needed, near
+ * the camera. */
+#define LGAME_3D_NEAR     LGAME_FP_ONE          /* 1.0 world unit */
+/* Smallest view-z the projection will divide by. lgame_3d_tri() clips
+ * against LGAME_3D_NEAR first, so this only ever catches a vertex the clipper
+ * interpolated to a hair on the wrong side of the near plane -- it exists to
+ * keep lgame_fp_div() away from a zero denominator, not to model anything. */
+#define LGAME_3D_ZV_MIN   (LGAME_FP_ONE / 64)
+/* Reject a degenerate focal length; 0 would divide by zero in the projection. */
+#define LGAME_3D_FOCAL_MIN (LGAME_FP_ONE / 8)
+#define LGAME_3D_INVZ_MAX  ((uint32_t)0xFFFFFFFFu)
+
+static uint16_t *lgame_3d_depth;
+static int lgame_3d_vw, lgame_3d_vh, lgame_3d_ox, lgame_3d_oy;
+static int lgame_3d_on;
+static int lgame_3d_cull_on;
+/* Camera basis, orthonormal, 16.16 */
+static lgame_vec3_t lgame_3d_eye, lgame_3d_right, lgame_3d_up, lgame_3d_fwd;
+static lgame_fp_t lgame_3d_focal;
+
+static int lgame_3d_n_submitted, lgame_3d_n_drawn;
+static int lgame_3d_n_clipped, lgame_3d_n_culled;
+
+/* ── negative-control seam ──
+ *
+ * Declared here, with the rest of the 3D state, so a reader of the rasteriser
+ * finds the seam they can break rather than just the flag.
+ *
+ * Each 3D pixel assertion in scripts/lgame_check.py has to be shown to fail
+ * when the feature it tests is broken, otherwise it is not an assertion. The
+ * way to show that is to break the feature and rerun, and the way to break it
+ * here is this variable. The values:
+ *
+ *   1  depth test always passes (occlusion disabled)
+ *   2  backface culling ignored
+ *   3  near-plane clipping drops the triangle instead of clipping it
+ *   4  lgame_3d_clear() does not paint
+ *
+ * `volatile` is load-bearing and is the whole reason this is a variable and not
+ * a macro or a literal: at -O2 the compiler reads it once, sees 0, and deletes
+ * the branch, so a control written as `if (0)` -- or with a plain `int` -- is a
+ * control that does nothing and the assertion would then pass with the feature
+ * still disabled, which is the exact failure this seam exists to prevent. A
+ * volatile load is emitted on every evaluation; the disassembly from the
+ * control runs is what shows that, rather than assuming it.
+ *
+ * MUST be 0 outside a deliberate control run. */
+volatile int lgame_3d_break = 0;
+
+/* ── fixed-point helpers ── */
+static inline lgame_fp_t lgame_fp_mul(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)(((int64_t)a * (int64_t)b) >> LGAME_FP_SHIFT);
+}
+static inline lgame_fp_t lgame_fp_div(lgame_fp_t a, lgame_fp_t b) {
+    if (b == 0) return a < 0 ? -LGAME_3D_INVZ_MAX : LGAME_3D_INVZ_MAX;
+    return (lgame_fp_t)((((int64_t)a) << LGAME_FP_SHIFT) / (int64_t)b);
+}
+/* Integer square root, exact, by the digit-by-digit restoring method. Used
+ * instead of Newton-Raphson because a Newton seed has to be guessed and an
+ * iteration count has to be guessed, and both were wrong here: the seed was
+ * 128x too large, mag/x truncated to 0, and eight iterations of `x = (x + 0)/2`
+ * merely halved the seed -- which happened to land within 2x of the right answer
+ * and so looked fine. A restoring sqrt has no seed and cannot stop early.
+ *
+ * Returns floor(sqrt(n)) for n up to 2^62. */
+static uint64_t lgame_isqrt(uint64_t n) {
+    uint64_t res = 0;
+    uint64_t bit = 1ULL << 62;
+    while (bit > n) bit >>= 2;
+    while (bit) {
+        if (n >= res + bit) {
+            n -= res + bit;
+            res = (res >> 1) + bit;
+        } else {
+            res >>= 1;
+        }
+        bit >>= 2;
+    }
+    return res;
+}
+
+/* Square root of a 16.16 magnitude, as a 16.16 value.
+ *
+ * The scaling is the part that is easy to get wrong. `mag` holds a squared
+ * length already in 16.16, so the root is sqrt(mag) * 256, NOT sqrt(mag):
+ * sqrt(mag << 16). Getting that factor wrong makes every "normalised" vector
+ * the wrong length, which does not fail loudly -- it just quietly produces a
+ * camera basis that is not orthonormal, and then every projection downstream
+ * is wrong. */
+static lgame_fp_t lgame_fp_isqrt(uint64_t mag) {
+    if (mag == 0) return 0;
+    /* mag << 16 must stay inside 64 bits. A magnitude this large means a
+     * coordinate far outside any sane world, so saturate rather than wrap. */
+    if (mag >= (1ULL << 46)) return LGAME_FP_ONE / 8;
+    return (lgame_fp_t)lgame_isqrt(mag << 16);
+}
+static lgame_vec3_t lgame_vec3_sub(lgame_vec3_t a, lgame_vec3_t b) {
+    lgame_vec3_t r; r.x = a.x - b.x; r.y = a.y - b.y; r.z = a.z - b.z; return r;
+}
+static lgame_vec3_t lgame_vec3_cross(lgame_vec3_t a, lgame_vec3_t b) {
+    lgame_vec3_t r;
+    r.x = lgame_fp_mul(a.y, b.z) - lgame_fp_mul(a.z, b.y);
+    r.y = lgame_fp_mul(a.z, b.x) - lgame_fp_mul(a.x, b.z);
+    r.z = lgame_fp_mul(a.x, b.y) - lgame_fp_mul(a.y, b.x);
+    return r;
+}
+static lgame_fp_t lgame_vec3_dot(lgame_vec3_t a, lgame_vec3_t b) {
+    return lgame_fp_mul(a.x, b.x) + lgame_fp_mul(a.y, b.y) + lgame_fp_mul(a.z, b.z);
+}
+/* Scale to unit length. Returns 0 for a zero vector, so callers can detect the
+ * degenerate case instead of dividing by a rounded-to-zero length. */
+static lgame_vec3_t lgame_vec3_normalize(lgame_vec3_t v) {
+    uint64_t mag = (uint64_t)lgame_fp_mul(v.x, v.x)
+                 + (uint64_t)lgame_fp_mul(v.y, v.y)
+                 + (uint64_t)lgame_fp_mul(v.z, v.z);
+    lgame_fp_t len = lgame_fp_isqrt(mag);
+    lgame_vec3_t r;
+    if (len == 0) { r.x = r.y = r.z = 0; return r; }
+    r.x = lgame_fp_div(v.x, len);
+    r.y = lgame_fp_div(v.y, len);
+    r.z = lgame_fp_div(v.z, len);
+    return r;
+}
+
+int lgame_3d_active(void) { return lgame_3d_on; }
+
+int lgame_3d_begin(int view_w, int view_h, int ox, int oy) {
+    if (!lgame.initialized) return LGAME_ERR_NOT_INIT;
+    if (view_w <= 0 || view_h <= 0) return LGAME_ERR_INVALID_ARG;
+    /* Refuse a viewport that cannot fit the surface rather than clipping every
+     * draw: a silently cropped viewport is much harder to debug than an error. */
+    if (ox < 0 || oy < 0 ||
+        ox + view_w > (int)fb_getwidth() || oy + view_h > (int)fb_getheight())
+        return LGAME_ERR_INVALID_ARG;
+
+    lgame_3d_end();   /* idempotent: re-begin does not leak the old buffer */
+
+    size_t n = (size_t)view_w * (size_t)view_h;
+    lgame_3d_depth = (uint16_t *)malloc(n * sizeof(uint16_t));
+    if (!lgame_3d_depth) return LGAME_ERR_INVALID_ARG;
+
+    lgame_3d_vw = view_w;
+    lgame_3d_vh = view_h;
+    lgame_3d_ox = ox;
+    lgame_3d_oy = oy;
+    lgame_3d_on = 1;
+    lgame_3d_cull_on = 0;
+    /* Sensible default camera until lgame_3d_camera() is called. focal =
+     * view_h is roughly a 53-degree vertical field. */
+    lgame_3d_camera(lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_4),
+                    lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_0),
+                    view_h);
+    lgame_3d_reset_counters();
+    return LGAME_OK;
+}
+
+void lgame_3d_end(void) {
+    if (lgame_3d_depth) {
+        free(lgame_3d_depth);
+        lgame_3d_depth = NULL;
+    }
+    lgame_3d_vw = lgame_3d_vh = lgame_3d_ox = lgame_3d_oy = 0;
+    lgame_3d_on = 0;
+}
+
+void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, lgame_fp_t focal) {
+    if (focal < LGAME_3D_FOCAL_MIN) focal = LGAME_3D_FOCAL_MIN;
+    lgame_vec3_t fwd = lgame_vec3_normalize(lgame_vec3_sub(target, eye));
+    if (fwd.x == 0 && fwd.y == 0 && fwd.z == 0)
+        return;   /* eye == target: keep the previous camera, do not zero it */
+
+    /* right = normalise(cross(fwd, world_up)). World up is +Y; a camera looking
+     * straight up or down is degenerate against it, so fall back to +Z, which
+     * keeps a usable basis instead of a zero-length right vector. */
+    lgame_vec3_t world_up = lgame_vec3(LGAME_FP_0, LGAME_FP_1, LGAME_FP_0);
+    lgame_vec3_t right = lgame_vec3_cross(fwd, world_up);
+    if (right.x == 0 && right.y == 0 && right.z == 0)
+        right = lgame_vec3_cross(fwd, lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_1));
+    right = lgame_vec3_normalize(right);
+    lgame_vec3_t up = lgame_vec3_cross(right, fwd);
+
+    lgame_3d_eye = eye;
+    lgame_3d_fwd = fwd;
+    lgame_3d_right = right;
+    lgame_3d_up = up;
+    lgame_3d_focal = focal;
+}
+
+void lgame_3d_clear(lgame_color_t sky) {
+    if (!lgame_3d_on) return;
+    uint32_t c = lgame_color_pack(sky);
+    for (int y = 0; y < lgame_3d_vh; y++) {
+        for (int x = 0; x < lgame_3d_vw; x++) {
+            lgame_3d_depth[(size_t)y * lgame_3d_vw + x] = 0;
+            fb_putpixel((uint32_t)(lgame_3d_ox + x),
+                        (uint32_t)(lgame_3d_oy + y), c);
+        }
+    }
+}
+
+void lgame_3d_cull(int on) { lgame_3d_cull_on = on ? 1 : 0; }
+
+int  lgame_3d_submitted(void) { return lgame_3d_n_submitted; }
+int  lgame_3d_drawn(void)      { return lgame_3d_n_drawn; }
+int  lgame_3d_clipped(void)    { return lgame_3d_n_clipped; }
+int  lgame_3d_culled(void)     { return lgame_3d_n_culled; }
+void lgame_3d_reset_counters(void) {
+    lgame_3d_n_submitted = lgame_3d_n_drawn = 0;
+    lgame_3d_n_clipped = lgame_3d_n_culled = 0;
+}
+
+/* A vertex after the view transform and projection. */
+typedef struct {
+    int      sx, sy;      /* screen pixels, surface coordinates */
+    lgame_fp_t invz;      /* 1/z in 16.16; larger is nearer */
+} lgame_3d_vtx;
+
+static void lgame_3d_project(lgame_vec3_t p, lgame_3d_vtx *out) {
+    lgame_vec3_t d = lgame_vec3_sub(p, lgame_3d_eye);
+    lgame_fp_t zv = lgame_vec3_dot(d, lgame_3d_fwd);
+    lgame_fp_t xv = lgame_vec3_dot(d, lgame_3d_right);
+    lgame_fp_t yv = lgame_vec3_dot(d, lgame_3d_up);
+    if (zv < LGAME_3D_ZV_MIN) zv = LGAME_3D_ZV_MIN;   /* caller clips first */
+    out->invz = lgame_fp_div(LGAME_FP_ONE, zv);
+    /* lgame_fp_div() returns 16.16, so the shift is what turns the focal-scaled
+     * offset back into whole pixels. Leaving it out does not give a slightly
+     * wrong picture: every coordinate comes out 65536x too large, so every
+     * bounding box lands off the surface and the rasteriser quietly returns
+     * without drawing a single pixel. */
+    out->sx = lgame_3d_ox + lgame_3d_vw / 2
+            + (lgame_fp_div(lgame_fp_mul(xv, lgame_3d_focal), zv) >> LGAME_FP_SHIFT);
+    out->sy = lgame_3d_oy + lgame_3d_vh / 2
+            - (lgame_fp_div(lgame_fp_mul(yv, lgame_3d_focal), zv) >> LGAME_FP_SHIFT);
+}
+
+/* Edge function: positive on one side of the directed edge a->b. */
+static inline int64_t lgame_3d_edge(lgame_3d_vtx a, lgame_3d_vtx b, int px, int py) {
+    return (int64_t)(px - a.sx) * (int64_t)(b.sy - a.sy)
+         - (int64_t)(py - a.sy) * (int64_t)(b.sx - a.sx);
+}
+
+static void lgame_3d_raster(lgame_3d_vtx v0, lgame_3d_vtx v1, lgame_3d_vtx v2,
+                            uint32_t packed) {
+    int64_t area = lgame_3d_edge(v0, v1, v2.sx, v2.sy);
+    if (area == 0) return;
+    if (lgame_3d_cull_on && area < 0 && lgame_3d_break != 2) {
+        lgame_3d_n_culled++;
+        return;
+    }
+
+    /* Orient so area > 0 and the inside test is a simple sign check. */
+    if (area < 0) {
+        lgame_3d_vtx t = v1; v1 = v2; v2 = t;
+        area = -area;
+    }
+
+    int minx = v0.sx < v1.sx ? v0.sx : v1.sx;
+    if (v2.sx < minx) minx = v2.sx;
+    int maxx = v0.sx > v1.sx ? v0.sx : v1.sx;
+    if (v2.sx > maxx) maxx = v2.sx;
+    int miny = v0.sy < v1.sy ? v0.sy : v1.sy;
+    if (v2.sy < miny) miny = v2.sy;
+    int maxy = v0.sy > v1.sy ? v0.sy : v1.sy;
+    if (v2.sy > maxy) maxy = v2.sy;
+
+    /* Clip the bounding box to the viewport, then to the surface. */
+    if (minx < lgame_3d_ox) minx = lgame_3d_ox;
+    if (miny < lgame_3d_oy) miny = lgame_3d_oy;
+    if (maxx >= lgame_3d_ox + lgame_3d_vw) maxx = lgame_3d_ox + lgame_3d_vw - 1;
+    if (maxy >= lgame_3d_oy + lgame_3d_vh) maxy = lgame_3d_oy + lgame_3d_vh - 1;
+    if (minx > maxx || miny > maxy) return;
+
+    int drew = 0;
+    for (int y = miny; y <= maxy; y++) {
+        for (int x = minx; x <= maxx; x++) {
+            int64_t w0 = lgame_3d_edge(v1, v2, x, y);
+            int64_t w1 = lgame_3d_edge(v2, v0, x, y);
+            int64_t w2 = lgame_3d_edge(v0, v1, x, y);
+            if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+
+            /* 1/z interpolated linearly in screen space, which is the correct
+             * depth for a perspective projection. */
+            int64_t invz = (w0 * (int64_t)v0.invz
+                          + w1 * (int64_t)v1.invz
+                          + w2 * (int64_t)v2.invz) / area;
+            if (invz < 0) invz = 0;
+            /* Quantise to 16 bits, with the near plane landing on 0xFFFF.
+             * invz is at most LGAME_FP_ONE here because lgame_3d_tri() clips
+             * against LGAME_3D_NEAR == LGAME_FP_ONE before projecting, so the
+             * scale is a constant rather than something derived from the
+             * focal length. Deriving it from the focal is what this replaced:
+             * focal/NEAR is ~360, which pushed every depth past 0xFFFF, so
+             * every pixel compared equal and the depth buffer silently tested
+             * nothing at all. */
+            uint32_t depth = (uint32_t)(((uint64_t)invz
+                                         * (uint64_t)((1u << LGAME_3D_DEPTH_BITS) - 1u))
+                                        >> LGAME_FP_SHIFT);
+            if (depth > (1u << LGAME_3D_DEPTH_BITS) - 1u)
+                depth = (1u << LGAME_3D_DEPTH_BITS) - 1u;
+
+            size_t idx = (size_t)(y - lgame_3d_oy) * lgame_3d_vw
+                       + (size_t)(x - lgame_3d_ox);
+            if (depth <= lgame_3d_depth[idx] && lgame_3d_break != 1)
+                continue;   /* occluded */
+            lgame_3d_depth[idx] = (uint16_t)depth;
+            fb_putpixel((uint32_t)x, (uint32_t)y, packed);
+            drew = 1;
+        }
+    }
+    if (drew) lgame_3d_n_drawn++;
+}
+
+void lgame_3d_tri(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c,
+                  lgame_color_t col) {
+    if (!lgame_3d_on) return;
+    lgame_3d_n_submitted++;
+
+    /* View-space z decides the near clip, so transform first. */
+    lgame_vec3_t v[3] = { a, b, c };
+    lgame_fp_t vz[3];
+    for (int i = 0; i < 3; i++)
+        vz[i] = lgame_vec3_dot(lgame_vec3_sub(v[i], lgame_3d_eye), lgame_3d_fwd);
+
+    int inside[3];
+    int n_in = 0;
+    for (int i = 0; i < 3; i++) {
+        inside[i] = (vz[i] >= LGAME_3D_NEAR);
+        if (inside[i]) n_in++;
+    }
+
+    if (n_in == 3) {
+        lgame_3d_vtx p[3];
+        for (int i = 0; i < 3; i++) lgame_3d_project(v[i], &p[i]);
+        lgame_3d_raster(p[0], p[1], p[2], lgame_color_pack(col));
+        return;
+    }
+    if (n_in == 0) { lgame_3d_n_clipped++; return; }
+
+    /* Sutherland-Hodgman against the single near plane. A triangle crossing it
+     * yields a 3- or 4-gon, which is then fanned back into triangles. */
+    lgame_vec3_t poly[4];
+    int np = 0;
+    for (int i = 0; i < 3; i++) {
+        lgame_vec3_t cur = v[i], nxt = v[(i + 1) % 3];
+        lgame_fp_t zc = vz[i], zn = vz[(i + 1) % 3];
+        if (inside[i]) poly[np++] = cur;
+        if (inside[i] != inside[(i + 1) % 3]) {
+            /* Interpolate to z == NEAR. zn - zc is non-zero here because the two
+             * vertices are on opposite sides. */
+            lgame_fp_t t = lgame_fp_div(LGAME_3D_NEAR - zc, zn - zc);
+            poly[np].x = cur.x + lgame_fp_mul(nxt.x - cur.x, t);
+            poly[np].y = cur.y + lgame_fp_mul(nxt.y - cur.y, t);
+            poly[np].z = cur.z + lgame_fp_mul(nxt.z - cur.z, t);
+            np++;
+        }
+    }
+    lgame_3d_n_clipped++;
+    if (np < 3) return;
+    /* Control 3: skip the fan, so a straddling triangle vanishes instead of
+     * being clipped. The probe's clip-band sample then reads sky. */
+    if (lgame_3d_break == 3) return;
+    for (int i = 1; i + 1 < np; i++) {
+        lgame_3d_vtx p[3];
+        lgame_3d_project(poly[0], &p[0]);
+        lgame_3d_project(poly[i], &p[1]);
+        lgame_3d_project(poly[i + 1], &p[2]);
+        lgame_3d_raster(p[0], p[1], p[2], lgame_color_pack(col));
+    }
+}
+
+/* ── 3D probe ──
+ *
+ * Three sub-probes, each isolating one property of the rasteriser so a failure
+ * names the thing that broke rather than "the 3D part is wrong".
+ *
+ * The geometry is chosen so every expected pixel can be derived on paper from
+ * the projection, with >=12px between the sampling point and the nearest
+ * boundary, so a couple of units of fixed-point truncation cannot move a
+ * sample off a triangle. All the half-extents are exact in 16.16 (multiples of
+ * 1/16), which is why the numbers are what they are.
+ *
+ * The spec is printed to the serial line as well as drawn, so lgame_check.py
+ * asserts against what the kernel says it drew rather than against a second,
+ * hand-maintained copy of the same numbers. If the rasteriser puts a vertex in
+ * the wrong place, the pixels disagree with the printed intent; the harness
+ * cannot silently agree with a wrong implementation.
+ */
+#define SELFTEST_3D_VW    320
+#define SELFTEST_3D_VH    480
+#define SELFTEST_3D_OX    40
+#define SELFTEST_3D_OY    120
+#define SELFTEST_3D_CX    (SELFTEST_3D_OX + SELFTEST_3D_VW / 2)  /* 200 */
+#define SELFTEST_3D_CY    (SELFTEST_3D_OY + SELFTEST_3D_VH / 2)  /* 360 */
+#define SELFTEST_3D_FOCAL 360          /* pixels; independent of the viewport */
+#define SELFTEST_3D_EYE_Z 4            /* camera at z=4 looking down -Z */
+
+#define SELFTEST_3D_SKY   0xFF1A1C20u  /* rgb(26,28,32), distinct from every probe */
+#define SELFTEST_3D_RED   0xFFFF0000u  /* furthest */
+#define SELFTEST_3D_GREEN 0xFF00FF00u
+#define SELFTEST_3D_CYAN  0xFF00FFFFu
+#define SELFTEST_3D_BLUE  0xFF0000FFu  /* nearest */
+#define SELFTEST_3D_CLIP  0xFFFF8000u  /* straddles the near plane */
+#define SELFTEST_3D_CULL  0xFFFF00FFu  /* back-facing: must NOT appear */
+#define SELFTEST_3D_KEEP  0xFFFFFF00u  /* front-facing: must appear */
+
+#define SELFTEST_3D_FP_1    (LGAME_FP_ONE)
+#define SELFTEST_3D_FP_2    (2 * LGAME_FP_ONE)
+#define SELFTEST_3D_FP_4    (4 * LGAME_FP_ONE)
+#define SELFTEST_3D_FP_1_2  (LGAME_FP_ONE / 2)
+#define SELFTEST_3D_FP_7_8  (7 * LGAME_FP_ONE / 8)
+/* World half-extents for the staircase, as exact 16.16 (multiples of 1/16, so
+ * no truncation creeps into the on-screen extents the assertions rely on):
+ * on-screen half = half_w * focal / d, giving 135, 90, 67 and 45 px. */
+#define SELFTEST_3D_FP_1_8  (LGAME_FP_ONE / 8)
+#define SELFTEST_3D_FP_3_8  (3 * LGAME_FP_ONE / 8)
+#define SELFTEST_3D_FP_3_4  (3 * LGAME_FP_ONE / 4)
+#define SELFTEST_3D_FP_3_2  (3 * LGAME_FP_ONE / 2)
+/* Off-axis centre for the cull probe: world yv = -63000 projects to screen
+ * y = 519, which clears the staircase (bottom 495) and the viewport bottom
+ * (599) while leaving room for the probe's own half-extent. */
+#define SELFTEST_3D_CULL_YV (-63000)
+
+/* An axis-aligned quad at z = eye_z - d, centred on (cx, cy) in the view
+ * plane. `flip` reverses the winding of both triangles, which is what the
+ * backface culler is supposed to notice. */
+static void selftest_3d_quad(int d, lgame_fp_t cx, lgame_fp_t cy,
+                             lgame_fp_t half_w, lgame_color_t col, int flip) {
+    /* `d` is a distance in whole world units, so it has to be scaled into
+     * 16.16 before it can be subtracted from a 16.16 coordinate. Subtracting
+     * the raw int here puts every quad at z = 4 - 1 instead of 4 - 1.0, i.e.
+     * 262143 instead of 196608, and then every view-space z collapses to a
+     * hair above zero and the near clip rejects all of it. */
+    lgame_fp_t z  = SELFTEST_3D_FP_4 - (lgame_fp_t)d * LGAME_FP_ONE;
+    lgame_fp_t x0 = cx - half_w, x1 = cx + half_w;
+    lgame_fp_t y0 = cy - half_w, y1 = cy + half_w;
+    if (!flip) {
+        lgame_3d_tri(lgame_vec3(x0, y0, z), lgame_vec3(x1, y0, z),
+                     lgame_vec3(x0, y1, z), col);
+        lgame_3d_tri(lgame_vec3(x1, y0, z), lgame_vec3(x1, y1, z),
+                     lgame_vec3(x0, y1, z), col);
+    } else {
+        lgame_3d_tri(lgame_vec3(x0, y1, z), lgame_vec3(x1, y0, z),
+                     lgame_vec3(x0, y0, z), col);
+        lgame_3d_tri(lgame_vec3(x0, y1, z), lgame_vec3(x1, y1, z),
+                     lgame_vec3(x1, y0, z), col);
+    }
+}
+
+/* lgame_selftest()'s 3D section. Returns 0 on success, or a negative rc naming
+ * which probe could not be set up, so a probe that silently did not run is
+ * impossible -- a check that skips its own subject is how a gate starts
+ * passing for the wrong reason. */
+static int selftest_3d(void) {
+    lgame_vec3_t eye  = lgame_vec3(LGAME_FP_0, LGAME_FP_0, SELFTEST_3D_FP_4);
+    lgame_vec3_t zero = lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_0);
+
+    if (lgame_3d_begin(SELFTEST_3D_VW, SELFTEST_3D_VH,
+                       SELFTEST_3D_OX, SELFTEST_3D_OY) != LGAME_OK)
+        return -11;
+    lgame_3d_camera(eye, zero, (lgame_fp_t)SELFTEST_3D_FOCAL * LGAME_FP_ONE);
+    lgame_3d_cull(0);
+    lgame_3d_reset_counters();
+    /* Control 4: skip the sky fill. The quads are still drawn over whatever
+     * lgame_clear() left behind, so every probe sample still reads its own
+     * colour and `drawn` is unchanged -- the sky is the ONLY thing a missing
+     * clear takes away, which is why the check asserts on it explicitly rather
+     * than inferring it from the samples. */
+    if (lgame_3d_break != 4)
+        lgame_3d_clear(lgame_color_hex(SELFTEST_3D_SKY));
+    /* ── Probe A: the depth staircase ────────────────────────────────────
+     * Four nested quads at distances 4, 3, 2, 1, whose on-screen half-extents
+     * work out to 135, 90, 67 and 45 px (67.5 and 22.5 truncate). Submitted
+     * NEAREST FIRST, so every later quad overlaps every earlier one and the
+     * last one drawn -- RED, the largest of the four -- covers the lot. With no
+     * depth test all four samples would therefore read RED. So this one set of
+     * assertions covers the whole depth buffer: each sample must read the
+     * colour of the nearest quad reaching it. */
+    selftest_3d_quad(1, 0, 0, SELFTEST_3D_FP_1_8, lgame_color_hex(SELFTEST_3D_BLUE),  0);
+    selftest_3d_quad(2, 0, 0, SELFTEST_3D_FP_3_8, lgame_color_hex(SELFTEST_3D_CYAN),  0);
+    selftest_3d_quad(3, 0, 0, SELFTEST_3D_FP_3_4, lgame_color_hex(SELFTEST_3D_GREEN), 0);
+    selftest_3d_quad(4, 0, 0, SELFTEST_3D_FP_3_2, lgame_color_hex(SELFTEST_3D_RED),   0);
+
+    /* ── Probe B: near-plane clipping ────────────────────────────────────
+     * Two vertices at d=2 (in front of the near plane at 1.0) and one at d=0.5
+     * (behind it). Clipping must yield a polygon that is still drawn, not drop
+     * the triangle. The two in-front vertices land at screen y=203 and the
+     * clipped edge runs off the top of the viewport, leaving a band around
+     * y=180 where only a correctly clipped triangle could have put a pixel. */
+    lgame_3d_tri(lgame_vec3( SELFTEST_3D_FP_1_2, SELFTEST_3D_FP_7_8,
+                             SELFTEST_3D_FP_4 - 2 * LGAME_FP_ONE),
+                 lgame_vec3(-SELFTEST_3D_FP_1_2, SELFTEST_3D_FP_7_8,
+                             SELFTEST_3D_FP_4 - 2 * LGAME_FP_ONE),
+                 lgame_vec3( LGAME_FP_0, SELFTEST_3D_FP_7_8,
+                             SELFTEST_3D_FP_4 - SELFTEST_3D_FP_1_2),
+                 lgame_color_hex(SELFTEST_3D_CLIP));
+
+    /* ── Probe C: backface culling ───────────────────────────────────────
+     * Two concentric quads below the staircase, the LARGER one wound the wrong
+     * way round. With culling on, the reversed quad must be rejected outright
+     * and its colour appear nowhere. The size difference is the point: if the
+     * two quads were the same shape, a culler that silently ignored the
+     * winding would still hide the wrong one under the right one, and the
+     * "must not appear" assertion would pass for the wrong reason. Here the
+     * wrong-wound quad would leave a 17px ring of its own colour around the
+     * correct one. The small forward-wound quad is also the control that rules
+     * out a rasteriser which simply drew nothing here. */
+    lgame_3d_cull(1);
+    selftest_3d_quad(2, 0, SELFTEST_3D_CULL_YV, 3 * LGAME_FP_ONE / 16,
+                     lgame_color_hex(SELFTEST_3D_CULL), 1);   /* must vanish */
+    selftest_3d_quad(2, 0, SELFTEST_3D_CULL_YV, 3 * LGAME_FP_ONE / 32,
+                     lgame_color_hex(SELFTEST_3D_KEEP), 0);   /* must show */
+
+    /* Sample points and the colour each must read. Offsets from the centre are
+     * 112 / 78 / 55 / 30 px against on-screen half-extents of 135 / 90 / 67 /
+     * 45, so every offset falls strictly inside one ring and strictly outside
+     * the next, by at least 12px -- far more than the couple of units of
+     * fixed-point truncation in the projection. */
+    struct { int dx, dy; uint32_t hex; const char *name; } probes[] = {
+        { -112,    0, SELFTEST_3D_RED,   "stair_red"   },
+        {  -78,    0, SELFTEST_3D_GREEN, "stair_green" },
+        {  -55,    0, SELFTEST_3D_CYAN,  "stair_cyan"  },
+        {  -30,    0, SELFTEST_3D_BLUE,  "stair_blue"  },
+        {    0, -180, SELFTEST_3D_CLIP,  "clip_band"   },
+        {    0,  159, SELFTEST_3D_KEEP,  "cull_keep"   },
+    };
+    const int n_probes = (int)(sizeof(probes) / sizeof(probes[0]));
+
+    for (int i = 0; i < n_probes; i++) {
+        lgame_color_t want = lgame_color_hex(probes[i].hex);
+        kprintf("lgame: 3dprobe %s %d,%d %d,%d,%d\n", probes[i].name,
+                SELFTEST_3D_CX + probes[i].dx, SELFTEST_3D_CY + probes[i].dy,
+                want.r, want.g, want.b);
+    }
+    {
+        lgame_color_t cull = lgame_color_hex(SELFTEST_3D_CULL);
+        lgame_color_t sky  = lgame_color_hex(SELFTEST_3D_SKY);
+        kprintf("lgame: 3dprobe absent %d,%d,%d\n", cull.r, cull.g, cull.b);
+        kprintf("lgame: 3dprobe sky %d,%d,%d %d,%d,%d,%d\n",
+                sky.r, sky.g, sky.b,
+                SELFTEST_3D_OX, SELFTEST_3D_OY, SELFTEST_3D_VW, SELFTEST_3D_VH);
+    }
+    kprintf("lgame: 3dcounters submitted=%d drawn=%d clipped=%d culled=%d\n",
+            lgame_3d_submitted(), lgame_3d_drawn(),
+            lgame_3d_clipped(), lgame_3d_culled());
+
+    /* Free the depth buffer now rather than holding ~300 KB for the life of
+     * the frame. The check asserts the counters, which are plain ints. */
+    lgame_3d_end();
+    return 0;
+}
+
 /* ── Audio ── */
 int lgame_play_sound(int freq, int duration_ms) {
     return lgame_play_tone(freq, duration_ms, 100);
@@ -774,6 +1328,19 @@ int lgame_selftest(void) {
      * source, so a caller that blitted one sprite normally and then
      * highlighted it could never get the original back. */
     lgame_draw_texture(tex, SELFTEST_BLOCK * 6, 0);
+
+    /* The 3D probe, below the texture blocks (viewport top is y=120). It is
+     * drawn into the same frame on purpose: the two probes then share one
+     * screendump, so a single capture covers both, and neither can pass by
+     * drawing over the other. A failure here is fatal to the whole selftest
+     * rather than skipped -- if the depth buffer cannot be allocated (it is
+     * ~300 KB) the check must say so instead of quietly asserting less. */
+    int rc3d = selftest_3d();
+    if (rc3d != 0) {
+        lgame_free_texture(tex);
+        lgame_quit();
+        return -20 + rc3d;   /* -31 if the viewport could not be opened */
+    }
 
     lgame_present();
 

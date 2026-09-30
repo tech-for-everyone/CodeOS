@@ -127,6 +127,64 @@ def modal_colour(rgb):
     return colour, n
 
 
+def count_colour_rect(rgb, w, x0, y0, rw, rh, colour):
+    """How many pixels of exactly `colour` sit inside the given rect.
+
+    The rect comes off the kernel's own printed spec. Clamp to the frame
+    anyway: an out-of-range rect should report a count, not raise IndexError
+    and take the whole check down with it, which would hide the real verdict.
+    """
+    n = 0
+    for y in range(max(0, y0), min(y0 + rh, len(rgb) // (w * 3))):
+        base = y * w
+        for x in range(max(0, x0), min(x0 + rw, w)):
+            i = (base + x) * 3
+            if (rgb[i], rgb[i + 1], rgb[i + 2]) == colour:
+                n += 1
+    return n
+
+
+def parse_3d_spec(ser_text):
+    """Read the 3D probe's geometry and expectations off the kernel's own
+    serial output.
+
+    The kernel prints what it intended to draw, so the check compares the
+    framebuffer against the code's stated intent rather than against a second
+    hand-maintained copy of the same numbers. Returns None if the lines are
+    absent, which the caller must treat as a failure -- a check that cannot
+    judge its subject must say so rather than pass quietly.
+    """
+    probes, absent, sky, viewport, counters = [], None, None, None, {}
+    for line in ser_text.splitlines():
+        # A serial line arrives with whatever trailing noise the tty left, so
+        # match the prefix rather than assuming the line ends where the kernel's
+        # kprintf stopped.
+        line = line.strip()
+        if line.startswith("lgame: 3dcounters"):
+            for tok in line.split()[2:]:
+                if "=" in tok:
+                    k, _, v = tok.partition("=")
+                    counters[k] = int(v)
+            continue
+        if not line.startswith("lgame: 3dprobe "):
+            continue
+        f = line.split()
+        # f = ['lgame:', '3dprobe', <name|absent|sky>, ...]
+        if f[2] == "absent":
+            absent = tuple(int(t) for t in f[3].split(","))
+        elif f[2] == "sky":
+            sky = tuple(int(t) for t in f[3].split(","))
+            viewport = tuple(int(t) for t in f[4].split(","))
+        else:
+            # "<name> <x>,<y> <r>,<g>,<b>"
+            probes.append((f[2], tuple(int(t) for t in f[3].split(",")),
+                           tuple(int(t) for t in f[4].split(","))))
+    if not probes or absent is None or sky is None or viewport is None:
+        return None
+    return {"probes": probes, "absent": absent, "sky": sky,
+            "viewport": viewport, "counters": counters}
+
+
 def count_colour(rgb, colour):
     """How many pixels of `rgb` are exactly `colour`. Pixel-aligned by
     construction: it steps 3 bytes at a time, so it cannot match a colour that
@@ -420,7 +478,7 @@ def ramp_alpha(x):
     return 255 - (x * 255) // 63
 
 
-def check_selftest(rgb, w, h):
+def check_selftest(rgb, w, h, ser_text=""):
     fails = []
 
     def want(what, x, y, color, tol=3):
@@ -499,11 +557,81 @@ def check_selftest(rgb, w, h):
     want("G untinted re-draw is opaque white again", gx + 0, 32,
          (255, 255, 255), tol=2)
 
+    # ── H: the 3D probe ────────────────────────────────────────────────────
+    # The kernel prints its own probe geometry to the serial line
+    # (`lgame: 3dprobe ...`) as well as drawing it, and the check reads the
+    # expectations from there rather than from a second hand-maintained copy of
+    # the same numbers. The kernel states what it *intended* to draw; this
+    # compares that against what the framebuffer actually holds. A projection
+    # that puts a vertex in the wrong place therefore cannot make both agree,
+    # and the numbers cannot drift away from the code that uses them.
+    #
+    # Every sample point sits >=12px inside its target and outside the next
+    # shape, so a unit of fixed-point truncation cannot move one off a
+    # triangle. The offsets were derived by hand from the projection
+    # (screen half-extent = world_half * focal / distance, giving 135/90/67/45 px
+    # for the staircase), not read off a working build.
+    spec = parse_3d_spec(ser_text)
+    if spec is None:
+        fails.append(
+            "no `lgame: 3dprobe` lines on the serial log, so the 3D rasteriser "
+            "was not exercised and this check is asserting nothing about it")
+    else:
+        ox, oy, vw, vh = spec["viewport"]
+        sky = spec["sky"]
+        absent = spec["absent"]
+
+        # The sky fill is asserted explicitly because it is the ONLY thing a
+        # missing clear takes away: the quads are drawn over whatever backdrop
+        # was already there, so every probe sample still reads its own colour
+        # and `drawn` is unchanged. A check that inferred the viewport from the
+        # samples alone would pass with lgame_3d_clear() doing nothing.
+        if count_colour(rgb, sky) == 0:
+            fails.append(
+                f"the 3D viewport's sky rgb{sky} is nowhere in the frame, so "
+                f"lgame_3d_clear() never painted -- without it the staircase "
+                f"can pass while nothing was actually rasterised")
+
+        for name, (x, y), want_rgb in spec["probes"]:
+            want(f"H 3d {name}", x, y, want_rgb, tol=2)
+
+        # The culled colour must appear NOWHERE in the viewport. This is the
+        # assertion a rasteriser that ignored winding would fail, and it is
+        # paired in the same frame with the kept quad: a lone "nothing here"
+        # assertion would be equally satisfied by a rasteriser that drew
+        # nothing at all. The two quads are deliberately different sizes, so a
+        # culler that silently ignored the winding would leave a visible ring
+        # of the wrong colour rather than hiding under the right one.
+        leaked = count_colour_rect(rgb, w, ox, oy, vw, vh, absent)
+        if leaked:
+            fails.append(
+                f"back-facing quad's colour rgb{absent} appears {leaked} px "
+                f"inside the viewport -- lgame_3d_cull() did not reject it")
+
+        # Counters, so "the probes passed" cannot be confused with "the probes
+        # never ran". clipped>0 and culled>0 are what prove the two features
+        # were actually reached at all.
+        c = spec["counters"]
+        for key, why in (("submitted", "no triangles reached the rasteriser"),
+                         ("drawn", "every triangle was culled, clipped or "
+                                   "out of bounds"),
+                         ("clipped", "the near-plane clipper never ran"),
+                         ("culled", "the back-face culler never rejected "
+                                    "anything")):
+            if c.get(key, 0) < 1:
+                fails.append(
+                    f"3D counter {key}=0 ({why}), so that behaviour is not "
+                    f"actually covered by this check")
+
     return (not fails), fails
 
 
 CHECKS = {"pong": check_pong, "snake": check_snake,
           "selftest": check_selftest}
+
+# The 3D probe spec is only printed by the selftest, so the other two checks
+# must not be handed a serial log they have no use for.
+NEEDS_SERIAL = {"selftest"}
 
 
 def qemu_argv(mem, boot_entry):
@@ -632,7 +760,9 @@ def main():
             w, h, rgb = read_ppm(PPM)
             if w != W or h != H:
                 raise SystemExit(f"frame is {w}x{h}, expected {W}x{H}")
-            ok, fails = CHECKS[args.game](rgb, w, h)
+            fn = CHECKS[args.game]
+            ok, fails = (fn(rgb, w, h, ser.text()) if args.game in NEEDS_SERIAL
+                         else fn(rgb, w, h))
             if ok:
                 break
         shot.ppm_to_png(PPM, out)
