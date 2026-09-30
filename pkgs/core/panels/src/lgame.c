@@ -585,6 +585,9 @@ static int lgame_3d_cull_on;
 /* Camera basis, orthonormal, 16.16 */
 static lgame_vec3_t lgame_3d_eye, lgame_3d_right, lgame_3d_up, lgame_3d_fwd;
 static lgame_fp_t lgame_3d_focal;
+/* Directional light, for lgame_3d_tri_shaded(). */
+static lgame_vec3_t lgame_3d_light_dir = { 0, 0, 0 };
+static lgame_fp_t  lgame_3d_ambient;
 
 static int lgame_3d_n_submitted, lgame_3d_n_drawn;
 static int lgame_3d_n_clipped, lgame_3d_n_culled;
@@ -603,6 +606,9 @@ static int lgame_3d_n_clipped, lgame_3d_n_culled;
  *   2  backface culling ignored
  *   3  near-plane clipping drops the triangle instead of clipping it
  *   4  lgame_3d_clear() does not paint
+ *   5  lgame_3d_tri_shaded() ignores the normal and always draws the base
+ *      colour unlit, which is what a shading term that was never called would
+ *      look like
  *
  * `volatile` is load-bearing and is the whole reason this is a variable and not
  * a macro or a literal: at -O2 the compiler reads it once, sees 0, and deletes
@@ -767,6 +773,46 @@ void lgame_3d_clear(lgame_color_t sky) {
 }
 
 void lgame_3d_cull(int on) { lgame_3d_cull_on = on ? 1 : 0; }
+
+void lgame_3d_light(lgame_vec3_t dir, lgame_fp_t ambient) {
+    lgame_vec3_t n = lgame_vec3_normalize(dir);
+    /* A zero light direction has no facing to speak of, so leave the previous
+     * light in place rather than making every surface ambient. */
+    if (n.x == 0 && n.y == 0 && n.z == 0) return;
+    if (ambient < 0) ambient = 0;
+    if (ambient > LGAME_FP_ONE) ambient = LGAME_FP_ONE;
+    lgame_3d_light_dir = n;
+    lgame_3d_ambient = ambient;
+}
+
+/* Scale each channel toward black by `factor` (16.16, 1.0 == unchanged).
+ *
+ * The divide is by the full 16.16 range and the multiply is done in 64-bit, so
+ * a channel at 255 scales to exactly floor(255 * factor) with no rounding
+ * drift -- an assertion can state the expected channel value outright. */
+static lgame_color_t lgame_3d_shade(lgame_color_t c, lgame_fp_t factor) {
+    lgame_color_t o;
+    o.r = (uint8_t)(((uint32_t)c.r * (uint32_t)factor) >> LGAME_FP_SHIFT);
+    o.g = (uint8_t)(((uint32_t)c.g * (uint32_t)factor) >> LGAME_FP_SHIFT);
+    o.b = (uint8_t)(((uint32_t)c.b * (uint32_t)factor) >> LGAME_FP_SHIFT);
+    o.a = c.a;
+    return o;
+}
+
+void lgame_3d_tri_shaded(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c,
+                         lgame_vec3_t n, lgame_color_t col) {
+    /* n need not be unit length; normalising it first is what makes the result
+     * depend on facing alone and not on how the caller happened to scale the
+     * normal. */
+    lgame_vec3_t nn = lgame_vec3_normalize(n);
+    lgame_fp_t lam = lgame_vec3_dot(nn, lgame_3d_light_dir);
+    if (lgame_3d_break == 5) lam = LGAME_FP_ONE;   /* control: unlit */
+    if (lam < 0) lam = 0;                       /* back-facing: ambient only */
+    /* lerp(ambient, 1.0, lam) with lam in 0..1. */
+    lgame_fp_t f = lgame_3d_ambient
+                 + lgame_fp_mul(LGAME_FP_ONE - lgame_3d_ambient, lam);
+    lgame_3d_tri(a, b, c, lgame_3d_shade(col, f));
+}
 
 int  lgame_3d_submitted(void) { return lgame_3d_n_submitted; }
 int  lgame_3d_drawn(void)      { return lgame_3d_n_drawn; }
@@ -970,6 +1016,17 @@ void lgame_3d_tri(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c,
 #define SELFTEST_3D_CLIP  0xFFFF8000u  /* straddles the near plane */
 #define SELFTEST_3D_CULL  0xFFFF00FFu  /* back-facing: must NOT appear */
 #define SELFTEST_3D_KEEP  0xFFFFFF00u  /* front-facing: must appear */
+/* Probe D's base colour, and the two shades derived from it. These are the
+ * values the CHECK also computes independently, from the documented formula
+ * floor(channel * factor) >> 16 -- they are not copied from a working build.
+ * The channels are deliberately asymmetric (255/128/0) so that a channel-order
+ * or per-channel-scaling slip cannot hide behind three equal numbers.
+ *   lit  : lam = 1.0     -> factor 1.0        -> 255/128/0
+ *   mid  : lam = 46341/65536 -> factor 51139 -> 198/99/0
+ *   dark : lam clamps 0 -> factor 1/4 (ambient) -> 63/32/0 */
+#define SELFTEST_3D_SHADE      0xFFFF8000u
+#define SELFTEST_3D_SHADE_MID  0xFFC66300u
+#define SELFTEST_3D_SHADE_DARK 0xFF3F2000u
 
 #define SELFTEST_3D_FP_1    (LGAME_FP_ONE)
 #define SELFTEST_3D_FP_2    (2 * LGAME_FP_ONE)
@@ -1078,6 +1135,61 @@ static int selftest_3d(void) {
     selftest_3d_quad(2, 0, SELFTEST_3D_CULL_YV, 3 * LGAME_FP_ONE / 32,
                      lgame_color_hex(SELFTEST_3D_KEEP), 0);   /* must show */
 
+    /* ── Probe D: flat shading ──────────────────────────────────────────
+     * This is a unit test of the shading *term*, not of a lit scene. The
+     * normal is a caller argument, so the probe passes three different ones to
+     * three coplanar quads; what is under test is that facing alone picks the
+     * brightness. Saying so matters: asserting that these three quads are a
+     * physically consistent scene would be a claim the geometry does not
+     * support.
+     *
+     * The expected values are derived, not copied from a working build. With
+     * the light along +Z and ambient 1/4, a face along +Z has lam = 1.0 and
+     * lands on the base colour unchanged; a face at 45 degrees has
+     * lam = 46341/65536 and lands on 198/99/0; a face along -Z has lam < 0,
+     * clamps to 0, and lands on ambient = 63/32/0. The base colour is
+     * deliberately asymmetric in its channels (255/128/0), so a channel-order
+     * or per-channel-scaling slip cannot hide behind three equal numbers.
+     *
+     * All three quads sit at d=4 (so screen offset = world * 360/4 = *90) and
+     * at yv = -2.6 -> screen y 594, which is below both the staircase
+     * (y <= 495) and the cull quads (y <= 552), so nothing can occlude a
+     * sample point for a reason that has nothing to do with shading. */
+    lgame_3d_cull(0);
+    lgame_3d_light(lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_1),
+                   LGAME_FP_ONE / 4);
+    {
+        lgame_color_t base = lgame_color_hex(SELFTEST_3D_SHADE);
+        struct { lgame_fp_t x; lgame_vec3_t n; const char *name; } shades[] = {
+            { -6 * LGAME_FP_ONE / 5, lgame_vec3(LGAME_FP_0, LGAME_FP_0,  LGAME_FP_1),
+              "shade_lit" },
+            {  0,                    lgame_vec3(3 * LGAME_FP_ONE / 4, LGAME_FP_0,
+                                               3 * LGAME_FP_ONE / 4),
+              "shade_mid" },
+            {  6 * LGAME_FP_ONE / 5, lgame_vec3(LGAME_FP_0, LGAME_FP_0, -LGAME_FP_1),
+              "shade_dark" },
+        };
+        for (int i = 0; i < 3; i++) {
+            lgame_fp_t z  = SELFTEST_3D_FP_4 - 4 * LGAME_FP_ONE;
+            lgame_fp_t hw = LGAME_FP_ONE / 8;
+            /* x is already 16.16 in the table. Taking it raw as a plain int
+             * would collapse all three quads onto the same spot, and the depth
+             * test would then reject the second and third as being exactly as
+             * near as the first -- which reads as "shading does nothing" rather
+             * than "the geometry is wrong". */
+            lgame_fp_t x  = shades[i].x;
+            lgame_fp_t y  = -13 * LGAME_FP_ONE / 5;
+            lgame_3d_tri_shaded(lgame_vec3(x - hw, y - hw, z),
+                                lgame_vec3(x + hw, y - hw, z),
+                                lgame_vec3(x - hw, y + hw, z),
+                                shades[i].n, base);
+            lgame_3d_tri_shaded(lgame_vec3(x + hw, y - hw, z),
+                                lgame_vec3(x + hw, y + hw, z),
+                                lgame_vec3(x - hw, y + hw, z),
+                                shades[i].n, base);
+        }
+    }
+
     /* Sample points and the colour each must read. Offsets from the centre are
      * 112 / 78 / 55 / 30 px against on-screen half-extents of 135 / 90 / 67 /
      * 45, so every offset falls strictly inside one ring and strictly outside
@@ -1090,6 +1202,9 @@ static int selftest_3d(void) {
         {  -30,    0, SELFTEST_3D_BLUE,  "stair_blue"  },
         {    0, -180, SELFTEST_3D_CLIP,  "clip_band"   },
         {    0,  159, SELFTEST_3D_KEEP,  "cull_keep"   },
+        {  -108,  234, SELFTEST_3D_SHADE, "shade_lit"   },
+        {     0,  234, SELFTEST_3D_SHADE_MID,  "shade_mid"  },
+        {   108,  234, SELFTEST_3D_SHADE_DARK, "shade_dark" },
     };
     const int n_probes = (int)(sizeof(probes) / sizeof(probes[0]));
 

@@ -175,6 +175,21 @@ void lgame_3d_cull(int on);
  * and intersecting geometry resolves correctly. */
 void lgame_3d_tri(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c, lgame_color_t col);
 
+/* Flat shading. `lgame_3d_light()` sets one directional light; `dir` is
+ * normalised for you, and `ambient` is the fraction of full brightness a
+ * surface facing away from the light still gets, in 16.16 (LGAME_FP_1 == 1.0
+ * == no light contribution, 0 == fully black).
+ *
+ * `n` is the surface normal in the order of a->b->c, and need not be
+ * normalised. Faces pointing away from the light get exactly `ambient`;
+ * faces pointing straight at it get exactly 1.0, so a scene built from
+ * axis-aligned quads has exactly computable colours -- which is what lets the
+ * selftest assert a lit face's value rather than only that two faces differ.
+ */
+void lgame_3d_light(lgame_vec3_t dir, lgame_fp_t ambient);
+void lgame_3d_tri_shaded(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c,
+                         lgame_vec3_t n, lgame_color_t col);
+
 /* Counters, so a caller (and the selftest) can tell "nothing was drawn" from
  * "everything was culled or clipped away". */
 int  lgame_3d_submitted(void);
