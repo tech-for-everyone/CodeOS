@@ -1,0 +1,3 @@
+# CMake build tree. Regenerate with: cmake -S . -B build
+build/
+__pycache__/
