@@ -79,8 +79,41 @@ file(GLOB_RECURSE ACE_NG_LAYOUT_SOURCES CONFIGURE_DEPENDS
     ${ACE}/frameworks/core/components_ng/pattern/linear_layout/*.cpp
 )
 list(FILTER ACE_NG_LAYOUT_SOURCES EXCLUDE REGEX "/test/")
+
+# `property/calc_length.cpp` defines `ScaleProperty::CreateScaleProperty`, which
+# `LayoutConstraintT` calls from its default member initialiser
+# (layout_constraint.h:54). The real definition reaches
+# `PipelineBase::GetCurrentContextSafely()` purely to read the current density:
+#
+#     auto pipeline = context ? AceType::Claim(context) : PipelineBase::GetCurrentContextSafely();
+#     CHECK_NULL_RETURN(pipeline, scaleProperty);      // default 1.0 scale
+#
+# On a host with no container the call is null-safe and returns the default
+# scale -- but the reference is still emitted, so the linker then drags in
+# PipelineBase and everything PipelineBase transitively needs (Container,
+# AceEngine, Kit::UIContext, JsonUtil/cJSON, the trace machinery, ...). That is
+# a service-core closure, not layout logic, and it is not needed to measure
+# layout geometry.
+#
+# ace_engine already ships the correct seam for this: its own unit tests use
+#     test/mock/frameworks/core/components_ng/property/mock_calc_length.cpp
+# which implements the SAME symbol returning the default ScaleProperty() -- i.e.
+# exactly the value the real function returns when there is no container. This
+# is not a homemade stub; it is upstream's mock, selected the same way the
+# engine's own tests select it. The real TU is excluded by name so its other
+# entry points cannot silently re-enter the engine.
+set(ACE_NG_MOCKED
+    ${ACE}/frameworks/core/components_ng/property/calc_length.cpp
+)
+foreach(x ${ACE_NG_MOCKED})
+    list(REMOVE_ITEM ACE_NG_LAYOUT_SOURCES ${x})
+endforeach()
+list(APPEND ACE_NG_LAYOUT_SOURCES
+    ${ACE}/test/mock/frameworks/core/components_ng/property/mock_calc_length.cpp
+)
+
 list(LENGTH ACE_NG_LAYOUT_SOURCES n_ng)
-message(STATUS "ace_layout: + ${n_ng} components_ng layout sources")
+message(STATUS "ace_layout: + ${n_ng} components_ng layout sources (calc_length -> upstream mock)")
 
 # The OS abstraction layer and the pipeline. Linking *any* non-trivial engine
 # code needs these, because base/utils types log through LogWrapper and ask
@@ -146,6 +179,10 @@ target_link_libraries(ace_layout_probe PRIVATE ace_layout)
 # Negative control on the probe's own pass/fail machinery. Identical source with
 # one deliberately wrong expectation compiled in; controls.py requires it to FAIL.
 # If this ever passes, every other PASS from ace_layout_probe is worthless.
+add_executable(ace_layout_probe_mutant main.cpp)
+target_link_libraries(ace_layout_probe_mutant PRIVATE ace_layout)
+target_compile_definitions(ace_layout_probe_mutant PRIVATE ACE_PROBE_MUTANT=1)
+
 add_executable(ace_demo demo.cpp)
 target_link_libraries(ace_demo PRIVATE ace_layout)
 target_include_directories(ace_demo PRIVATE
@@ -158,24 +195,13 @@ target_compile_definitions(ace_demo PRIVATE ACE_UNITTEST=1)
 # Separate binary from ace_layout_probe because it asserts a different layer and
 # fails for different reasons.
 #
-# EXCLUDE_FROM_ALL on purpose. The layout layer *compiles* 51/51 off OpenHarmony
-# (that is verified by the ace_layout library above, which is always built), but
-# its probe cannot *link* yet, and pretending otherwise would mean shipping a red
-# build. The reason is specific and worth recording:
-#
-#   LayoutConstraintT has the member initialiser
-#       ScaleProperty scaleProperty = ScaleProperty::CreateScaleProperty();
-#   and that function is calc_length.cpp:26
-#       auto pipeline = context ? AceType::Claim(context) : PipelineBase::GetCurrentContextSafely();
-#       CHECK_NULL_RETURN(pipeline, scaleProperty);   // default 1.0 scale
-#
-#   So on a host with no container the call is null-SAFE and yields the default
-#   scale -- but the reference is still emitted, so the linker needs PipelineBase,
-#   which needs Container, AceEngine, Kit::UIContext, JsonUtil and the trace
-#   machinery. Constructing a layout constraint is therefore not purely
-#   functional even though measuring with one is.
-#
-# TARGET CURRENTLY FAILING TO LINK, by design, until that closure is supplied:
-#   cmake --build build --target ace_ng_layout_probe
-add_executable(ace_ng_layout_probe EXCLUDE_FROM_ALL layout_probe.cpp)
+# This target links and passes (Stage 1b). It used to be EXCLUDE_FROM_ALL while
+# `LayoutConstraintT`'s default member initialiser
+# (layout_constraint.h:54, `ScaleProperty scaleProperty = ...CreateScaleProperty()`)
+# dragged in the whole service core through `calc_length.cpp`. That is resolved
+# above by compiling upstream's own `mock_calc_length.cpp` in place of the real
+# TU: the mock returns the default ScaleProperty, which is exactly what the real
+# function returns with no container present. The closure therefore stays inside
+# the layout layer -- no PipelineBase, no Skia, no OHOS IPC, no cJSON.
+add_executable(ace_ng_layout_probe layout_probe.cpp)
 target_link_libraries(ace_ng_layout_probe PRIVATE ace_layout)

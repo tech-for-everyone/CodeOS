@@ -10,8 +10,9 @@ Run it:
 ```sh
 cd ace-host
 cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
-./build/ace_layout_probe                                  # 20 assertions, exit 0
-python3 controls.py                                       # 10 negative controls, exit 0
+./build/ace_layout_probe                                  # foundation: 20 assertions, exit 0
+./build/ace_ng_layout_probe                               # layout: 20 assertions, exit 0
+python3 controls.py                                       # 12 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -27,10 +28,10 @@ OpenHarmony. That question is answerable cheaply, and this directory answers it.
 
 ## What compiles today
 
-| layer | compiles | notes |
-|---|---|---|
-| `frameworks/base` (foundation) | **57 / 63** | the 57 **link and run**; the 6 need real third-party code |
-| `components_ng` layout core (`base`, `property`, `linear_layout`) | **51 / 51** | renderer-free via `ACE_UNITTEST` |
+| layer | compiles | links+runs | notes |
+|---|---|---|---|
+| `frameworks/base` (foundation) | **57 / 63** | **yes** | the 6 excluded need real third-party code |
+| `components_ng` layout core (`base`, `property`, `linear_layout`) | **51 / 51** | **yes** | renderer-free via `ACE_UNITTEST` |
 
 **Nothing under `arkui/` is modified** — a fresh clone reproduces this build.
 
@@ -71,10 +72,10 @@ of a symbol the tree calls, each a platform seam rather than engine logic:
 Deliberately *not* globbing all of `adapter/ohos` or `adapter/preview`: those are
 full platform ports that want Skia and the OHOS IPC stack.
 
-## The open frontier: compiling ≠ linking
+## Compiling ≠ linking, and the seam that closed it
 
-The layout core **compiles** 51/51, but its probe does not yet **link**, and the
-reason is specific and worth recording:
+The layout core **compiles** 51/51, but its probe did not **link**, for a specific
+reason worth recording:
 
 ```cpp
 // frameworks/core/components_ng/property/layout_constraint.h:54
@@ -86,16 +87,36 @@ CHECK_NULL_RETURN(pipeline, scaleProperty);                             // defau
 ```
 
 On a host with no container that call is **null-safe** and yields the default
-scale — but the reference is still emitted, so the linker requires `PipelineBase`,
-which requires `Container`, `AceEngine`, `Kit::UIContext`, `JsonUtil` (→ cJSON) and
-the trace machinery. **Constructing a layout constraint is not purely functional
-even though measuring with one is.**
+scale — but the reference is still emitted, so the linker required `PipelineBase`,
+which required `Container`, `AceEngine`, `Kit::UIContext`, `JsonUtil` (→ cJSON) and
+the trace machinery. A naive closure grew 517 → 1016 → 1289 undefined symbols and
+kept discovering Skia and the OHOS IPC stack. **Constructing a layout constraint
+is not purely functional even though measuring with one is.**
 
-So `ace_ng_layout_probe` is `EXCLUDE_FROM_ALL` by design and the build stays
-green rather than shipping a red target. Closing that closure — the engine's
-service core — is the next milestone, and it is a *link* problem, not a *compile*
-problem. `classify.py` measures compile reachability only; link coverage is not
-yet measured for the whole tree.
+The closure is not needed, because the real function's *only* use of
+`PipelineBase` is to read the current density, and with no container present it
+returns the **default** scale. ace_engine already ships that exact seam for its
+own unit tests:
+
+```cpp
+// test/mock/frameworks/core/components_ng/property/mock_calc_length.cpp
+ScaleProperty ScaleProperty::CreateScaleProperty(PipelineBase* context) {
+    (void)context;
+    return ScaleProperty();          // the same value the real path returns
+}
+```
+
+So the probe compiles **upstream's mock in place of the real `calc_length.cpp`**,
+selecting it the same way the engine's tests do. This is not a homemade stub: it
+is a real definition of the exact symbol, and it is the value the real code
+produces when there is no container. The result is that the whole closure stays
+inside the layout layer — no PipelineBase, no Skia, no OHOS IPC, no cJSON — and
+`ace_ng_layout_probe` **links and passes** (Stage 1b). Control C6 proves the swap
+is load-bearing: the real TU references `PipelineBase` (so it could not link
+standalone), the mock does not.
+
+The service core still has to be faced to *run* a component tree (Stage 2+), but
+it is no longer in the way of measuring layout geometry.
 
 ## Two measurements that changed the shape of the work
 
@@ -131,7 +152,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (10/10)
+## Negative controls (12/12)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -143,6 +164,7 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C3a / C3b | `-Wno-c++11-narrowing` | `dimension.cpp` fails on narrowing |
 | C5a / C5b | `-DACE_UNITTEST` | `view_abstract.cpp` fails on `draw/canvas.h` |
 | C4a / C4b | the probe's pass/fail machinery | the mutant probe exits non-zero |
+| C6a / C6b | the mock `calc_length` link seam | the real TU references `PipelineBase`; the mock defines the symbol and does not |
 
 C4 is the one that protects the assertions: `ace_layout_probe_mutant` is the same
 source with one deliberately wrong expectation compiled in, and it must FAIL. If it
@@ -194,7 +216,7 @@ framebuffer.
 |---|---|---|---|
 | 0 | foundation compiles and runs off OpenHarmony | `ace_layout_probe` + `controls.py` | **done** |
 | 1a | layout core compiles renderer-free | `classify.py` 51/51 + C5 | **done** |
-| 1b | layout core **links** and measures a tree | assert measured geometry | blocked on the service-core closure above |
+| 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
 | 2 | ace_engine rasterises a component tree | pixel assertions | not started |
 | 3 | a GNUstep app shows that output in a VM window | screenshot | not started |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
@@ -216,17 +238,27 @@ is not automatically a blocker.
 | `closure.py` | walks a header `#include` closure and reports unresolvable targets |
 | `CMakeLists.txt` | the host build; explicit exclusion list for third-party deps |
 | `main.cpp` | foundation probe: 20 assertions over Dimension and Matrix3 |
-| `layout_probe.cpp` | layout probe: assertions over LayoutConstraint geometry (not yet linked) |
-| `controls.py` | 10 negative controls; must exit 0 |
+| `layout_probe.cpp` | layout probe: assertions over LayoutConstraint geometry (links via the upstream mock) |
+| `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
+| `controls.py` | 12 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
 
 ## Known gaps
 
-* **Link coverage is not measured.** `classify.py` and `closure.py` report header
-  and compile reachability only. A file that compiles may still fail to link; this
-  is exactly what stage 1b is blocked on.
+* **Layout links by an explicit seam, not by closing the service core.** The probe
+  compiles upstream's `mock_calc_length.cpp` in place of the real TU; the real
+  one is excluded by name and C6 proves the difference. Everything the probe
+  measures is therefore the real layout arithmetic, with `ScaleProperty` fixed at
+  the no-container default. Running a full `FrameNode` tree (Stage 2) will need
+  the engine's real pipeline, and that closure is still open.
+* **Link coverage is measured as a tool.** `linkclosure.py` maps undefined symbols
+  in a linker failure to the `.cpp` files that appear to define them (tracking
+  namespace scope and trimming Itanium ABI tags), with explicit policy (prefer
+  `adapter/preview/` over `ohos/`, prefer `fake_*` over `rosen_*` under
+  `ACE_UNITTEST`). It is what showed the naive closure growing 517 → 1016 → 1289
+  and reaching Skia/OHOS IPC — i.e. that closing it wholesale is the wrong move.
+  `classify.py` and `closure.py` remain for compile/header reachability.
 * `securec.h` covers three functions. `refbase.h` does not share OHOS refcounting.
-* `layout_probe.cpp` compiles but its binary does not link yet, by design.
 * Nothing here has been run on CodeOS. That is stage 5.

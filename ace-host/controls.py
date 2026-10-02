@@ -14,11 +14,14 @@ Each control REMOVES one ingredient and requires a specific failure:
   C2  the securec shim                  -> ace_trace.cpp must fail on securec.h
   C3  -Wno-c++11-narrowing              -> dimension.cpp must fail on narrowing
   C4  the probe's pass/fail machinery   -> the mutant probe must FAIL
+  C5  -DACE_UNITTEST                    -> view_abstract.cpp must fail on draw/canvas.h
+  C6  the mock_calc_length link seam    -> real calc_length.cpp must reference
+                                           PipelineBase, the mock must not
 
-C1-C3 are compile-time and prove each shim/flag is load-bearing rather than inert.
-C4 is the one that matters for the assertions: it proves a PASS from
-ace_layout_probe is a real comparison that can come out false, rather than a
-program that ran and printed.
+C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
+load-bearing rather than inert. C4 is the one that matters for the assertions: it
+proves a PASS from ace_layout_probe is a real comparison that can come out false,
+rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
 Nothing here shows ace_engine computes the *right* numbers in an absolute sense --
@@ -154,6 +157,70 @@ if os.path.exists(mutant):
            "never reached")
 else:
     report("C4b  the mutant probe exits NON-zero", False, f"{mutant} not built", "n/a")
+
+# --- C6: the layout probe's link seam is upstream's mock_calc_length ---------
+# Stage 1b. LayoutConstraintT's default member initialiser calls
+# ScaleProperty::CreateScaleProperty() (layout_constraint.h:54). The real
+# definition (calc_length.cpp) exists only to read the current density, and to do
+# that it reaches PipelineBase::GetCurrentContextSafely() -- which drags the
+# service core into the link. Upstream's own mock returns the default
+# ScaleProperty and reaches nothing. The probe compiles the mock in place of the
+# real TU; this control proves that swap is what keeps the closure inside layout.
+#
+# It compiles both translation units and inspects their symbols: the real object
+# must reference PipelineBase (so it could not be linked standalone), and the
+# mock object must define CreateScaleProperty without referencing PipelineBase.
+import shutil
+import tempfile
+
+
+def _tu_symbols(src):
+    d = tempfile.mkdtemp(prefix="acehost-c6-")
+    obj = os.path.join(d, "tu.o")
+    p = subprocess.run(
+        ["clang++"] + INC
+        + ["-std=gnu++17", "-include", COMPAT, "-Wno-c++11-narrowing",
+           "-DACE_UNITTEST=1", "-c", src, "-o", obj],
+        capture_output=True, text=True)
+    if p.returncode != 0:
+        shutil.rmtree(d, ignore_errors=True)
+        return None, p.stdout + p.stderr
+    nm = subprocess.run(["nm", "-C", obj], capture_output=True, text=True).stdout
+    shutil.rmtree(d, ignore_errors=True)
+    return nm, ""
+
+
+real_cl = f"{ROOT}/frameworks/core/components_ng/property/calc_length.cpp"
+mock_cl = (f"{ROOT}/test/mock/frameworks/core/components_ng/property/"
+           f"mock_calc_length.cpp")
+
+real_syms, real_err = _tu_symbols(real_cl)
+if real_syms is None:
+    report("C6a  real calc_length.cpp references the service core", False,
+           f"did not compile: {real_err.strip().splitlines()[-1] if real_err else '?'}",
+           "n/a")
+else:
+    refs = "GetCurrentContextSafely" in real_syms
+    report("C6a  real calc_length.cpp references the service core", refs,
+           f"references PipelineBase::GetCurrentContextSafely: {refs}",
+           "the real definition cannot be linked without PipelineBase and its "
+           "whole transitive closure, which is why it is excluded from the probe")
+
+mock_syms, mock_err = _tu_symbols(mock_cl)
+if mock_syms is None:
+    report("C6b  mock_calc_length.cpp defines the symbol and reaches nothing",
+           False,
+           f"did not compile: {mock_err.strip().splitlines()[-1] if mock_err else '?'}",
+           "n/a")
+else:
+    defines = "T OHOS::Ace::NG::ScaleProperty::CreateScaleProperty" in mock_syms
+    reaches = "GetCurrentContextSafely" in mock_syms
+    report("C6b  mock_calc_length.cpp defines the symbol and reaches nothing",
+           defines and not reaches,
+           f"defines CreateScaleProperty: {defines}; references PipelineBase: {reaches}",
+           "the substitute is a real definition of the exact symbol the probe "
+           "needs, and it is what lets the probe link with no service core -- C6a "
+           "is the failure this swap avoids, so C6b is not vacuous")
 
 print()
 failed = results.count(False)
