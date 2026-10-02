@@ -146,9 +146,13 @@ target_link_libraries(ace_layout_probe PRIVATE ace_layout)
 # Negative control on the probe's own pass/fail machinery. Identical source with
 # one deliberately wrong expectation compiled in; controls.py requires it to FAIL.
 # If this ever passes, every other PASS from ace_layout_probe is worthless.
-add_executable(ace_layout_probe_mutant main.cpp)
-target_link_libraries(ace_layout_probe_mutant PRIVATE ace_layout)
-target_compile_definitions(ace_layout_probe_mutant PRIVATE ACE_PROBE_MUTANT=1)
+add_executable(ace_demo demo.cpp)
+target_link_libraries(ace_demo PRIVATE ace_layout)
+target_include_directories(ace_demo PRIVATE
+    ${ACE}/test/mock/frameworks/core
+    ${ACE}/test/mock
+)
+target_compile_definitions(ace_demo PRIVATE ACE_UNITTEST=1)
 
 # The layout engine's own probe: asserts the geometry the layout layer computes.
 # Separate binary from ace_layout_probe because it asserts a different layer and
