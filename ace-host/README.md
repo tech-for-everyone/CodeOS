@@ -12,7 +12,8 @@ cd ace-host
 cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_layout_probe                                  # foundation: 20 assertions, exit 0
 ./build/ace_ng_layout_probe                               # layout: 20 assertions, exit 0
-python3 controls.py                                       # 12 negative controls, exit 0
+./build/ace_tree_probe                                    # layout a tree + rasterise -> tree_layout.ppm
+python3 controls.py                                       # 16 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -115,15 +116,61 @@ inside the layout layer — no PipelineBase, no Skia, no OHOS IPC, no cJSON — 
 is load-bearing: the real TU references `PipelineBase` (so it could not link
 standalone), the mock does not.
 
-The service core still has to be faced to *run* a component tree (Stage 2+), but
-it is no longer in the way of measuring layout geometry.
+The service core still has to be faced to run a real `FrameNode` tree, but it is
+no longer in the way of measuring layout geometry. Stage 2 splits in two:
+**2a, lay a tree out** (done) and **2b, let the engine paint it** (open, needs
+Skia or the engine's preview render path).
 
-### Stage 2, measured before it is attempted
+## Stage 2a: the real algorithm over a tree
+
+`ace_tree_probe` builds a `Column`-rooted tree
+
+```
+root(Column) -> a, b, row(Row) -> {c, d}, e
+```
+
+out of a `LayoutWrapper` **test double**, runs the engine's
+`LinearLayoutUtils::Measure` / `Layout` on it, asserts the resulting
+`GeometryNode` rectangles, and rasterises them with a trivial software renderer
+to `tree_layout.ppm`. All geometry assertions pass, e.g. `b` sits at `y = 50`
+(the height of `a`), `row` at `y = 100` and measures `160x60` from its children,
+`c`/`d` sit at `x = 0`/`80` inside it, `e` at `y = 160`.
+
+* **Real:** the algorithm (`linear_layout_utils.cpp`), `LayoutProperty`
+  (`layout/layout_property.cpp`), `GeometryNode`, `CalcLength::NormalizeToPx`.
+* **Double:** the `LayoutWrapper`. Upstream backs it with a `FrameNode`, and a
+  `FrameNode` drags in `Pattern` + `RenderContext` + `PipelineContext` —
+  measured, one node is **1226 undefined references**. A tree probe does not need
+  a `FrameNode`, so it implements the abstract interface directly and delegates
+  straight back into `LinearLayoutUtils`. No layout arithmetic is reimplemented;
+  control C7a checks the engine's `Measure`/`Layout` are the ones linked.
+* **Ours:** the rasteriser. The engine's paint path is the Skia/Rosen backend,
+  absent here, so the probe draws the geometry itself. The claim is about
+  *geometry*; the pixels are a rendering of the engine's layout output, not the
+  engine's paint output. Control C7c samples the PPM at six points and checks
+  each against the computed rectangle.
+
+The closure that run needs is **5 engine TUs** (`inspector_constants` for the
+`V2::*_ETS_TAG` strings the property vtable references, `alignment`,
+`layout_property`, `layout_algorithm`, the real `calc_length`) plus upstream's
+mocks for the services that are not here (JSON, the application-info singleton,
+the log sink, the `LayoutWrapper` out-of-line methods), plus `tree_seams.cpp`.
+That last file is the *"no container / no pipeline exists"* answer for the
+unreachable paths the property vtable and safe-area code reference; it defines no
+layout arithmetic, and the geometry assertions would fail if it did.
+
+`-ffunction-sections` + `--gc-sections` are what keep this from becoming the
+1226-symbol service core: they drop the unreachable functions instead of linking
+them. Before that, the same tree run failed to link with 758 references; after,
+it closes. (A `FrameNode` path cannot use the same trick as cheaply — its
+constructor is one function that itself references the render/task core.)
+
+### Stage 2b is still open, and why
 
 Constructing one real `FrameNode` (`FrameNode::CreateFrameNode` + a `Pattern`)
-and linking it against `libace_layout.a` produces **1226 undefined references** —
-essentially the same closure the naive layout-probe attempt hit. The first ones
-are already the service core, not layout:
+and linking it against `libace_layout.a` produces **1226 undefined references**,
+and `--gc-sections` only brings that to 758. The first ones are already the
+service core, not layout:
 
 ```
 VTT / vtable for OHOS::Ace::NG::Pattern        -> pattern.cpp (the whole pattern layer)
@@ -133,16 +180,16 @@ OHOS::Ace::NG::LayoutProperty::SetHost(...)    -> the property layer's C++ out-o
 OHOS::Ace::MultiThreadBuildManager::CheckTag() -> base/multi_thread (task manager)
 ```
 
-So Stage 2 is not "wire up a renderer": it is the engine's real tree + render +
-task/service core, which is where Skia and the OHOS IPC/resource stack enter.
-
-The environment this was measured in has **no `gn`, no Skia, and no OHOS SDK**
-(checked: `which gn` empty, no `libskia*` on disk). ace_engine's own standalone
-rendering path, the DevEco previewer
+So letting the *engine* paint is the engine's real tree + render + task/service
+core, which is where Skia and the OHOS IPC/resource stack enter. The environment
+this was measured in has **no `gn`, no Skia, and no OHOS SDK** (checked:
+`which gn` empty, no `libskia*` on disk). ace_engine's own standalone rendering
+path, the DevEco previewer
 (`adapter/preview/entrance/samples/ace_phone_test.cpp`), additionally needs
 `//ide/tools/previewer` and `//foundation/window/window_manager`, a JS/ETS bundle
-and Skia — none of which are in this repo. So "run the real engine" is a fetch of
-major third-party trees, not a configuration change.
+and Skia — none of which are in this repo. So "run the engine's own paint" is a
+fetch of major third-party trees, not a configuration change; Stage 2a gets the
+*geometry* into a window without it.
 
 ## Two measurements that changed the shape of the work
 
@@ -178,7 +225,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (12/12)
+## Negative controls (16/16)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -188,13 +235,16 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C1a / C1b | the forced-include compat header | `matrix3.cpp` fails on `std::for_each` |
 | C2a / C2b | the securec shim | `ace_trace.cpp` fails on `securec.h` |
 | C3a / C3b | `-Wno-c++11-narrowing` | `dimension.cpp` fails on narrowing |
-| C5a / C5b | `-DACE_UNITTEST` | `view_abstract.cpp` fails on `draw/canvas.h` |
 | C4a / C4b | the probe's pass/fail machinery | the mutant probe exits non-zero |
+| C5a / C5b | `-DACE_UNITTEST` | `view_abstract.cpp` fails on `draw/canvas.h` |
 | C6a / C6b | the mock `calc_length` link seam | the real TU references `PipelineBase`; the mock defines the symbol and does not |
+| C7a / C7b | the tree probe's dependence on the real algorithm | the binary links `LinearLayoutUtils::Measure`/`Layout`; the probe exits 0 |
+| C7c / C7d | the raster's tie to the layout | six sampled pixels match the computed rectangles; the tree mutant exits non-zero |
 
-C4 is the one that protects the assertions: `ace_layout_probe_mutant` is the same
-source with one deliberately wrong expectation compiled in, and it must FAIL. If it
-ever passes, every PASS from `ace_layout_probe` is worthless.
+C4 and C7d are the controls that protect the assertions:
+`ace_layout_probe_mutant` and `ace_tree_probe_mutant` are the same sources with one
+deliberately wrong expectation compiled in, and they must FAIL. If either ever
+passes, every PASS from its real probe is worthless.
 
 C2b caught a real bug in an earlier version of itself, which had failed to actually
 remove the shims directory — the control failed, correctly, and the control was
@@ -243,7 +293,8 @@ framebuffer.
 | 0 | foundation compiles and runs off OpenHarmony | `ace_layout_probe` + `controls.py` | **done** |
 | 1a | layout core compiles renderer-free | `classify.py` 51/51 + C5 | **done** |
 | 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
-| 2 | ace_engine rasterises a component tree | pixel assertions | not started |
+| 2a | the real algorithm lays out a tree, software-rastered | `ace_tree_probe` + controls C7 | **done** |
+| 2b | ace_engine paints the tree itself | engine-raster pixel assertions | not started |
 | 3 | a GNUstep app shows that output in a VM window | screenshot | not started |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
 | 5 | bring it to CodeOS | boot-verified | not started |
@@ -262,11 +313,15 @@ is not automatically a blocker.
 | `aceroots.py` | the include roots the real GN build uses, in one place |
 | `classify.py` | compiles a subtree and buckets each file by first error, by *distinct root cause* |
 | `closure.py` | walks a header `#include` closure and reports unresolvable targets |
+| `linkclosure.py` | maps undefined symbols in a link failure to the `.cpp` files that define them |
+| `closure_sources.txt` | the source set `linkclosure.py` searches |
 | `CMakeLists.txt` | the host build; explicit exclusion list for third-party deps |
 | `main.cpp` | foundation probe: 20 assertions over Dimension and Matrix3 |
 | `layout_probe.cpp` | layout probe: assertions over LayoutConstraint geometry (links via the upstream mock) |
+| `tree_probe.cpp` | tree probe: real `LinearLayoutUtils` over a `LayoutWrapper` double + software raster |
+| `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 12 negative controls; must exit 0 |
+| `controls.py` | 16 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
@@ -277,8 +332,11 @@ is not automatically a blocker.
   compiles upstream's `mock_calc_length.cpp` in place of the real TU; the real
   one is excluded by name and C6 proves the difference. Everything the probe
   measures is therefore the real layout arithmetic, with `ScaleProperty` fixed at
-  the no-container default. Running a full `FrameNode` tree (Stage 2) will need
-  the engine's real pipeline, and that closure is still open.
+  the no-container default. Stage 2a's tree probe stays on the same side of that
+  seam: it feeds the real algorithm a `LayoutWrapper` double and answers the
+  unreachable service paths in `tree_seams.cpp`. Letting the engine **paint**
+  (Stage 2b) is different — that wants a real `FrameNode`, which is the 1226-ref
+  service/render core, and that closure is still open.
 * **Link coverage is measured as a tool.** `linkclosure.py` maps undefined symbols
   in a linker failure to the `.cpp` files that appear to define them (tracking
   namespace scope and trimming Itanium ABI tags), with explicit policy (prefer

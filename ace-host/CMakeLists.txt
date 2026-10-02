@@ -32,6 +32,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Dead-code elimination. The layout-tree probe reaches only a handful of
+# functions in large TUs (layout/layout_property.cpp and the property vtables),
+# but an object file is linked whole unless it is split. `-ffunction-sections`
+# splits it and `--gc-sections` drops what `main` cannot reach, instead of
+# dragging in the service-core symbols that only the unreachable functions
+# reference. This is a build-hygiene change -- it removes dead code, it does not
+# change behaviour -- and it also shrinks the existing probes.
+add_compile_options(-ffunction-sections -fdata-sections)
+add_link_options(-Wl,--gc-sections)
+
 set(ACE ${CMAKE_CURRENT_SOURCE_DIR}/../arkui)
 if(NOT EXISTS ${ACE}/frameworks/base)
     message(FATAL_ERROR
@@ -205,3 +215,76 @@ target_compile_definitions(ace_demo PRIVATE ACE_UNITTEST=1)
 # the layout layer -- no PipelineBase, no Skia, no OHOS IPC, no cJSON.
 add_executable(ace_ng_layout_probe layout_probe.cpp)
 target_link_libraries(ace_ng_layout_probe PRIVATE ace_layout)
+
+# Stage 2: run the *real* linear-layout algorithm over a hand-built tree, assert
+# the resulting geometry, and rasterise it. See tree_probe.cpp for what is real
+# (the algorithm, LayoutProperty, GeometryNode) and what is a test double (the
+# LayoutWrapper, which upstream backs with a FrameNode; here it is implemented
+# directly so the engine's service core is not pulled in).
+#
+# The sources below are the measured link closure of that run, nothing more:
+#
+#   inspector_constants.cpp  the V2::*_ETS_TAG string constants. They are
+#                            referenced from LayoutProperty's vtable (the
+#                            ToJsonValue virtual), so they are kept even though
+#                            the probe never serialises anything.
+#   alignment.cpp            Alignment::GetAlignment, used by layout properties.
+#   layout_property.cpp      the real LayoutProperty implementation.
+#   layout_algorithm.cpp     LayoutAlgorithmWrapper.
+#   calc_length.cpp          the real CalcLength::NormalizeToPx. It is the only
+#                            source of this symbol; it also defines
+#                            ScaleProperty::CreateScaleProperty, which therefore
+#                            wins over the mock in ace_layout (a directly-linked
+#                            object beats an archive member).
+#   tree_seams.cpp           the "no service exists on this host" answers for the
+#                            unreachable paths (see that file).
+#   mock_*                   upstream's own mocks for the services that are not
+#                            here: the render JSON layer, the application info
+#                            singleton, the log sink and the LayoutWrapper
+#                            out-of-line methods.
+set(ACE_TREE_ENGINE_SOURCES
+    ${ACE}/frameworks/core/components_v2/inspector/inspector_constants.cpp
+    ${ACE}/frameworks/core/components/common/properties/alignment.cpp
+    ${ACE}/frameworks/core/components_ng/layout/layout_property.cpp
+    ${ACE}/frameworks/core/components_ng/layout/layout_algorithm.cpp
+    ${ACE}/frameworks/core/components_ng/property/calc_length.cpp
+)
+set(ACE_TREE_MOCK_SOURCES
+    ${ACE}/test/mock/frameworks/core/components_ng/layout/mock_layout_wrapper.cpp
+    ${ACE}/test/mock/frameworks/base/json/mock_json_util.cpp
+    ${ACE}/test/mock/frameworks/base/json/mock_json_value.cpp
+    ${ACE}/test/mock/frameworks/core/common/mock_ace_application_info.cpp
+    ${ACE}/test/mock/adapter/ohos/osal/mock_log_wrapper.cpp
+)
+# Split into a library so the probe and its mutant share one compilation of the
+# engine TUs. It must come BEFORE ace_layout on the link line: the linker is
+# left-to-right, so the real calc_length.o here resolves CreateScaleProperty and
+# ace_layout's mock_calc_length.o is never pulled (which is the point -- the tree
+# path needs the real CalcLength::NormalizeToPx).
+add_library(ace_tree_support STATIC
+    tree_seams.cpp
+    ${ACE_TREE_ENGINE_SOURCES}
+    ${ACE_TREE_MOCK_SOURCES}
+)
+# PRIVATE: ace_tree_support needs ace_layout's include dirs and compile options,
+# and records it as a LINK_ONLY dependency, so the executable's link line is
+# `ace_tree_support ace_layout` -- support first, which is the greedy order that
+# lets the real calc_length.o win.
+target_link_libraries(ace_tree_support PRIVATE ace_layout)
+
+# The two archives reference each other: ace_layout's real log_wrapper.cpp calls
+# the va_list sink defined by a mock in ace_tree_support, and ace_tree_support's
+# engine TUs call symbols in ace_layout. A plain left-to-right archive order
+# cannot resolve that without a rescan, so wrap them in a group. The group is
+# still ordered support-then-layout, so the real calc_length.o wins.
+add_executable(ace_tree_probe tree_probe.cpp)
+target_link_libraries(ace_tree_probe PRIVATE
+    "-Wl,--start-group" ace_tree_support ace_layout "-Wl,--end-group")
+
+# Negative control on the tree probe's pass/fail machinery: identical source with
+# one deliberately wrong expectation compiled in. controls.py requires it to FAIL.
+# If it ever passes, ace_tree_probe's PASS is not a comparison.
+add_executable(ace_tree_probe_mutant tree_probe.cpp)
+target_link_libraries(ace_tree_probe_mutant PRIVATE
+    "-Wl,--start-group" ace_tree_support ace_layout "-Wl,--end-group")
+target_compile_definitions(ace_tree_probe_mutant PRIVATE ACE_TREE_MUTANT=1)

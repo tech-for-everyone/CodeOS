@@ -17,11 +17,14 @@ Each control REMOVES one ingredient and requires a specific failure:
   C5  -DACE_UNITTEST                    -> view_abstract.cpp must fail on draw/canvas.h
   C6  the mock_calc_length link seam    -> real calc_length.cpp must reference
                                            PipelineBase, the mock must not
+  C7  the tree probe                    -> links the real LinearLayoutUtils, its
+                                           PASS is a comparison that can fail,
+                                           and the raster it reports is real
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4 is the one that matters for the assertions: it
-proves a PASS from ace_layout_probe is a real comparison that can come out false,
-rather than a program that ran and printed.
+load-bearing rather than inert. C4 and C7b are the ones that matter for the
+assertions: they prove a PASS from the probes is a real comparison that can come
+out false, rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
 Nothing here shows ace_engine computes the *right* numbers in an absolute sense --
@@ -221,6 +224,82 @@ else:
            "the substitute is a real definition of the exact symbol the probe "
            "needs, and it is what lets the probe link with no service core -- C6a "
            "is the failure this swap avoids, so C6b is not vacuous")
+
+# --- C7: the layout-TREE probe runs the real algorithm -----------------------
+# Stage 2. tree_probe builds a parent/children tree over a LayoutWrapper test
+# double and runs LinearLayoutUtils::Measure/Layout from the engine. Three
+# things have to hold for the PASS to mean anything: the binary must contain the
+# engine's algorithm (not a local reimplementation), the PASS must be able to
+# fail, and the raster it prints must actually contain the geometry it asserts.
+tree_probe = f"{HERE}/build/ace_tree_probe"
+tree_mutant = f"{HERE}/build/ace_tree_probe_mutant"
+
+if os.path.exists(tree_probe):
+    nm = subprocess.run(["nm", "-C", tree_probe], capture_output=True, text=True).stdout
+    has_measure = "OHOS::Ace::NG::LinearLayoutUtils::Measure" in nm
+    has_layout = "OHOS::Ace::NG::LinearLayoutUtils::Layout" in nm
+    report("C7a  tree probe links the engine's linear-layout algorithm",
+           has_measure and has_layout,
+           f"LinearLayoutUtils::Measure={has_measure}, Layout={has_layout} "
+           f"(present = linked, not garbage-collected, so actually called)",
+           "the tree geometry comes from LinearLayoutUtils in the engine, not "
+           "from a layout routine reimplemented in the probe")
+
+    d = tempfile.mkdtemp(prefix="acehost-c7-")
+    ppm = os.path.join(d, "tree.ppm")
+    p = subprocess.run([tree_probe, ppm], capture_output=True, text=True)
+    report("C7b  the real tree probe exits 0",
+           p.returncode == 0,
+           f"rc={p.returncode}, last line: {p.stdout.strip().splitlines()[-1]!r}",
+           "the engine lays out the tree to the asserted geometry")
+
+    ok_file = os.path.exists(ppm)
+    header_ok = False
+    pixels_ok = False
+    detail = "no PPM written"
+    if ok_file:
+        with open(ppm, "rb") as f:
+            data = f.read()
+        header = data[:15].split(b"\n")
+        header_ok = header[:3] == [b"P6", b"360 640", b"255"]
+        pix = data[15:]
+        # interior pixels, one per node, in the order the probe draws them
+        want = {
+            (50, 25): (0xE0, 0x5C, 0x5C),    # child a
+            (50, 75): (0x5C, 0xE0, 0xA0),    # child b
+            (40, 120): (0x60, 0x90, 0xF0),   # nested-row child c
+            (120, 120): (0xB0, 0x60, 0xE0),  # nested-row child d
+            (50, 180): (0xF0, 0x80, 0x50),   # child e
+            (330, 600): (0xE8, 0xE8, 0xF0),  # root background
+        }
+        pixels_ok = all(
+            tuple(pix[(y * 360 + x) * 3:(y * 360 + x) * 3 + 3]) == rgb
+            for (x, y), rgb in want.items())
+        detail = (f"header ok={header_ok}; the {len(want)} sampled pixels "
+                  f"match the computed layout={pixels_ok}")
+    report("C7c  the reported raster actually contains the layout",
+           ok_file and header_ok and pixels_ok,
+           detail,
+           "the software rasteriser draws the geometry the engine produced, so "
+           "the 'visual proof' is the layout output and not a hard-coded picture")
+    shutil.rmtree(d, ignore_errors=True)
+else:
+    report("C7a  tree probe links the engine's linear-layout algorithm", False,
+           f"{tree_probe} not built", "n/a")
+    report("C7b  the real tree probe exits 0", False, f"{tree_probe} not built", "n/a")
+    report("C7c  the reported raster actually contains the layout", False,
+           f"{tree_probe} not built", "n/a")
+
+if os.path.exists(tree_mutant):
+    p = subprocess.run([tree_mutant], capture_output=True, text=True)
+    report("C7d  the tree mutant probe exits NON-zero",
+           p.returncode != 0 and "MUTANT" in p.stdout,
+           f"rc={p.returncode}; mutant line present: {'MUTANT' in p.stdout}",
+           "the tree probe's comparisons can come out false, so C7b's PASS is not "
+           "vacuous")
+else:
+    report("C7d  the tree mutant probe exits NON-zero", False,
+           f"{tree_mutant} not built", "n/a")
 
 print()
 failed = results.count(False)
