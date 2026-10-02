@@ -20,9 +20,12 @@ Each control REMOVES one ingredient and requires a specific failure:
   C7  the tree probe                    -> links the real LinearLayoutUtils, its
                                            PASS is a comparison that can fail,
                                            and the raster it reports is real
+  C8  the live window                   -> links the real LinearLayoutUtils, and
+                                           resizing makes the engine re-lay the
+                                           tree out (pixel count tracks W/2)
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4 and C7b are the ones that matter for the
+load-bearing rather than inert. C4, C7b and C8b are the ones that matter for the
 assertions: they prove a PASS from the probes is a real comparison that can come
 out false, rather than a program that ran and printed.
 
@@ -300,6 +303,60 @@ if os.path.exists(tree_mutant):
 else:
     report("C7d  the tree mutant probe exits NON-zero", False,
            f"{tree_mutant} not built", "n/a")
+
+# --- C8: the live X11 window re-runs the engine's layout on resize -----------
+# window_demo lays the tree out at the window's current size and shows it. The
+# claim is that the *engine's* layout is live: resizing must change the geometry
+# in a way the engine computes. The scene gives the proportional node a unique
+# colour, so counting its pixels measures the width the engine gave it. At width
+# W the node is 0.5*W wide; FillRect insets one pixel on each side, so the count
+# is (W/2 - 2) * (30 - 2). Two sizes are run under Xvfb; a hard-coded buffer, or
+# a layout that ignored the resize, could not match both.
+window_demo = f"{HERE}/build/ace_window_demo"
+if os.path.exists(window_demo) and shutil.which("xvfb-run"):
+    nm = subprocess.run(["nm", "-C", window_demo], capture_output=True, text=True).stdout
+    has_measure = "OHOS::Ace::NG::LinearLayoutUtils::Measure" in nm
+    has_layout = "OHOS::Ace::NG::LinearLayoutUtils::Layout" in nm
+    report("C8a  window demo links the engine's linear-layout algorithm",
+           has_measure and has_layout,
+           f"LinearLayoutUtils::Measure={has_measure}, Layout={has_layout}",
+           "the window's pixels come from the engine's layout, not from a "
+           "layout routine reimplemented in the demo")
+
+    def _pct_count(width, height, tag):
+        d = tempfile.mkdtemp(prefix="acehost-c8-")
+        ppm = os.path.join(d, f"window_{tag}.ppm")
+        p = subprocess.run(["xvfb-run", "-a", window_demo, "--size", f"{width}x{height}",
+                            "--frames", "1", "--screenshot", ppm],
+                           capture_output=True, text=True)
+        if p.returncode != 0 or not os.path.exists(ppm):
+            shutil.rmtree(d, ignore_errors=True)
+            return None, f"rc={p.returncode}: {p.stderr.strip()[:120]}"
+        data = open(ppm, "rb").read()
+        header = data[:15].split(b"\n")
+        if header[:3] != [b"P6", f"{width} {height}".encode(), b"255"]:
+            shutil.rmtree(d, ignore_errors=True)
+            return None, f"bad header {header[:3]}"
+        pix = data[15:]
+        target = bytes((0xff, 0x2d, 0x95))  # unique colour of the 0.5-width node
+        n = sum(1 for i in range(0, len(pix), 3) if pix[i:i + 3] == target)
+        shutil.rmtree(d, ignore_errors=True)
+        return n, ""
+
+    c1, e1 = _pct_count(360, 640, "360")
+    c2, e2 = _pct_count(640, 480, "640")
+    want1 = (360 // 2 - 2) * (30 - 2)
+    want2 = (640 // 2 - 2) * (30 - 2)
+    ok = (c1 == want1) and (c2 == want2) and c1 != c2
+    report("C8b  resizing re-runs the engine's layout proportionally",
+           ok,
+           f"0.5-width node pixels: at 360 wide {c1} (want {want1}), at 640 wide {c2} "
+           f"(want {want2})" + (f"; {e1}{e2}" if (e1 or e2) else ""),
+           "the window's own size drives a fresh engine layout whose result is "
+           "visible in the pixels; matching W/2-2 at two different widths cannot "
+           "come from one hard-coded picture")
+else:
+    print("  [skip] C8 window demo control (no ace_window_demo and/or no xvfb-run)")
 
 print()
 failed = results.count(False)

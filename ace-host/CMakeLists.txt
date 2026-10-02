@@ -288,3 +288,22 @@ add_executable(ace_tree_probe_mutant tree_probe.cpp)
 target_link_libraries(ace_tree_probe_mutant PRIVATE
     "-Wl,--start-group" ace_tree_support ace_layout "-Wl,--end-group")
 target_compile_definitions(ace_tree_probe_mutant PRIVATE ACE_TREE_MUTANT=1)
+
+# A live X11 window showing that same layout, re-run on every resize. This turns
+# the Stage 2a raster into a running visual runtime: layout -> pixels -> event ->
+# layout, with ArkUI doing the layout. It reuses ace_scene.hpp, so it is the same
+# real algorithm and the same test-double wrapper as the probe.
+#
+# Gated on X11 so the default build stays green on a host without X11 (this
+# machine has it; a bare CI image may not).
+find_package(X11)
+if(X11_FOUND)
+    add_executable(ace_window_demo window_demo.cpp)
+    target_include_directories(ace_window_demo PRIVATE ${X11_INCLUDE_DIR})
+    target_link_libraries(ace_window_demo PRIVATE
+        "-Wl,--start-group" ace_tree_support ace_layout "-Wl,--end-group"
+        ${X11_LIBRARIES})
+    message(STATUS "ace_window_demo: enabled (X11 ${X11_VERSION})")
+else()
+    message(STATUS "ace_window_demo: skipped (X11 not found)")
+endif()

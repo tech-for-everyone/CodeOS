@@ -13,9 +13,15 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_layout_probe                                  # foundation: 20 assertions, exit 0
 ./build/ace_ng_layout_probe                               # layout: 20 assertions, exit 0
 ./build/ace_tree_probe                                    # layout a tree + rasterise -> tree_layout.ppm
-python3 controls.py                                       # 16 negative controls, exit 0
+./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
+python3 controls.py                                       # 18 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
+
+`ace_window_demo` needs an X display; under a headless host use
+`xvfb-run -a ./build/ace_window_demo --frames 1 --screenshot out.ppm` to present
+once and exit. It is only built when X11 is found, so the rest of the build is
+unaffected on a host without it.
 
 ## Why a host build first, and why this is not the OpenHarmony build
 
@@ -191,6 +197,30 @@ and Skia — none of which are in this repo. So "run the engine's own paint" is 
 fetch of major third-party trees, not a configuration change; Stage 2a gets the
 *geometry* into a window without it.
 
+## Stage 3, host step: a live window that relayouts
+
+`ace_window_demo` is the same real algorithm and the same `LayoutWrapper` double as
+the tree probe, but the output is a running X11 window instead of a file:
+
+```
+window size change (ConfigureNotify)
+      -> LayoutScene(root, w, h)          # the engine's LinearLayoutUtils
+      -> Flatten(root)                    # absolute rectangles
+      -> Surface + XPutImage              # ours
+```
+
+Its scene is built to make the loop visible: the column centres its children, and
+one node is measured at **half the width the engine hands down**. So resizing the
+window runs a genuinely new layout, and the pixels change with it. Control C8b
+checks that by counting the half-width node's pixels at two window widths: the
+count is `(W/2 - 2) * 28` at both, which a fixed picture cannot satisfy, and the
+demo links `LinearLayoutUtils::Measure`/`Layout` (C8a), so the geometry is the
+engine's.
+
+This is the host visual runtime: **layout is ArkUI's, pixels are ours, and the
+size comes from the window**. It is not yet the GNUstep shell (Stage 3 proper) and
+not yet the engine's own paint (Stage 2b) -- those stay the next steps.
+
 ## Two measurements that changed the shape of the work
 
 **1. Use the compiler the project uses.** `frameworks/base` gets 32/63 files clean
@@ -225,7 +255,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (16/16)
+## Negative controls (18/18)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -240,6 +270,7 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C6a / C6b | the mock `calc_length` link seam | the real TU references `PipelineBase`; the mock defines the symbol and does not |
 | C7a / C7b | the tree probe's dependence on the real algorithm | the binary links `LinearLayoutUtils::Measure`/`Layout`; the probe exits 0 |
 | C7c / C7d | the raster's tie to the layout | six sampled pixels match the computed rectangles; the tree mutant exits non-zero |
+| C8a / C8b | the live window's dependence on the real algorithm and on the resize | the binary links `LinearLayoutUtils`; a 0.5-width node's pixel count is `W/2-2` wide at two different window widths |
 
 C4 and C7d are the controls that protect the assertions:
 `ace_layout_probe_mutant` and `ace_tree_probe_mutant` are the same sources with one
@@ -295,7 +326,8 @@ framebuffer.
 | 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
 | 2a | the real algorithm lays out a tree, software-rastered | `ace_tree_probe` + controls C7 | **done** |
 | 2b | ace_engine paints the tree itself | engine-raster pixel assertions | not started |
-| 3 | a GNUstep app shows that output in a VM window | screenshot | not started |
+| 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
+| 3b | a GNUstep app wraps that output in a VM window | screenshot | not started |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
 | 5 | bring it to CodeOS | boot-verified | not started |
 
@@ -318,10 +350,12 @@ is not automatically a blocker.
 | `CMakeLists.txt` | the host build; explicit exclusion list for third-party deps |
 | `main.cpp` | foundation probe: 20 assertions over Dimension and Matrix3 |
 | `layout_probe.cpp` | layout probe: assertions over LayoutConstraint geometry (links via the upstream mock) |
-| `tree_probe.cpp` | tree probe: real `LinearLayoutUtils` over a `LayoutWrapper` double + software raster |
+| `ace_scene.hpp` | shared scene: `ProbeWrapper` (LayoutWrapper double), `LayoutScene`, `Flatten`, `Surface` software raster |
+| `tree_probe.cpp` | tree probe: real `LinearLayoutUtils` over the double + software raster |
 | `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
+| `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 16 negative controls; must exit 0 |
+| `controls.py` | 18 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
