@@ -118,6 +118,32 @@ standalone), the mock does not.
 The service core still has to be faced to *run* a component tree (Stage 2+), but
 it is no longer in the way of measuring layout geometry.
 
+### Stage 2, measured before it is attempted
+
+Constructing one real `FrameNode` (`FrameNode::CreateFrameNode` + a `Pattern`)
+and linking it against `libace_layout.a` produces **1226 undefined references** —
+essentially the same closure the naive layout-probe attempt hit. The first ones
+are already the service core, not layout:
+
+```
+VTT / vtable for OHOS::Ace::NG::Pattern        -> pattern.cpp (the whole pattern layer)
+OHOS::Ace::NG::RenderContext::Create()         -> render/adapter (Skia/Rosen)
+OHOS::Ace::PreMakeScope::IsPreMake()           -> base/premake (build-time globals)
+OHOS::Ace::NG::LayoutProperty::SetHost(...)    -> the property layer's C++ out-of-line members
+OHOS::Ace::MultiThreadBuildManager::CheckTag() -> base/multi_thread (task manager)
+```
+
+So Stage 2 is not "wire up a renderer": it is the engine's real tree + render +
+task/service core, which is where Skia and the OHOS IPC/resource stack enter.
+
+The environment this was measured in has **no `gn`, no Skia, and no OHOS SDK**
+(checked: `which gn` empty, no `libskia*` on disk). ace_engine's own standalone
+rendering path, the DevEco previewer
+(`adapter/preview/entrance/samples/ace_phone_test.cpp`), additionally needs
+`//ide/tools/previewer` and `//foundation/window/window_manager`, a JS/ETS bundle
+and Skia — none of which are in this repo. So "run the real engine" is a fetch of
+major third-party trees, not a configuration change.
+
 ## Two measurements that changed the shape of the work
 
 **1. Use the compiler the project uses.** `frameworks/base` gets 32/63 files clean
