@@ -33,11 +33,14 @@ Each control REMOVES one ingredient and requires a specific failure:
                                            (DebugBoundaryPainter) emits a rect plus
                                            corner lines; the recorder is not
                                            line-only and its PASS can fail
+  C11 the GNUstep shell                  -> an ArkUIView : NSView hosts the engine;
+                                           the link (C11a) and a live AppKit draw
+                                           (C11b) both hold
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4, C7b, C8b, C9b and C10b are the ones that matter
-for the assertions: they prove a PASS from the probes is a real comparison that can
-come out false, rather than a program that ran and printed.
+load-bearing rather than inert. C4, C7b, C8b, C9b, C10b and C11b are the ones that
+matter for the assertions: they prove a PASS from the probes is a real comparison
+that can come out false, rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
 Nothing here shows ace_engine computes the *right* numbers in an absolute sense --
@@ -583,8 +586,11 @@ if os.path.exists(gnustep_demo):
         def _gnustep_counts(width, height, tag):
             d = tempfile.mkdtemp(prefix="acehost-c11-")
             ppm = os.path.join(d, f"gnustep_{tag}.ppm")
-            p = subprocess.run(["xvfb-run", "-a", gnustep_demo, "--size", f"{width}x{height}",
-                                "--screenshot", ppm],
+            # Give Xvfb a screen larger than either test window: GNUstep's backend
+            # clamps a window to the screen, so the default 640x480 screen would
+            # silently turn the 360x640 case into 360x480.
+            p = subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 1600x1200x24", gnustep_demo,
+                                "--size", f"{width}x{height}", "--screenshot", ppm],
                                capture_output=True, text=True)
             if p.returncode != 0 or not os.path.exists(ppm):
                 shutil.rmtree(d, ignore_errors=True)
