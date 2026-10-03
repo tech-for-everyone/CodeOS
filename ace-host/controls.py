@@ -20,9 +20,11 @@ Each control REMOVES one ingredient and requires a specific failure:
   C7  the tree probe                    -> links the real LinearLayoutUtils, its
                                            PASS is a comparison that can fail,
                                            and the raster it reports is real
-  C8  the live window                   -> links the real LinearLayoutUtils, and
-                                           resizing makes the engine re-lay the
-                                           tree out (pixel count tracks W/2)
+  C8  the live window                   -> links the real LinearLayoutUtils and
+                                           DividerPainter, resizing re-lays the
+                                           tree out (pixel count tracks W/2), and
+                                           the engine-painted divider tracks its
+                                           laid-out width
   C9  the paint probe                   -> links the real DividerPainter::DrawLine,
                                            its PASS is a comparison that can fail,
                                            and the raster contains the engine's
@@ -308,26 +310,33 @@ else:
     report("C7d  the tree mutant probe exits NON-zero", False,
            f"{tree_mutant} not built", "n/a")
 
-# --- C8: the live X11 window re-runs the engine's layout on resize -----------
-# window_demo lays the tree out at the window's current size and shows it. The
-# claim is that the *engine's* layout is live: resizing must change the geometry
-# in a way the engine computes. The scene gives the proportional node a unique
-# colour, so counting its pixels measures the width the engine gave it. At width
-# W the node is 0.5*W wide; FillRect insets one pixel on each side, so the count
-# is (W/2 - 2) * (30 - 2). Two sizes are run under Xvfb; a hard-coded buffer, or
-# a layout that ignored the resize, could not match both.
+# --- C8: the live X11 window re-runs the engine's layout and paint ------------
+# window_demo lays the tree out at the window's current size, shows it, and paints
+# one node with a real DividerModifier. The claim is that the *engine's* layout and
+# paint are live: resizing must change the geometry in a way the engine computes.
+# The scene gives the proportional node a unique colour, so counting its pixels
+# measures the width the engine gave it; at width W the node is 0.5*W wide and
+# FillRect insets one pixel on each side, so the count is (W/2 - 2) * (30 - 2).
+# The divider node has its own unique colour and is *not* filled by the raster: it
+# is painted only by the engine's draw command, so counting it measures the
+# engine's paint (length 0.8*W, stroke 4 -> 4 * 0.8*W pixels). Two sizes are run
+# under Xvfb; a hard-coded buffer, or a layout that ignored the resize, could not
+# match both.
 window_demo = f"{HERE}/build/ace_window_demo"
 if os.path.exists(window_demo) and shutil.which("xvfb-run"):
     nm = subprocess.run(["nm", "-C", window_demo], capture_output=True, text=True).stdout
     has_measure = "OHOS::Ace::NG::LinearLayoutUtils::Measure" in nm
     has_layout = "OHOS::Ace::NG::LinearLayoutUtils::Layout" in nm
-    report("C8a  window demo links the engine's linear-layout algorithm",
-           has_measure and has_layout,
-           f"LinearLayoutUtils::Measure={has_measure}, Layout={has_layout}",
-           "the window's pixels come from the engine's layout, not from a "
-           "layout routine reimplemented in the demo")
+    has_drawline = "OHOS::Ace::NG::DividerPainter::DrawLine" in nm
+    report("C8a  window demo links the engine's layout and paint code",
+           has_measure and has_layout and has_drawline,
+           f"LinearLayoutUtils::Measure={has_measure}, Layout={has_layout}, "
+           f"DividerPainter::DrawLine={has_drawline}",
+           "the window's layout comes from the engine's LinearLayoutUtils and its "
+           "divider pixels from the engine's DividerPainter, not from routines "
+           "reimplemented in the demo")
 
-    def _pct_count(width, height, tag):
+    def _counts(width, height, tag):
         d = tempfile.mkdtemp(prefix="acehost-c8-")
         ppm = os.path.join(d, f"window_{tag}.ppm")
         p = subprocess.run(["xvfb-run", "-a", window_demo, "--size", f"{width}x{height}",
@@ -335,20 +344,25 @@ if os.path.exists(window_demo) and shutil.which("xvfb-run"):
                            capture_output=True, text=True)
         if p.returncode != 0 or not os.path.exists(ppm):
             shutil.rmtree(d, ignore_errors=True)
-            return None, f"rc={p.returncode}: {p.stderr.strip()[:120]}"
+            return None, None, f"rc={p.returncode}: {p.stderr.strip()[:120]}"
         data = open(ppm, "rb").read()
         header = data[:15].split(b"\n")
         if header[:3] != [b"P6", f"{width} {height}".encode(), b"255"]:
             shutil.rmtree(d, ignore_errors=True)
-            return None, f"bad header {header[:3]}"
+            return None, None, f"bad header {header[:3]}"
         pix = data[15:]
-        target = bytes((0xff, 0x2d, 0x95))  # unique colour of the 0.5-width node
-        n = sum(1 for i in range(0, len(pix), 3) if pix[i:i + 3] == target)
-        shutil.rmtree(d, ignore_errors=True)
-        return n, ""
 
-    c1, e1 = _pct_count(360, 640, "360")
-    c2, e2 = _pct_count(640, 480, "640")
+        def count(rgb):
+            target = bytes(rgb)
+            return sum(1 for i in range(0, len(pix), 3) if pix[i:i + 3] == target)
+
+        pct = count((0xff, 0x2d, 0x95))  # unique colour of the 0.5-width node
+        div = count((0xff, 0xd2, 0x4a))  # unique colour of the engine-painted divider
+        shutil.rmtree(d, ignore_errors=True)
+        return pct, div, ""
+
+    c1, d1, e1 = _counts(360, 640, "360")
+    c2, d2, e2 = _counts(640, 480, "640")
     want1 = (360 // 2 - 2) * (30 - 2)
     want2 = (640 // 2 - 2) * (30 - 2)
     ok = (c1 == want1) and (c2 == want2) and c1 != c2
@@ -359,6 +373,17 @@ if os.path.exists(window_demo) and shutil.which("xvfb-run"):
            "the window's own size drives a fresh engine layout whose result is "
            "visible in the pixels; matching W/2-2 at two different widths cannot "
            "come from one hard-coded picture")
+
+    wd1 = int(0.8 * 360) * 4
+    wd2 = int(0.8 * 640) * 4
+    dok = (d1 == wd1) and (d2 == wd2) and d1 != d2
+    report("C8c  the live engine paint follows the engine's layout",
+           dok,
+           f"engine-painted divider pixels: at 360 wide {d1} (want {wd1}), at 640 "
+           f"wide {d2} (want {wd2})" + (f"; {e1}{e2}" if (e1 or e2) else ""),
+           "the divider is drawn by a real DividerModifier from the rectangle the "
+           "engine laid out, so its pixel count is 4 * 0.8*W at two different "
+           "widths -- live engine paint, not a fixed image")
 else:
     print("  [skip] C8 window demo control (no ace_window_demo and/or no xvfb-run)")
 

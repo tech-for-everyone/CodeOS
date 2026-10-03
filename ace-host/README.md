@@ -15,7 +15,7 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_tree_probe                                    # layout a tree + rasterise -> tree_layout.ppm
 ./build/ace_paint_probe                                   # engine paint code -> its own draw command + raster
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
-python3 controls.py                                       # 22 negative controls, exit 0
+python3 controls.py                                       # 23 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -204,7 +204,9 @@ segment.
 This is one painter, not the whole tree. Background/border/foreground are Rosen
 `RSNode` property setters rather than canvas draw calls, so painting a real
 `FrameNode` tree still needs a render context or a software backend — the closure
-measured next.
+measured next. The same capture is wired into `ace_window_demo`, where one node is
+painted by a real `DividerModifier` from its engine-computed rectangle (Stage 3a,
+control C8c).
 
 ### Why painting the whole tree is still open
 
@@ -252,9 +254,17 @@ count is `(W/2 - 2) * 28` at both, which a fixed picture cannot satisfy, and the
 demo links `LinearLayoutUtils::Measure`/`Layout` (C8a), so the geometry is the
 engine's.
 
-This is the host visual runtime: **layout is ArkUI's, pixels are ours, and the
-size comes from the window**. It is not yet the GNUstep shell (Stage 3 proper) and
-not yet the engine's own paint (Stage 2b) -- those stay the next steps.
+The window also shows Stage 2b live. One node (`div`) is not filled by the raster:
+`Present` drives a real `DividerModifier` from that node's engine-computed
+rectangle, captures the `DrawLine` it emits, and rasterises that. So the divider's
+pixels are the engine's own draw command following the engine's own layout. Control
+C8c counts them: the length is `0.8*W`, stroke 4, so the count is `4 * 0.8*W` at
+both sizes, and C8a checks `DividerPainter::DrawLine` is linked.
+
+This is the host visual runtime: **layout is ArkUI's, the divider's paint is
+ArkUI's, pixels are ours, and the size comes from the window**. It is not yet the
+GNUstep shell (Stage 3 proper), and not yet a whole `FrameNode` tree painted by the
+engine (Stage 2c) -- those stay the next steps.
 
 ## Two measurements that changed the shape of the work
 
@@ -290,7 +300,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (22/22)
+## Negative controls (23/23)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -305,7 +315,8 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C6a / C6b | the mock `calc_length` link seam | the real TU references `PipelineBase`; the mock defines the symbol and does not |
 | C7a / C7b | the tree probe's dependence on the real algorithm | the binary links `LinearLayoutUtils::Measure`/`Layout`; the probe exits 0 |
 | C7c / C7d | the raster's tie to the layout | six sampled pixels match the computed rectangles; the tree mutant exits non-zero |
-| C8a / C8b | the live window's dependence on the real algorithm and on the resize | the binary links `LinearLayoutUtils`; a 0.5-width node's pixel count is `W/2-2` wide at two different window widths |
+| C8a / C8b | the live window's dependence on the real layout | the binary links `LinearLayoutUtils` and `DividerPainter::DrawLine`; a 0.5-width node's pixel count is `W/2-2` wide at two different window widths |
+| C8c | the live engine paint's dependence on the engine's layout | the engine-painted divider's pixel count is `4 * 0.8*W` at two different window widths |
 | C9a / C9b | the paint probe's dependence on the engine's painter | the binary links `DividerPainter::DrawLine`; the probe exits 0 |
 | C9c / C9d | the raster's tie to the engine's draw command | eight sampled pixels match the engine-emitted segment; the paint mutant exits non-zero |
 
@@ -362,7 +373,7 @@ framebuffer.
 | 1a | layout core compiles renderer-free | `classify.py` 51/51 + C5 | **done** |
 | 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
 | 2a | the real algorithm lays out a tree, software-rastered | `ace_tree_probe` + controls C7 | **done** |
-| 2b | the engine's paint code emits a draw command, captured and rastered | `ace_paint_probe` + controls C9 | **done (first draw)** |
+| 2b | the engine's paint code emits a draw command, captured, rastered, and shown live | `ace_paint_probe` + controls C9; window C8c | **done** |
 | 2c | paint a whole `FrameNode` tree (background/border/foreground) | engine-raster pixel assertions | not started |
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
 | 3b | a GNUstep app wraps that output in a VM window | screenshot | not started |
@@ -391,11 +402,12 @@ is not automatically a blocker.
 | `ace_scene.hpp` | shared scene: `ProbeWrapper` (LayoutWrapper double), `LayoutScene`, `Flatten`, `Surface` software raster |
 | `tree_probe.cpp` | tree probe: real `LinearLayoutUtils` over the double + software raster |
 | `paint_capture.hpp` | `RecordingCanvas`: records the engine's `DrawLine` geometry |
+| `paint_raster.hpp` | `StampLine`: draws a captured engine draw command into the `Surface` |
 | `paint_probe.cpp` | paint probe: real `DividerModifier`/`DividerPainter` draw command + software raster |
 | `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
 | `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 22 negative controls; must exit 0 |
+| `controls.py` | 23 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |

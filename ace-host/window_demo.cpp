@@ -30,6 +30,8 @@
 #include <string>
 
 #include "ace_scene.hpp"
+#include "core/components_ng/pattern/divider/divider_modifier.h"
+#include "paint_raster.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -42,6 +44,14 @@ namespace {
 
 constexpr uint32_t kBackground = 0x00141822u;
 
+// The engine-painted divider. Its geometry is computed by the engine (both the
+// node's rectangle from layout and the line endpoints from DividerPainter); the
+// colour and the raster are ours, because the mock pen is stateless (the style a
+// painter sets on a pen never reaches the canvas -- see paint_capture.hpp).
+constexpr uint32_t kDividerColor = 0x00ffd24aU;
+constexpr float kDividerStroke = 4.0f;
+constexpr float kDividerWidthFraction = 0.8f;
+
 // A scene whose layout visibly depends on the viewport size: the column centres
 // its children, and `pct` is measured as a fraction of the width the engine
 // hands down, so both position and size change when the window does.
@@ -50,6 +60,7 @@ struct Scene {
     RefPtr<ProbeWrapper> a;
     RefPtr<ProbeWrapper> b;
     RefPtr<ProbeWrapper> pct;
+    RefPtr<ProbeWrapper> div;
     RefPtr<ProbeWrapper> row;
     RefPtr<ProbeWrapper> c;
     RefPtr<ProbeWrapper> d;
@@ -69,6 +80,13 @@ Scene BuildScene()
     s.pct = AceType::MakeRefPtr<ProbeWrapper>(
         "pct", false, ProbeWrapper::Kind::LEAF, SizeF(0, 30), 0x00ff2d95u);
     s.pct->SetPercentWidth(0.5f);
+    // A divider whose length is a fraction of the parent width. It is not filled
+    // by the raster: Present paints it with a real DividerModifier driven from
+    // this node's engine-computed rectangle, so its pixels are the engine's draw
+    // command, not ours.
+    s.div = AceType::MakeRefPtr<ProbeWrapper>(
+        "div", false, ProbeWrapper::Kind::LEAF, SizeF(0, 4), kDividerColor);
+    s.div->SetPercentWidth(kDividerWidthFraction);
     s.row = AceType::MakeRefPtr<ProbeWrapper>(
         "row", false, ProbeWrapper::Kind::CONTAINER, SizeF(0, 0), 0x00f0c020u, FlexAlign::CENTER, FlexAlign::CENTER);
     s.c = AceType::MakeRefPtr<ProbeWrapper>(
@@ -80,6 +98,7 @@ Scene BuildScene()
     s.root->AddChild(s.a);
     s.root->AddChild(s.b);
     s.root->AddChild(s.pct);
+    s.root->AddChild(s.div);
     s.root->AddChild(s.row);
     return s;
 }
@@ -122,14 +141,41 @@ void HandleEvent(XEvent& e, Atom wmDelete, bool* done, bool* dirty, int* w, int*
 }
 
 // Lay the engine's tree out at w x h, rasterise it, and blit it to the window.
-void Present(Display* dpy, Window win, GC gc, Visual* visual, int depth, Scene& scene, int w, int h,
+void Present(Display* dpy, ::Window win, GC gc, Visual* visual, int depth, Scene& scene, int w, int h,
     acehost::Surface& surface)
 {
     LayoutScene(scene.root, static_cast<float>(w), static_cast<float>(h));
 
     surface = acehost::Surface(w, h, kBackground);
-    for (const auto& p : acehost::Flatten(scene.root)) {
+    const auto rects = acehost::Flatten(scene.root);
+    for (const auto& p : rects) {
+        if (p.tag == "div") {
+            continue; // painted by the engine's paint code below
+        }
         surface.FillRect(p.x, p.y, p.w, p.h, p.color);
+    }
+
+    // Engine paint: drive a real DividerModifier from the node's engine-computed
+    // rectangle, capture the DrawLine it emits, and rasterise that. The line
+    // endpoints are DividerPainter's arithmetic; only the colour and the raster
+    // are ours (the mock pen is stateless -- see paint_capture.hpp).
+    for (const auto& p : rects) {
+        if (p.tag != "div") {
+            continue;
+        }
+        DividerModifier divider;
+        divider.SetStrokeWidth(kDividerStroke);
+        divider.SetDividerLength(static_cast<float>(p.w));
+        divider.SetVertical(false);
+        divider.SetLineCap(LineCap::SQUARE);
+        divider.SetOffset(OffsetF(static_cast<float>(p.x), static_cast<float>(p.y)));
+        divider.SetColor(LinearColor(0xff000000u | kDividerColor));
+        acehost::RecordingCanvas canvas;
+        DrawingContext context { canvas, static_cast<float>(w), static_cast<float>(h) };
+        divider.Draw(context);
+        for (const auto& line : canvas.lines) {
+            acehost::StampLine(surface, line, kDividerColor, static_cast<int>(kDividerStroke));
+        }
     }
 
     XImage* img = XCreateImage(dpy, visual, static_cast<unsigned int>(depth), ZPixmap, 0,
@@ -147,8 +193,9 @@ void Present(Display* dpy, Window win, GC gc, Visual* visual, int depth, Scene& 
 
     const auto rootSize = scene.root->GetGeometryNode()->GetFrameSize();
     const auto pctSize = scene.pct->GetGeometryNode()->GetFrameSize();
-    std::printf("  present %dx%d: root=%.0fx%.0f pct=%.0fx%.0f\n", w, h, rootSize.Width(), rootSize.Height(),
-        pctSize.Width(), pctSize.Height());
+    const auto divSize = scene.div->GetGeometryNode()->GetFrameSize();
+    std::printf("  present %dx%d: root=%.0fx%.0f pct=%.0fx%.0f div=%.0fx%.0f\n", w, h, rootSize.Width(),
+        rootSize.Height(), pctSize.Width(), pctSize.Height(), divSize.Width(), divSize.Height());
 }
 
 } // namespace
@@ -190,7 +237,7 @@ int main(int argc, char* argv[])
     const int screen = DefaultScreen(dpy);
     Visual* visual = DefaultVisual(dpy, screen);
     const int depth = DefaultDepth(dpy, screen);
-    Window win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0, static_cast<unsigned int>(w),
+    ::Window win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen), 0, 0, static_cast<unsigned int>(w),
         static_cast<unsigned int>(h), 0, BlackPixel(dpy, screen), WhitePixel(dpy, screen));
     XStoreName(dpy, win, "ArkUI layout (ace-host)");
     XSelectInput(dpy, win, ExposureMask | StructureNotifyMask | KeyPressMask);
