@@ -29,10 +29,14 @@ Each control REMOVES one ingredient and requires a specific failure:
                                            its PASS is a comparison that can fail,
                                            and the raster contains the engine's
                                            own draw command
+  C10 the boundary probe                -> a second engine painter
+                                           (DebugBoundaryPainter) emits a rect plus
+                                           corner lines; the recorder is not
+                                           line-only and its PASS can fail
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4, C7b, C8b and C9b are the ones that matter for
-the assertions: they prove a PASS from the probes is a real comparison that can
+load-bearing rather than inert. C4, C7b, C8b, C9b and C10b are the ones that matter
+for the assertions: they prove a PASS from the probes is a real comparison that can
 come out false, rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
@@ -460,6 +464,80 @@ if os.path.exists(paint_mutant):
 else:
     report("C9d  the paint mutant probe exits NON-zero", False,
            f"{paint_mutant} not built", "n/a")
+
+# --- C10: a SECOND engine painter, so the capture is not line-only -------------
+# DividerPainter emitted one DrawLine. DebugBoundaryPainter emits a rect plus
+# eight corner lines, computed from content/frame sizes. If the same capture
+# machinery recovers its geometry exactly, the model generalises beyond one shape.
+boundary_probe = f"{HERE}/build/ace_boundary_probe"
+boundary_mutant = f"{HERE}/build/ace_boundary_probe_mutant"
+
+if os.path.exists(boundary_probe):
+    nm = subprocess.run(["nm", "-C", boundary_probe], capture_output=True, text=True).stdout
+    has_corner = "OHOS::Ace::NG::DebugBoundaryPainter::PaintDebugCorner" in nm
+    has_margin = "OHOS::Ace::NG::DebugBoundaryPainter::PaintDebugMargin" in nm
+    report("C10a the boundary probe links the engine's DebugBoundaryPainter",
+           has_corner and has_margin,
+           f"PaintDebugCorner={has_corner}, PaintDebugMargin={has_margin}",
+           "the captured rect and corner lines were computed by the engine's "
+           "painter, not by arithmetic reimplemented in the probe")
+
+    d = tempfile.mkdtemp(prefix="acehost-c10-")
+    ppm = os.path.join(d, "boundary.ppm")
+    p = subprocess.run([boundary_probe, ppm], capture_output=True, text=True)
+    report("C10b the real boundary probe exits 0",
+           p.returncode == 0,
+           f"rc={p.returncode}, last line: {p.stdout.strip().splitlines()[-1]!r}",
+           "a second, unrelated painter runs to completion and its computed "
+           "geometry matches the asserted values")
+
+    ok_file = os.path.exists(ppm)
+    header_ok = False
+    pixels_ok = False
+    detail = "no PPM written"
+    if ok_file:
+        data = open(ppm, "rb").read()
+        header = data[:15].split(b"\n")
+        header_ok = header[:3] == [b"P6", b"240 240", b"255"]
+        pix = data[15:]
+        boundary = (0xfa, 0x2a, 0x2d)
+        corner = (0x00, 0x7d, 0xff)
+        margin = (0xff, 0x00, 0xaa)
+        bg = (0x14, 0x18, 0x22)
+        want = {
+            (100, 0): boundary, (0, 60): boundary, (100, 119): boundary,
+            (100, 110): margin, (210, 50): margin,
+            (100, 60): bg, (100, 1): bg,
+            (4, 0): corner,
+        }
+        pixels_ok = all(
+            tuple(pix[(y * 240 + x) * 3:(y * 240 + x) * 3 + 3]) == rgb
+            for (x, y), rgb in want.items())
+        detail = (f"header ok={header_ok}; the {len(want)} sampled pixels match the "
+                  f"engine-emitted rect/corners={pixels_ok}")
+    report("C10c the reported raster contains the engine's rect and lines",
+           ok_file and header_ok and pixels_ok,
+           detail,
+           "the captured DrawRect and DrawLine are rasterised, so the second "
+           "painter's output is the engine's draw list, not a fixed picture")
+    shutil.rmtree(d, ignore_errors=True)
+else:
+    report("C10a the boundary probe links the engine's DebugBoundaryPainter", False,
+           f"{boundary_probe} not built", "n/a")
+    report("C10b the real boundary probe exits 0", False, f"{boundary_probe} not built", "n/a")
+    report("C10c the reported raster contains the engine's rect and lines", False,
+           f"{boundary_probe} not built", "n/a")
+
+if os.path.exists(boundary_mutant):
+    p = subprocess.run([boundary_mutant], capture_output=True, text=True)
+    report("C10d the boundary mutant probe exits NON-zero",
+           p.returncode != 0 and "MUTANT" in p.stdout,
+           f"rc={p.returncode}; mutant line present: {'MUTANT' in p.stdout}",
+           "the boundary probe's comparisons can come out false, so C10b's PASS is "
+           "not vacuous")
+else:
+    report("C10d the boundary mutant probe exits NON-zero", False,
+           f"{boundary_mutant} not built", "n/a")
 
 print()
 failed = results.count(False)

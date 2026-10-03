@@ -7,3 +7,6 @@ tree_layout.ppm
 
 # Raster written next to the probe by ace_paint_probe. Scratch output.
 paint_probe.ppm
+
+# Raster written next to the probe by ace_boundary_probe. Scratch output.
+boundary_probe.ppm

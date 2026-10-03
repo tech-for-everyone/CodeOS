@@ -329,10 +329,15 @@ endif()
 #   mock_log_wrapper.cpp       upstream's va_list log sink (see ace_tree_support).
 #   fake_modifier_adapter.cpp  upstream's no-Rosen ModifierAdapter::RemoveModifier
 #                              seam, called from Modifier::~Modifier.
+#
+# debug_boundary_painter.cpp is the second painter (boundary_probe.cpp): it emits
+# a rect plus eight corner lines, so the capture is shown not to be line-only.
+# It is already part of this closure's render set, so adding it costs nothing.
 set(ACE_PAINT_ENGINE_SOURCES
     ${ACE}/frameworks/core/components_ng/pattern/divider/divider_modifier.cpp
     ${ACE}/frameworks/core/components_ng/render/divider_painter.cpp
     ${ACE}/frameworks/core/components_ng/render/drawing_prop_convertor.cpp
+    ${ACE}/frameworks/core/components_ng/render/debug_boundary_painter.cpp
     ${ACE}/frameworks/core/components/common/properties/color.cpp
     ${ACE}/frameworks/core/components_v2/inspector/inspector_constants.cpp
     ${ACE}/test/mock/adapter/ohos/osal/mock_log_wrapper.cpp
@@ -350,3 +355,14 @@ add_executable(ace_paint_probe_mutant paint_probe.cpp)
 target_link_libraries(ace_paint_probe_mutant PRIVATE
     "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
 target_compile_definitions(ace_paint_probe_mutant PRIVATE ACE_PAINT_MUTANT=1)
+
+# Stage 2b, second painter: DebugBoundaryPainter emits a rect + 8 corner lines.
+# Same capture machinery, different engine arithmetic -- see boundary_probe.cpp.
+add_executable(ace_boundary_probe boundary_probe.cpp)
+target_link_libraries(ace_boundary_probe PRIVATE
+    "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
+
+add_executable(ace_boundary_probe_mutant boundary_probe.cpp)
+target_link_libraries(ace_boundary_probe_mutant PRIVATE
+    "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
+target_compile_definitions(ace_boundary_probe_mutant PRIVATE ACE_BOUNDARY_MUTANT=1)

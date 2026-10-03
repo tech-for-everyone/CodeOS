@@ -14,8 +14,9 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_ng_layout_probe                               # layout: 20 assertions, exit 0
 ./build/ace_tree_probe                                    # layout a tree + rasterise -> tree_layout.ppm
 ./build/ace_paint_probe                                   # engine paint code -> its own draw command + raster
+./build/ace_boundary_probe                                # a second engine painter -> rect + lines + raster
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
-python3 controls.py                                       # 23 negative controls, exit 0
+python3 controls.py                                       # 27 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -201,7 +202,16 @@ segment.
 * **Recovered:** the draw command. That is the seam a host backend plugs into:
   override the canvas, take the engine's draw list, rasterise it yourself.
 
-This is one painter, not the whole tree. Background/border/foreground are Rosen
+A single painter could be a fluke — maybe only lines are observable off-pipeline.
+`ace_boundary_probe` drives a second, unrelated engine painter,
+`DebugBoundaryPainter` (`components_ng/render/debug_boundary_painter.cpp`), which
+computes a boundary rect and eight 8px corner marks from the content/frame sizes
+and emits a `DrawRect` plus eight `DrawLine`s. The probe recovers all of that
+exactly (rect edges at `frame - 0.5`, corner marks `8` long) and rasterises it, so
+the recorder is not special-cased: it captures whatever the engine's paint code
+emits.
+
+These are two painters, not the whole tree. Background/border/foreground are Rosen
 `RSNode` property setters rather than canvas draw calls, so painting a real
 `FrameNode` tree still needs a render context or a software backend — the closure
 measured next. The same capture is wired into `ace_window_demo`, where one node is
@@ -300,7 +310,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (23/23)
+## Negative controls (27/27)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -319,11 +329,14 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C8c | the live engine paint's dependence on the engine's layout | the engine-painted divider's pixel count is `4 * 0.8*W` at two different window widths |
 | C9a / C9b | the paint probe's dependence on the engine's painter | the binary links `DividerPainter::DrawLine`; the probe exits 0 |
 | C9c / C9d | the raster's tie to the engine's draw command | eight sampled pixels match the engine-emitted segment; the paint mutant exits non-zero |
+| C10a / C10b | the second painter's dependence on the engine | the binary links `DebugBoundaryPainter`; the probe exits 0 |
+| C10c / C10d | the capture is not line-only | eight sampled pixels match the engine-emitted rect + corner lines; the boundary mutant exits non-zero |
 
-C4, C7d and C9d are the controls that protect the assertions:
-`ace_layout_probe_mutant`, `ace_tree_probe_mutant` and `ace_paint_probe_mutant` are
-the same sources with one deliberately wrong expectation compiled in, and they must
-FAIL. If any ever passes, every PASS from its real probe is worthless.
+C4, C7d, C9d and C10d are the controls that protect the assertions:
+`ace_layout_probe_mutant`, `ace_tree_probe_mutant`, `ace_paint_probe_mutant` and
+`ace_boundary_probe_mutant` are the same sources with one deliberately wrong
+expectation compiled in, and they must FAIL. If any ever passes, every PASS from
+its real probe is worthless.
 
 C2b caught a real bug in an earlier version of itself, which had failed to actually
 remove the shims directory — the control failed, correctly, and the control was
@@ -373,7 +386,7 @@ framebuffer.
 | 1a | layout core compiles renderer-free | `classify.py` 51/51 + C5 | **done** |
 | 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
 | 2a | the real algorithm lays out a tree, software-rastered | `ace_tree_probe` + controls C7 | **done** |
-| 2b | the engine's paint code emits a draw command, captured, rastered, and shown live | `ace_paint_probe` + controls C9; window C8c | **done** |
+| 2b | the engine's paint code emits draw commands (two painters), captured, rastered, and shown live | `ace_paint_probe`, `ace_boundary_probe` + controls C9/C10; window C8c | **done** |
 | 2c | paint a whole `FrameNode` tree (background/border/foreground) | engine-raster pixel assertions | not started |
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
 | 3b | a GNUstep app wraps that output in a VM window | screenshot | not started |
@@ -404,10 +417,11 @@ is not automatically a blocker.
 | `paint_capture.hpp` | `RecordingCanvas`: records the engine's `DrawLine` geometry |
 | `paint_raster.hpp` | `StampLine`: draws a captured engine draw command into the `Surface` |
 | `paint_probe.cpp` | paint probe: real `DividerModifier`/`DividerPainter` draw command + software raster |
+| `boundary_probe.cpp` | boundary probe: real `DebugBoundaryPainter` rect + corner lines + software raster |
 | `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
 | `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 23 negative controls; must exit 0 |
+| `controls.py` | 27 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |

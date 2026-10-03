@@ -40,6 +40,13 @@ struct LineOp {
     float y1 = 0.0f;
 };
 
+struct RectOp {
+    float left = 0.0f;
+    float top = 0.0f;
+    float right = 0.0f;
+    float bottom = 0.0f;
+};
+
 // A canvas that records rather than rasterises. It only overrides the methods
 // the probes actually exercise; the rest stay the mock's no-ops.
 class RecordingCanvas final : public OHOS::Ace::RSCanvas {
@@ -50,7 +57,13 @@ public:
         lines.push_back({ startPt.GetX(), startPt.GetY(), endPt.GetX(), endPt.GetY() });
     }
 
+    void DrawRect(const OHOS::Ace::Testing::TestingRect& rect) override
+    {
+        rects.push_back({ rect.GetLeft(), rect.GetTop(), rect.GetRight(), rect.GetBottom() });
+    }
+
     std::vector<LineOp> lines;
+    std::vector<RectOp> rects;
 };
 
 } // namespace acehost
