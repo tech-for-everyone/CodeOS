@@ -33,6 +33,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -60,6 +61,8 @@ static const int kDividerFractionCount = 3;
 - (BOOL)writePpmFromSurface:(const char*)path;
 - (int)renderCount;
 - (int)drawCount;
+- (float)dividerWidth;
+- (float)pctWidth;
 @end
 
 @implementation ArkUIView
@@ -178,7 +181,14 @@ static const int kDividerFractionCount = 3;
 - (void)mouseDown:(NSEvent*)event
 {
     (void)event;
+#ifdef ACE_NO_INTERACT
+    // Interaction mutant: the handler is wired up but does not change the model,
+    // so the event control must FAIL. This proves the control measures the
+    // event -> engine relayout path, not just that the window opened.
+    return;
+#else
     [self toggleDividerWidth];
+#endif
 }
 
 - (void)keyDown:(NSEvent*)event
@@ -188,11 +198,16 @@ static const int kDividerFractionCount = 3;
         return;
     }
     const unichar c = [chars characterAtIndex:0];
+#ifdef ACE_NO_INTERACT
+    (void)c;
+    return;
+#else
     if (c == ' ' || c == '\r') {
         [self toggleDividerWidth];
     } else if (c == 'q' || c == 'Q' || c == 0x1b) {
         [NSApp terminate:nil];
     }
+#endif
 }
 
 - (BOOL)writePpmFromSurface:(const char*)path
@@ -213,7 +228,80 @@ static const int kDividerFractionCount = 3;
     return _draws;
 }
 
+// The engine-computed widths, read straight from the laid-out tree. The event
+// control uses them to see that a GNUstep event changed the engine's layout.
+- (float)dividerWidth
+{
+    return _scene->div->GetGeometryNode()->GetFrameSize().Width();
+}
+
+- (float)pctWidth
+{
+    return _scene->pct->GetGeometryNode()->GetFrameSize().Width();
+}
+
 @end
+
+// Stage 4: drive the real AppKit responder methods with synthesized events and
+// check that each one changes what the *engine* computes. `--events` runs this
+// headlessly under Xvfb. It is not a simulation of the X server's event delivery
+// (that is GNUstep's job, and no xdotool is present here); it exercises the seam
+// this port owns: NSResponder -> model -> engine relayout -> NSView redraw.
+static int RunEventsMode(ArkUIView* view, NSWindow* win, int w, int h)
+{
+    const float tol = 1.0f;
+    const int winNum = (int)[win windowNumber];
+
+    [view display];
+    const float d0 = [view dividerWidth];
+
+    // Keyboard: a space key event through -keyDown:.
+    NSEvent* key = [NSEvent keyEventWithType:NSEventTypeKeyDown
+                                    location:NSMakePoint(0, 0)
+                               modifierFlags:0
+                                   timestamp:0
+                                windowNumber:winNum
+                                     context:nil
+                                  characters:@" "
+                 charactersIgnoringModifiers:@" "
+                                   isARepeat:NO
+                                     keyCode:0];
+    [view keyDown:key];
+    [view display];
+    const float d1 = [view dividerWidth];
+
+    // Mouse: a left-button event through -mouseDown:.
+    NSEvent* mouse = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
+                                        location:NSMakePoint(w / 2.0, h / 2.0)
+                                   modifierFlags:0
+                                       timestamp:0
+                                    windowNumber:winNum
+                                         context:nil
+                                     eventNumber:0
+                                      clickCount:1
+                                        pressure:1.0f];
+    [view mouseDown:mouse];
+    [view display];
+    const float d2 = [view dividerWidth];
+
+    // Resize: AppKit's own frame setter must relayout the engine at the new size.
+    const int w2 = w + 120;
+    [view setFrameSize:NSMakeSize(w2, h)];
+    [view display];
+    const float pct2 = [view pctWidth];
+
+    const float e0 = 0.8f * w;
+    const float e1 = 0.4f * w;
+    const float e2 = 0.2f * w;
+    const float ep = 0.5f * w2;
+    const bool ok = std::fabs(d0 - e0) <= tol && std::fabs(d1 - e1) <= tol &&
+                    std::fabs(d2 - e2) <= tol && std::fabs(pct2 - ep) <= tol;
+
+    std::printf("  event-toggle: key div %.0f -> %.0f (want %.0f); mouse div -> %.0f (want %.0f); "
+                "resize pct -> %.0f (want %.0f); draws=%d\n",
+                d0, d1, e1, d2, e2, pct2, ep, [view drawCount]);
+    return ok ? 0 : 6;
+}
 
 static int ParseSize(const char* spec, int* w, int* h)
 {
@@ -225,6 +313,7 @@ int main(int argc, const char** argv)
     int w = 360;
     int h = 640;
     const char* screenshot = nullptr;
+    bool events = false;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--size") == 0 && i + 1 < argc) {
@@ -234,8 +323,10 @@ int main(int argc, const char** argv)
             }
         } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             screenshot = argv[++i];
+        } else if (std::strcmp(argv[i], "--events") == 0) {
+            events = true;
         } else if (std::strcmp(argv[i], "--help") == 0) {
-            std::printf("usage: ace_gnustep_demo [--size WxH] [--screenshot FILE]\n");
+            std::printf("usage: ace_gnustep_demo [--size WxH] [--screenshot FILE] [--events]\n");
             return 0;
         } else {
             std::fprintf(stderr, "unknown argument: %s\n", argv[i]);
@@ -266,6 +357,13 @@ int main(int argc, const char** argv)
             [NSApp activateIgnoringOtherApps:YES];
 
             std::printf("ace gnustep demo: ArkUI layout in a GNUstep window\n");
+
+            if (events) {
+                const int rc = RunEventsMode(view, win, w, h);
+                [view release];
+                [win release];
+                return rc;
+            }
 
             if (screenshot != nullptr) {
                 // Drive the real AppKit draw path, then dump the surface it

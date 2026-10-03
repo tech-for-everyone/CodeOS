@@ -36,11 +36,14 @@ Each control REMOVES one ingredient and requires a specific failure:
   C11 the GNUstep shell                  -> an ArkUIView : NSView hosts the engine;
                                            the link (C11a) and a live AppKit draw
                                            (C11b) both hold
+  C12 event forwarding                   -> AppKit key/mouse/resize events drive an
+                                           engine relayout; an inert-handler mutant
+                                           makes the control fail
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4, C7b, C8b, C9b, C10b and C11b are the ones that
-matter for the assertions: they prove a PASS from the probes is a real comparison
-that can come out false, rather than a program that ran and printed.
+load-bearing rather than inert. C4, C7b, C8b, C9b, C10b, C11b and C12b are the ones
+that matter for the assertions: they prove a PASS from the probes is a real
+comparison that can come out false, rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
 Nothing here shows ace_engine computes the *right* numbers in an absolute sense --
@@ -636,6 +639,45 @@ if os.path.exists(gnustep_demo):
     else:
         print(f"  [skip] C11b GNUstep runtime pixel control: no gnustep-back bundle "
               f"found ({backend!r}); install it to enable")
+
+    # --- C12: event forwarding drives the engine (Stage 4) --------------------
+    # C11b proves the shell renders at a given size; C12 proves a GNUstep event
+    # changes what the engine computes: -keyDown: and -mouseDown: each toggle the
+    # divider's percent width, and -setFrameSize: relayouts the tree. The events
+    # are synthesized and sent straight to the responder methods (no xdotool on
+    # this host), so this measures the NSResponder -> model -> engine-relayout
+    # seam, not the X server's event delivery (that part is GNUstep's).
+    gnustep_demo_mutant = f"{HERE}/build/ace_gnustep_demo_mutant"
+
+    def _gnustep_events(exe):
+        p = subprocess.run(["xvfb-run", "-a", "-s", "-screen 0 1600x1200x24", exe,
+                            "--size", "360x640", "--events"],
+                           capture_output=True, text=True)
+        line = ""
+        for ln in p.stdout.splitlines():
+            if "event-toggle" in ln:
+                line = ln.strip()
+        return p.returncode, line
+
+    if backend is not None and shutil.which("xvfb-run") and os.path.exists(gnustep_demo_mutant):
+        rc_ok, line_ok = _gnustep_events(gnustep_demo)
+        rc_mut, line_mut = _gnustep_events(gnustep_demo_mutant)
+        # 360 wide: divider is 0.8*360=288, then 0.4*360=144, then 0.2*360=72;
+        # the resize to 480 makes the half-width node 240.
+        report("C12a a GNUstep key/mouse event relayouts the engine",
+               rc_ok == 0 and "key div 288 -> 144" in line_ok and "mouse div -> 72" in line_ok
+               and "resize pct -> 240" in line_ok,
+               f"rc={rc_ok}: {line_ok}",
+               "AppKit's -keyDown: and -mouseDown: reach the model and the engine "
+               "lays the tree out again, and -setFrameSize: relayouts too, so the "
+               "shell is interactive rather than a still frame")
+        report("C12b the interaction mutant does NOT relayout",
+               rc_mut != 0 and "-> 144" not in line_mut,
+               f"rc={rc_mut}: {line_mut}",
+               "the key/mouse handlers are what makes C12a pass; with them inert "
+               "the width does not change, so C12a's PASS is not vacuous")
+    else:
+        print("  [skip] C12 GNUstep event controls: no interaction mutant or backend")
 else:
     report("C11a the GNUstep view links ace_engine and defines ArkUIView", False,
            f"{gnustep_demo} not built", "n/a")

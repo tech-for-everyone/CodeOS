@@ -428,6 +428,25 @@ if(GNUSTEP_GUI_FOUND AND GNUSTEP_CONFIG AND X11_FOUND)
         target_link_libraries(ace_gnustep_demo PRIVATE
             "-Wl,--start-group" ace_paint_support ace_tree_support ace_layout "-Wl,--end-group"
             ${GNUSTEP_GUI_LINK_FLAGS})
+
+        # Negative control for the event path (Stage 4): the same view with its
+        # mouse/key handlers made inert. controls.py requires `--events` on this
+        # binary to FAIL, so a PASS from the real demo proves the event handlers
+        # actually drive the engine relayout.
+        add_executable(ace_gnustep_demo_mutant gnustep_demo.mm)
+        target_compile_options(ace_gnustep_demo_mutant PRIVATE
+            -fobjc-runtime=gcc
+            -fconstant-string-class=NSConstantString
+            -fobjc-exceptions
+            -fexceptions
+            -DGNUSTEP -DGNU_RUNTIME=1 -DGNUSTEP_BASE_LIBRARY=1 -DGNU_GUI_LIBRARY=1
+            -I${GNUSTEP_OBJC_INCLUDE_ROOT}
+        )
+        target_compile_definitions(ace_gnustep_demo_mutant PRIVATE ACE_NO_INTERACT=1)
+        target_link_libraries(ace_gnustep_demo_mutant PRIVATE
+            "-Wl,--start-group" ace_paint_support ace_tree_support ace_layout "-Wl,--end-group"
+            ${GNUSTEP_GUI_LINK_FLAGS})
+
         message(STATUS "ace_gnustep_demo: enabled (gnustep-gui ${GNUSTEP_GUI_VERSION})")
     else()
         message(STATUS "ace_gnustep_demo: skipped (no objc/objc.h under /usr/lib/gcc)")

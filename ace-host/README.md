@@ -17,7 +17,8 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_boundary_probe                                # a second engine painter -> rect + lines + raster
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
 ./build/ace_gnustep_demo --size 800x600                   # the same layout in a GNUstep NSView
-python3 controls.py                                       # 29 negative controls, exit 0
+./build/ace_gnustep_demo --size 360x640 --events          # drive key/mouse/resize into the engine
+python3 controls.py                                       # 31 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -331,6 +332,26 @@ Two environment details were load-bearing:
   Xvfb screen silently turned the 360x640 case into 360x480. C11b runs Xvfb with
   `-screen 0 1600x1200x24` so both test sizes are exact.
 
+## Stage 4: events drive the engine
+
+Interaction is the last piece of "a live runtime" before CodeOS. `ArkUIView`
+forwards the three AppKit events the engine cares about: `setFrameSize:` marks the
+view dirty, and `keyDown:` / `mouseDown:` cycle the engine-painted divider's
+percent width (0.8 -> 0.4 -> 0.2) and redraw.
+
+`--events` sends synthesized `NSEvent`s to those responder methods and checks what
+the *engine* computed afterwards: the divider's frame width must go 288 -> 144 -> 72
+at 360 wide, and after `setFrameSize:480x640` the half-width node must be 240
+(control C12a). The negative case is `ace_gnustep_demo_mutant` (the same source
+with `-DACE_NO_INTERACT`), whose mouse/key handlers are inert: its `--events` run
+must exit non-zero (C12b). So the shell is interactive rather than a still frame,
+and that PASS is a real comparison, not a program that ran.
+
+One honest limit: the events are delivered by calling the responder methods
+directly, not through the X server. This host has no `xdotool`/`xte`, and event
+*delivery* is GNUstep's job; what this port owns -- `NSResponder` -> model ->
+engine relayout -> `NSView` redraw -- is exactly what C12 measures.
+
 ## Two measurements that changed the shape of the work
 
 **1. Use the compiler the project uses.** `frameworks/base` gets 32/63 files clean
@@ -365,7 +386,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (29/29)
+## Negative controls (31/31)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -388,12 +409,14 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C10c / C10d | the capture is not line-only | eight sampled pixels match the engine-emitted rect + corner lines; the boundary mutant exits non-zero |
 | C11a | the GNUstep shell's dependence on the engine | the binary links `LinearLayoutUtils` + `DividerPainter::DrawLine` and defines `ArkUIView` with `drawRect:` |
 | C11b | the GNUstep `NSView` render path | `draws >= 1` (AppKit's `drawRect:` ran) and the pixels match the C8 counts (`0.5*W` node, `0.8*W` engine-painted divider) at two sizes |
+| C12a | the GNUstep shell's dependence on events | a synthesized key/mouse event changes the engine's divider width and a resize changes the node's width (288→144→72, 240) |
+| C12b | the event handlers are what changes the model | the inert-handler mutant's `--events` run exits non-zero |
 
-C4, C7d, C9d and C10d are the controls that protect the assertions:
-`ace_layout_probe_mutant`, `ace_tree_probe_mutant`, `ace_paint_probe_mutant` and
-`ace_boundary_probe_mutant` are the same sources with one deliberately wrong
-expectation compiled in, and they must FAIL. If any ever passes, every PASS from
-its real probe is worthless.
+C4, C7d, C9d, C10d and C12b are the controls that protect the assertions:
+`ace_layout_probe_mutant`, `ace_tree_probe_mutant`, `ace_paint_probe_mutant`,
+`ace_boundary_probe_mutant` and `ace_gnustep_demo_mutant` are the same sources with
+one deliberately wrong ingredient compiled in, and they must FAIL. If any ever
+passes, every PASS from its real probe is worthless.
 
 C2b caught a real bug in an earlier version of itself, which had failed to actually
 remove the shims directory — the control failed, correctly, and the control was
@@ -447,7 +470,7 @@ framebuffer.
 | 2c | paint a whole `FrameNode` tree (background/border/foreground) | engine-raster pixel assertions | not started |
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
 | 3b | a GNUstep app wraps that output in an NSView | `ace_gnustep_demo` + controls C11a/C11b | **done** |
-| 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
+| 4 | mouse/keyboard/resize forwarded into ace_engine | `ace_gnustep_demo --events` + controls C12a/C12b | **done** |
 | 5 | bring it to CodeOS | boot-verified | not started |
 
 ## Environment (host)
@@ -482,7 +505,7 @@ blocker.
 | `ace_visual.hpp` | shared scene + engine layout/paint -> pixels, used by both the X11 and GNUstep shells |
 | `gnustep_demo.mm` | GNUstep `ArkUIView : NSView` hosting the same engine scene; events drive relayout |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 29 negative controls; must exit 0 |
+| `controls.py` | 31 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
@@ -508,12 +531,13 @@ blocker.
   `ACE_UNITTEST`). It is what showed the naive closure growing 517 → 1016 → 1289
   and reaching Skia/OHOS IPC — i.e. that closing it wholesale is the wrong move.
   `classify.py` and `closure.py` remain for compile/header reachability.
-* **The GNUstep shell renders, but its event forwarding is not yet a control.**
-  `gnustep_demo.mm` forwards resize (verified: `setFrameSize:` drives a relayout)
-  and mouse/key (`SetPercentWidth`), but only the resize/render path is exercised
-  by a probe; the click/key loop is Stage 4. The backend is `gnustep-back` (a
-  separate package from `gnustep-gui`), and GNUstep clamps a window to the X
-  screen, so headless checks must give Xvfb a screen at least as large as the
-  window.
+* **The GNUstep shell renders and relayouts on events, but X event *delivery* is
+  not tested.** C11 proves the live render; C12 proves `keyDown:`, `mouseDown:` and
+  `setFrameSize:` each drive an engine relayout, with an inert-handler mutant that
+  must fail. The events are sent straight to the responder methods, because
+  delivery is GNUstep's job and this host has no `xdotool`/`xte`. The backend is
+  `gnustep-back` (a separate package from `gnustep-gui`), and GNUstep clamps a
+  window to the X screen, so headless checks must give Xvfb a screen at least as
+  large as the window.
 * `securec.h` covers three functions. `refbase.h` does not share OHOS refcounting.
 * Nothing here has been run on CodeOS. That is stage 5.
