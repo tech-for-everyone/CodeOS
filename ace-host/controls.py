@@ -539,6 +539,102 @@ else:
     report("C10d the boundary mutant probe exits NON-zero", False,
            f"{boundary_mutant} not built", "n/a")
 
+# --- C11: the GNUstep shell (Stage 3b) ----------------------------------------
+# gnustep_demo.mm is Objective-C++: `ArkUIView : NSView` runs the same engine
+# scene as ace_window_demo, but AppKit owns the window and the event loop. The
+# bridge has two halves that are checked separately:
+#   * build/link: the binary must contain the engine's layout and paint entry
+#     points and the ArkUIView class, i.e. the Objective-C++ view really drives
+#     ace_engine and is not a stub;
+#   * runtime: a real AppKit draw of that scene must produce the same pixel
+#     counts the X11 control C8 does. That half needs GNUstep's drawing backend
+#     (the gnustep-back bundle), a separate package from gnustep-gui. When it is
+#     absent the runtime half is SKIPPED, not reported as a pass: with no backend
+#     there is no NSView to draw into.
+gnustep_demo = f"{HERE}/build/ace_gnustep_demo"
+
+if os.path.exists(gnustep_demo):
+    nm = subprocess.run(["nm", "-C", gnustep_demo], capture_output=True, text=True).stdout
+    has_measure = "OHOS::Ace::NG::LinearLayoutUtils::Measure" in nm
+    has_layout = "OHOS::Ace::NG::LinearLayoutUtils::Layout" in nm
+    has_drawline = "OHOS::Ace::NG::DividerPainter::DrawLine" in nm
+    has_view = "_OBJC_CLASS_ArkUIView" in nm
+    has_drawrect = "_i_ArkUIView__drawRect_" in nm
+    report("C11a the GNUstep view links ace_engine and defines ArkUIView",
+           has_measure and has_layout and has_drawline and has_view and has_drawrect,
+           f"LinearLayoutUtils::Measure={has_measure}, Layout={has_layout}, "
+           f"DividerPainter::DrawLine={has_drawline}, ArkUIView class={has_view}, "
+           f"drawRect:={has_drawrect}",
+           "the NSView subclass drives the same real engine layout and paint as the "
+           "X11 demo, so the GNUstep shell is a shell around the engine, not a stub")
+
+    def _find_gnustep_backend():
+        for root in ("/usr/lib/GNUstep/Bundles", "/usr/local/lib/GNUstep/Bundles",
+                     os.path.expanduser("~/GNUstep/Library/Bundles")):
+            if not os.path.isdir(root):
+                continue
+            for name in os.listdir(root):
+                if "gnustep-back" in name:
+                    return os.path.join(root, name)
+        return None
+
+    backend = _find_gnustep_backend()
+    if backend is not None and shutil.which("xvfb-run"):
+        def _gnustep_counts(width, height, tag):
+            d = tempfile.mkdtemp(prefix="acehost-c11-")
+            ppm = os.path.join(d, f"gnustep_{tag}.ppm")
+            p = subprocess.run(["xvfb-run", "-a", gnustep_demo, "--size", f"{width}x{height}",
+                                "--screenshot", ppm],
+                               capture_output=True, text=True)
+            if p.returncode != 0 or not os.path.exists(ppm):
+                shutil.rmtree(d, ignore_errors=True)
+                return None, None, None, f"rc={p.returncode}: {p.stderr.strip()[:160]}"
+            data = open(ppm, "rb").read()
+            header = data[:15].split(b"\n")
+            if header[:3] != [b"P6", f"{width} {height}".encode(), b"255"]:
+                shutil.rmtree(d, ignore_errors=True)
+                return None, None, None, f"bad header {header[:3]}"
+            pix = data[15:]
+
+            def count(rgb):
+                target = bytes(rgb)
+                return sum(1 for i in range(0, len(pix), 3) if pix[i:i + 3] == target)
+
+            pct = count((0xff, 0x2d, 0x95))
+            div = count((0xff, 0xd2, 0x4a))
+            draws = None
+            for line in p.stdout.splitlines():
+                if "renders=" in line and "draws=" in line:
+                    draws = int(line.split("draws=")[1].split()[0])
+            shutil.rmtree(d, ignore_errors=True)
+            return pct, div, draws, ""
+
+        pct1, div1, draws1, e1 = _gnustep_counts(360, 640, "360")
+        pct2, div2, draws2, e2 = _gnustep_counts(640, 480, "640")
+        want1 = (360 // 2 - 2) * (30 - 2)
+        want2 = (640 // 2 - 2) * (30 - 2)
+        wd1 = int(0.8 * 360) * 4
+        wd2 = int(0.8 * 640) * 4
+        ok = (pct1 == want1 and pct2 == want2 and pct1 != pct2 and
+              div1 == wd1 and div2 == wd2 and div1 != div2 and
+              draws1 is not None and draws1 >= 1 and draws2 is not None and draws2 >= 1)
+        report("C11b the GNUstep NSView draws the engine's layout and paint",
+               ok,
+               f"draws {draws1}/{draws2} (>=1 = AppKit drawRect ran); "
+               f"0.5-width node pixels {pct1} (want {want1}) / {pct2} (want {want2}); "
+               f"engine-painted divider pixels {div1} (want {wd1}) / {div2} (want {wd2})"
+               + (f"; {e1}{e2}" if (e1 or e2) else ""),
+               "AppKit's drawRect: ran the engine's layout and paint through the "
+               "NSView, and the pixels track the window size, so the shell hosts a "
+               "live engine rather than a static image")
+    else:
+        print(f"  [skip] C11b GNUstep runtime pixel control: no gnustep-back bundle "
+              f"found ({backend!r}); install it to enable")
+else:
+    report("C11a the GNUstep view links ace_engine and defines ArkUIView", False,
+           f"{gnustep_demo} not built", "n/a")
+    print("  [skip] C11b GNUstep runtime pixel control: ace_gnustep_demo not built")
+
 print()
 failed = results.count(False)
 print(f"{'ALL CONTROLS OK' if not failed else 'CONTROLS FAILED'}: "

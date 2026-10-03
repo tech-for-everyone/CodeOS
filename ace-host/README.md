@@ -16,7 +16,8 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_paint_probe                                   # engine paint code -> its own draw command + raster
 ./build/ace_boundary_probe                                # a second engine painter -> rect + lines + raster
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
-python3 controls.py                                       # 27 negative controls, exit 0
+./build/ace_gnustep_demo --size 800x600                   # the same layout in a GNUstep NSView (needs gnustep-back)
+python3 controls.py                                       # 28 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -24,6 +25,11 @@ python3 classify.py <dir>                                 # compile-and-bucket a
 `xvfb-run -a ./build/ace_window_demo --frames 1 --screenshot out.ppm` to present
 once and exit. It is only built when X11 is found, so the rest of the build is
 unaffected on a host without it.
+
+`ace_gnustep_demo` is Objective-C++ and is only built when `gnustep-gui` is found
+(and is linked against the engine the same way the X11 demo is). It also needs
+GNUstep's drawing backend, the `gnustep-back` bundle, to open a window; see
+[Stage 3b](#stage-3b-the-gnustep-shell-wired-and-linked-runtime-needs-gnustep-back).
 
 ## Why a host build first, and why this is not the OpenHarmony build
 
@@ -272,9 +278,51 @@ C8c counts them: the length is `0.8*W`, stroke 4, so the count is `4 * 0.8*W` at
 both sizes, and C8a checks `DividerPainter::DrawLine` is linked.
 
 This is the host visual runtime: **layout is ArkUI's, the divider's paint is
-ArkUI's, pixels are ours, and the size comes from the window**. It is not yet the
-GNUstep shell (Stage 3 proper), and not yet a whole `FrameNode` tree painted by the
-engine (Stage 2c) -- those stay the next steps.
+ArkUI's, pixels are ours, and the size comes from the window**. A whole
+`FrameNode` tree painted by the engine (Stage 2c) is still open; the GNUstep shell
+is [Stage 3b](#stage-3b-the-gnustep-shell-wired-and-linked-runtime-needs-gnustep-back).
+
+## Stage 3b: the GNUstep shell (wired and linked; runtime needs gnustep-back)
+
+`gnustep_demo.mm` is the `ArkUIView : NSView` box from the target architecture:
+GNUstep owns `NSApplication`, `NSWindow` and the event loop, and the view owns the
+same engine scene as the X11 demo. The engine work is *shared*, not copied --
+both shells call `BuildVisualScene` / `RenderVisualScene` in `ace_visual.hpp` --
+so they cannot drift into showing different content.
+
+```
+NSView drawRect:            -> RenderVisualScene(view bounds)   # engine layout + engine paint
+NSView setFrameSize:        -> setNeedsDisplay:                 # a resize becomes a relayout
+NSView mouseDown:/keyDown:  -> SetPercentWidth + setNeedsDisplay # an event changes the model
+```
+
+`drawRect:` runs the engine, repacks the surface's `0x00RRGGBB` pixels into an
+`NSBitmapImageRep` and blits it. For headless checking, `--screenshot FILE` drives
+the real AppKit draw path and dumps the same surface as a PPM, printing whether the
+draw went through `drawRect:` (`draws=`) or the direct fallback (`renders=`).
+
+**What is verified now** (control C11a): the binary links the engine's
+`LinearLayoutUtils::Measure`/`Layout` and `DividerPainter::DrawLine` and defines
+the `ArkUIView` class with its `drawRect:` method -- i.e. the Objective-C++ view
+really drives ace_engine. The build is gated on `pkg-config --exists gnustep-gui`
+and on the GNU runtime's `objc/objc.h`, and CMake's OBJCXX language is enabled only
+inside that gate, so a host without GNUstep still builds.
+
+**What is blocked** (control C11b is skipped, not faked): opening the window needs
+GNUstep's drawing *backend*, the `gnustep-back` bundle. `gnustep-gui` is the class
+library and is installed; `gnustep-back` is a separate package and is not. Without
+it `[NSApplication sharedApplication]` raises `Unable to find backend back`, which
+the demo catches and reports as exit code 5. The runtime pixel control (the same
+`0.5*W` / `0.8*W` counts C8 checks, plus `draws >= 1`) is wired and will run as
+soon as the backend is present; until then it is reported as a skip so a green
+`controls.py` cannot be mistaken for a proof that the shell renders.
+
+One link flag was load-bearing: `gnustep-config --gui-libs` emits `-rdynamic`,
+which puts every global symbol in the dynamic table and so **defeats
+`--gc-sections`** -- the mechanism that lets the engine link without its service
+core. Dropping `-rdynamic` (the app resolves its classes at link time) brings the
+closure back to exactly what the X11 demo links; with it, `Matrix4`, `AceTrace` and
+`ui_node_multi_thread` undefined references reappear.
 
 ## Two measurements that changed the shape of the work
 
@@ -310,7 +358,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (27/27)
+## Negative controls (28/28)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -331,6 +379,8 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C9c / C9d | the raster's tie to the engine's draw command | eight sampled pixels match the engine-emitted segment; the paint mutant exits non-zero |
 | C10a / C10b | the second painter's dependence on the engine | the binary links `DebugBoundaryPainter`; the probe exits 0 |
 | C10c / C10d | the capture is not line-only | eight sampled pixels match the engine-emitted rect + corner lines; the boundary mutant exits non-zero |
+| C11a | the GNUstep shell's dependence on the engine | the binary links `LinearLayoutUtils` + `DividerPainter::DrawLine` and defines `ArkUIView` with `drawRect:` |
+| C11b | the GNUstep `NSView` render path | `draws >= 1` (AppKit's `drawRect:` ran) and the pixels match the C8 counts; **skipped, not passed, until `gnustep-back` is installed** |
 
 C4, C7d, C9d and C10d are the controls that protect the assertions:
 `ace_layout_probe_mutant`, `ace_tree_probe_mutant`, `ace_paint_probe_mutant` and
@@ -389,16 +439,19 @@ framebuffer.
 | 2b | the engine's paint code emits draw commands (two painters), captured, rastered, and shown live | `ace_paint_probe`, `ace_boundary_probe` + controls C9/C10; window C8c | **done** |
 | 2c | paint a whole `FrameNode` tree (background/border/foreground) | engine-raster pixel assertions | not started |
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
-| 3b | a GNUstep app wraps that output in a VM window | screenshot | not started |
+| 3b | a GNUstep app wraps that output in an NSView | `ace_gnustep_demo` + control C11a; C11b once `gnustep-back` is installed | **wired; runtime blocked on gnustep-back** |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
 | 5 | bring it to CodeOS | boot-verified | not started |
 
 ## Environment (host)
 
-Arch Linux. `gnustep-base` and `gnustep-make` are in `extra`; `gnustep-gui` and
-`libobjc2` need AUR/source and `yay` is present. QEMU 11.1.1 is available for the VM.
-GitHub is reachable. No Skia is installed — which, per the `ACE_UNITTEST` finding,
-is not automatically a blocker.
+Arch Linux. `gnustep-make`, `gnustep-base` and `gnustep-gui` are in `extra` and
+installed. GNUstep's X11/cairo drawing backend, `gnustep-back`, is **not** in the
+repos (it is AUR/source) and is not installed — that is the one package the
+runtime half of Stage 3b waits on (`yay -S gnustep-back`). `yay` and `makepkg` are
+present but installing needs root, and `sudo` requires a password here. QEMU 11.1.1
+is available for the VM. GitHub is reachable. No Skia is installed — which, per the
+`ACE_UNITTEST` finding, is not automatically a blocker.
 
 ## Files
 
@@ -420,8 +473,10 @@ is not automatically a blocker.
 | `boundary_probe.cpp` | boundary probe: real `DebugBoundaryPainter` rect + corner lines + software raster |
 | `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
 | `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
+| `ace_visual.hpp` | shared scene + engine layout/paint -> pixels, used by both the X11 and GNUstep shells |
+| `gnustep_demo.mm` | GNUstep `ArkUIView : NSView` hosting the same engine scene; events drive relayout |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 27 negative controls; must exit 0 |
+| `controls.py` | 28 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
@@ -447,5 +502,10 @@ is not automatically a blocker.
   `ACE_UNITTEST`). It is what showed the naive closure growing 517 → 1016 → 1289
   and reaching Skia/OHOS IPC — i.e. that closing it wholesale is the wrong move.
   `classify.py` and `closure.py` remain for compile/header reachability.
+* **The GNUstep shell links, but its runtime half needs `gnustep-back`.** Control
+  C11a proves the `ArkUIView : NSView` bridge links the real engine (with
+  `-rdynamic` dropped so `--gc-sections` still keeps the service core out); C11b,
+  which would prove a live AppKit draw, is skipped until the drawing-backend
+  bundle is installed. `gnustep-gui` alone is the class library, not the renderer.
 * `securec.h` covers three functions. `refbase.h` does not share OHOS refcounting.
 * Nothing here has been run on CodeOS. That is stage 5.

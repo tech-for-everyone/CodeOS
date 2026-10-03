@@ -366,3 +366,72 @@ add_executable(ace_boundary_probe_mutant boundary_probe.cpp)
 target_link_libraries(ace_boundary_probe_mutant PRIVATE
     "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
 target_compile_definitions(ace_boundary_probe_mutant PRIVATE ACE_BOUNDARY_MUTANT=1)
+
+# Stage 3b: the GNUstep shell. `ArkUIView : NSView` (gnustep_demo.mm) owns the
+# same engine scene as ace_window_demo and is driven by AppKit events instead of
+# raw X11: drawRect: runs the engine, setFrameSize: relayouts, mouseDown:/keyDown:
+# change the model. The engine work is shared through ace_visual.hpp, so this is a
+# shell around the Stage 3a runtime, not a second implementation of it.
+#
+# Gated twice so a host without GNUstep still builds:
+#   * pkg-config must see gnustep-gui (gnustep-make's gnustep-config exists even
+#     when the GUI kit is absent, so it alone is not enough to gate on);
+#   * the ObjC++ compiler must find `objc/objc.h`, which on this runtime is GCC's
+#     GNU runtime header under the GCC include root -- a directory clang does not
+#     search by default. CMake's OBJCXX language is enabled only inside this gate.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GNUSTEP_GUI QUIET gnustep-gui)
+endif()
+find_program(GNUSTEP_CONFIG gnustep-config)
+
+if(GNUSTEP_GUI_FOUND AND GNUSTEP_CONFIG AND X11_FOUND)
+    file(GLOB _ace_objc_headers /usr/lib/gcc/*/*/include/objc/objc.h)
+    if(_ace_objc_headers)
+        list(GET _ace_objc_headers 0 _ace_objc_header)
+        get_filename_component(_ace_objc_include "${_ace_objc_header}" DIRECTORY)
+        get_filename_component(GNUSTEP_OBJC_INCLUDE_ROOT "${_ace_objc_include}" DIRECTORY)
+
+        # OBJCXX has not been enabled by project(); turn it on now that we know
+        # there is a GUI kit to build against. Force clang++ (the compiler the
+        # rest of this build uses) rather than letting CMake pick g++.
+        set(CMAKE_OBJCXX_COMPILER clang++)
+        set(CMAKE_OBJCXX_STANDARD 17)
+        enable_language(OBJCXX)
+
+        # gnustep-config --gui-libs lists the runtime libraries (including
+        # -lgnustep-gui, which pkg-config --libs gnustep-gui omits). It also
+        # carries -flto=auto; our objects are not LTO, and clang spells the flag
+        # differently, so drop it before handing the rest to the linker.
+        execute_process(COMMAND ${GNUSTEP_CONFIG} --gui-libs
+            OUTPUT_VARIABLE _ace_gnustep_gui_libs OUTPUT_STRIP_TRAILING_WHITESPACE)
+        separate_arguments(GNUSTEP_GUI_LINK_FLAGS UNIX_COMMAND "${_ace_gnustep_gui_libs}")
+        list(FILTER GNUSTEP_GUI_LINK_FLAGS EXCLUDE REGEX "^-flto")
+        # gnustep-config also emits -rdynamic, which puts every global symbol in
+        # the dynamic table. That makes the linker keep sections --gc-sections
+        # would otherwise drop, dragging the engine's unreachable service core
+        # back into the link (measured: Matrix4, AceTrace and ui_node_multi_thread
+        # undefined references). This app resolves its classes at link time, so it
+        # does not need the dynamic export.
+        list(FILTER GNUSTEP_GUI_LINK_FLAGS EXCLUDE REGEX "^-rdynamic")
+
+        add_executable(ace_gnustep_demo gnustep_demo.mm)
+        target_compile_options(ace_gnustep_demo PRIVATE
+            # Select the GNU (GCC) Objective-C runtime, not the NeXT/libobjc2 one.
+            -fobjc-runtime=gcc
+            -fconstant-string-class=NSConstantString
+            -fobjc-exceptions
+            -fexceptions
+            -DGNUSTEP -DGNU_RUNTIME=1 -DGNUSTEP_BASE_LIBRARY=1 -DGNU_GUI_LIBRARY=1
+            -I${GNUSTEP_OBJC_INCLUDE_ROOT}
+        )
+        target_link_libraries(ace_gnustep_demo PRIVATE
+            "-Wl,--start-group" ace_paint_support ace_tree_support ace_layout "-Wl,--end-group"
+            ${GNUSTEP_GUI_LINK_FLAGS})
+        message(STATUS "ace_gnustep_demo: enabled (gnustep-gui ${GNUSTEP_GUI_VERSION})")
+    else()
+        message(STATUS "ace_gnustep_demo: skipped (no objc/objc.h under /usr/lib/gcc)")
+    endif()
+else()
+    message(STATUS "ace_gnustep_demo: skipped (gnustep-gui/gnustep-config/X11 not all found)")
+endif()

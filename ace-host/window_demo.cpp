@@ -29,9 +29,7 @@
 #include <cstring>
 #include <string>
 
-#include "ace_scene.hpp"
-#include "core/components_ng/pattern/divider/divider_modifier.h"
-#include "paint_raster.hpp"
+#include "ace_visual.hpp"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -42,66 +40,10 @@ using namespace OHOS::Ace::NG;
 
 namespace {
 
-constexpr uint32_t kBackground = 0x00141822u;
-
-// The engine-painted divider. Its geometry is computed by the engine (both the
-// node's rectangle from layout and the line endpoints from DividerPainter); the
-// colour and the raster are ours, because the mock pen is stateless (the style a
-// painter sets on a pen never reaches the canvas -- see paint_capture.hpp).
-constexpr uint32_t kDividerColor = 0x00ffd24aU;
-constexpr float kDividerStroke = 4.0f;
-constexpr float kDividerWidthFraction = 0.8f;
-
-// A scene whose layout visibly depends on the viewport size: the column centres
-// its children, and `pct` is measured as a fraction of the width the engine
-// hands down, so both position and size change when the window does.
-struct Scene {
-    RefPtr<ProbeWrapper> root;
-    RefPtr<ProbeWrapper> a;
-    RefPtr<ProbeWrapper> b;
-    RefPtr<ProbeWrapper> pct;
-    RefPtr<ProbeWrapper> div;
-    RefPtr<ProbeWrapper> row;
-    RefPtr<ProbeWrapper> c;
-    RefPtr<ProbeWrapper> d;
-};
-
-Scene BuildScene()
-{
-    Scene s;
-    s.root = AceType::MakeRefPtr<ProbeWrapper>(
-        "root", true, ProbeWrapper::Kind::CONTAINER, SizeF(0, 0), 0x00141822u, FlexAlign::CENTER, FlexAlign::CENTER);
-    s.a = AceType::MakeRefPtr<ProbeWrapper>(
-        "a", false, ProbeWrapper::Kind::LEAF, SizeF(100, 50), 0x00e05c5cu);
-    s.b = AceType::MakeRefPtr<ProbeWrapper>(
-        "b", false, ProbeWrapper::Kind::LEAF, SizeF(160, 40), 0x005ce0a0u);
-    // A unique colour for the proportional node, so the resize control can count
-    // exactly its pixels and check the count is 0.5 x width.
-    s.pct = AceType::MakeRefPtr<ProbeWrapper>(
-        "pct", false, ProbeWrapper::Kind::LEAF, SizeF(0, 30), 0x00ff2d95u);
-    s.pct->SetPercentWidth(0.5f);
-    // A divider whose length is a fraction of the parent width. It is not filled
-    // by the raster: Present paints it with a real DividerModifier driven from
-    // this node's engine-computed rectangle, so its pixels are the engine's draw
-    // command, not ours.
-    s.div = AceType::MakeRefPtr<ProbeWrapper>(
-        "div", false, ProbeWrapper::Kind::LEAF, SizeF(0, 4), kDividerColor);
-    s.div->SetPercentWidth(kDividerWidthFraction);
-    s.row = AceType::MakeRefPtr<ProbeWrapper>(
-        "row", false, ProbeWrapper::Kind::CONTAINER, SizeF(0, 0), 0x00f0c020u, FlexAlign::CENTER, FlexAlign::CENTER);
-    s.c = AceType::MakeRefPtr<ProbeWrapper>(
-        "c", false, ProbeWrapper::Kind::LEAF, SizeF(80, 60), 0x006090f0u);
-    s.d = AceType::MakeRefPtr<ProbeWrapper>(
-        "d", false, ProbeWrapper::Kind::LEAF, SizeF(80, 60), 0x00b060e0u);
-    s.row->AddChild(s.c);
-    s.row->AddChild(s.d);
-    s.root->AddChild(s.a);
-    s.root->AddChild(s.b);
-    s.root->AddChild(s.pct);
-    s.root->AddChild(s.div);
-    s.root->AddChild(s.row);
-    return s;
-}
+// The scene (the tree, the palette, the engine-painted divider) is shared with
+// the GNUstep view and lives in ace_visual.hpp, so the two shells cannot drift
+// into showing different content and the pixel controls measure one definition.
+using Scene = acehost::VisualScene;
 
 int ParseSize(const char* spec, int* w, int* h)
 {
@@ -144,39 +86,9 @@ void HandleEvent(XEvent& e, Atom wmDelete, bool* done, bool* dirty, int* w, int*
 void Present(Display* dpy, ::Window win, GC gc, Visual* visual, int depth, Scene& scene, int w, int h,
     acehost::Surface& surface)
 {
-    LayoutScene(scene.root, static_cast<float>(w), static_cast<float>(h));
-
-    surface = acehost::Surface(w, h, kBackground);
-    const auto rects = acehost::Flatten(scene.root);
-    for (const auto& p : rects) {
-        if (p.tag == "div") {
-            continue; // painted by the engine's paint code below
-        }
-        surface.FillRect(p.x, p.y, p.w, p.h, p.color);
-    }
-
-    // Engine paint: drive a real DividerModifier from the node's engine-computed
-    // rectangle, capture the DrawLine it emits, and rasterise that. The line
-    // endpoints are DividerPainter's arithmetic; only the colour and the raster
-    // are ours (the mock pen is stateless -- see paint_capture.hpp).
-    for (const auto& p : rects) {
-        if (p.tag != "div") {
-            continue;
-        }
-        DividerModifier divider;
-        divider.SetStrokeWidth(kDividerStroke);
-        divider.SetDividerLength(static_cast<float>(p.w));
-        divider.SetVertical(false);
-        divider.SetLineCap(LineCap::SQUARE);
-        divider.SetOffset(OffsetF(static_cast<float>(p.x), static_cast<float>(p.y)));
-        divider.SetColor(LinearColor(0xff000000u | kDividerColor));
-        acehost::RecordingCanvas canvas;
-        DrawingContext context { canvas, static_cast<float>(w), static_cast<float>(h) };
-        divider.Draw(context);
-        for (const auto& line : canvas.lines) {
-            acehost::StampLine(surface, line, kDividerColor, static_cast<int>(kDividerStroke));
-        }
-    }
+    // The engine lays the tree out and its paint code draws the divider; the
+    // raster is ours. Shared with the GNUstep view via ace_visual.hpp.
+    acehost::RenderVisualScene(scene, w, h, surface);
 
     XImage* img = XCreateImage(dpy, visual, static_cast<unsigned int>(depth), ZPixmap, 0,
         reinterpret_cast<char*>(surface.Data()), static_cast<unsigned int>(w), static_cast<unsigned int>(h), 32, 0);
@@ -227,7 +139,7 @@ int main(int argc, char* argv[])
     }
 
     std::printf("ace window demo: ArkUI layout in an X11 window\n");
-    Scene scene = BuildScene();
+    Scene scene = acehost::BuildVisualScene();
 
     Display* dpy = XOpenDisplay(nullptr);
     if (dpy == nullptr) {
@@ -246,7 +158,7 @@ int main(int argc, char* argv[])
     XMapWindow(dpy, win);
     GC gc = XCreateGC(dpy, win, 0, nullptr);
 
-    acehost::Surface surface(w, h, kBackground);
+    acehost::Surface surface(w, h, acehost::kVisualBackground);
     bool done = false;
     bool dirty = true;
     int presents = 0;
