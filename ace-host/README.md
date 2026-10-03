@@ -13,8 +13,9 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_layout_probe                                  # foundation: 20 assertions, exit 0
 ./build/ace_ng_layout_probe                               # layout: 20 assertions, exit 0
 ./build/ace_tree_probe                                    # layout a tree + rasterise -> tree_layout.ppm
+./build/ace_paint_probe                                   # engine paint code -> its own draw command + raster
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
-python3 controls.py                                       # 18 negative controls, exit 0
+python3 controls.py                                       # 22 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -124,8 +125,10 @@ standalone), the mock does not.
 
 The service core still has to be faced to run a real `FrameNode` tree, but it is
 no longer in the way of measuring layout geometry. Stage 2 splits in two:
-**2a, lay a tree out** (done) and **2b, let the engine paint it** (open, needs
-Skia or the engine's preview render path).
+**2a, lay a tree out** (done) and **2b, let the engine paint** — the engine's own
+paint code now runs off-pipeline and emits a draw command we capture and raster
+(done, below); painting a whole `FrameNode` tree still needs a render backend
+(open).
 
 ## Stage 2a: the real algorithm over a tree
 
@@ -171,7 +174,39 @@ them. Before that, the same tree run failed to link with 758 references; after,
 it closes. (A `FrameNode` path cannot use the same trick as cheaply — its
 constructor is one function that itself references the render/task core.)
 
-### Stage 2b is still open, and why
+## Stage 2b: the engine's own paint code, driven off-pipeline
+
+Stage 2a rasterised geometry the engine's *layout* produced. Stage 2b asks the
+other half: what does the engine's *paint* code draw, and can that be observed
+without Skia?
+
+`ace_paint_probe` builds a real `DividerModifier`, hands it a `DrawingContext`
+around a `RecordingCanvas`, and calls `ContentModifier::Draw`
+(`components_ng/base/modifier.cpp`), which calls `DividerModifier::onDraw`, which
+builds a `DividerPainter` and calls `DividerPainter::DrawLine`
+(`components_ng/render/divider_painter.cpp`). That function computes the line's
+endpoints from the stroke width, line-cap style, orientation and length — engine
+arithmetic — and emits `canvas.DrawLine`. The probe records those endpoints and
+asserts them: a SQUARE cap insets by `width/2`, a BUTT cap does not, vertical swaps
+the axes, and `DividerModifier` coerces BUTT to SQUARE while
+`strokeWidthLimitation_` is on (its default). It then rasterises the captured
+segment.
+
+* **Real:** the paint logic — `DividerModifier`, `DividerPainter`, and every
+  endpoint. Control C9a checks that the binary links
+  `DividerPainter::DrawLine`, so the arithmetic under test is the engine's.
+* **Ours:** the rasteriser, and the colour. The engine's pen is a stateless mock
+  (`TestingPen::SetColor`/`SetWidth` are no-ops), so the canvas observes *geometry*
+  but not *style*; the probe supplies the colour it configured.
+* **Recovered:** the draw command. That is the seam a host backend plugs into:
+  override the canvas, take the engine's draw list, rasterise it yourself.
+
+This is one painter, not the whole tree. Background/border/foreground are Rosen
+`RSNode` property setters rather than canvas draw calls, so painting a real
+`FrameNode` tree still needs a render context or a software backend — the closure
+measured next.
+
+### Why painting the whole tree is still open
 
 Constructing one real `FrameNode` (`FrameNode::CreateFrameNode` + a `Pattern`)
 and linking it against `libace_layout.a` produces **1226 undefined references**,
@@ -255,7 +290,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (18/18)
+## Negative controls (22/22)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -271,11 +306,13 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C7a / C7b | the tree probe's dependence on the real algorithm | the binary links `LinearLayoutUtils::Measure`/`Layout`; the probe exits 0 |
 | C7c / C7d | the raster's tie to the layout | six sampled pixels match the computed rectangles; the tree mutant exits non-zero |
 | C8a / C8b | the live window's dependence on the real algorithm and on the resize | the binary links `LinearLayoutUtils`; a 0.5-width node's pixel count is `W/2-2` wide at two different window widths |
+| C9a / C9b | the paint probe's dependence on the engine's painter | the binary links `DividerPainter::DrawLine`; the probe exits 0 |
+| C9c / C9d | the raster's tie to the engine's draw command | eight sampled pixels match the engine-emitted segment; the paint mutant exits non-zero |
 
-C4 and C7d are the controls that protect the assertions:
-`ace_layout_probe_mutant` and `ace_tree_probe_mutant` are the same sources with one
-deliberately wrong expectation compiled in, and they must FAIL. If either ever
-passes, every PASS from its real probe is worthless.
+C4, C7d and C9d are the controls that protect the assertions:
+`ace_layout_probe_mutant`, `ace_tree_probe_mutant` and `ace_paint_probe_mutant` are
+the same sources with one deliberately wrong expectation compiled in, and they must
+FAIL. If any ever passes, every PASS from its real probe is worthless.
 
 C2b caught a real bug in an earlier version of itself, which had failed to actually
 remove the shims directory — the control failed, correctly, and the control was
@@ -325,7 +362,8 @@ framebuffer.
 | 1a | layout core compiles renderer-free | `classify.py` 51/51 + C5 | **done** |
 | 1b | layout core **links** and measures geometry | `ace_ng_layout_probe` + controls C4/C6 | **done** |
 | 2a | the real algorithm lays out a tree, software-rastered | `ace_tree_probe` + controls C7 | **done** |
-| 2b | ace_engine paints the tree itself | engine-raster pixel assertions | not started |
+| 2b | the engine's paint code emits a draw command, captured and rastered | `ace_paint_probe` + controls C9 | **done (first draw)** |
+| 2c | paint a whole `FrameNode` tree (background/border/foreground) | engine-raster pixel assertions | not started |
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
 | 3b | a GNUstep app wraps that output in a VM window | screenshot | not started |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | interaction drives a change | not started |
@@ -352,10 +390,12 @@ is not automatically a blocker.
 | `layout_probe.cpp` | layout probe: assertions over LayoutConstraint geometry (links via the upstream mock) |
 | `ace_scene.hpp` | shared scene: `ProbeWrapper` (LayoutWrapper double), `LayoutScene`, `Flatten`, `Surface` software raster |
 | `tree_probe.cpp` | tree probe: real `LinearLayoutUtils` over the double + software raster |
+| `paint_capture.hpp` | `RecordingCanvas`: records the engine's `DrawLine` geometry |
+| `paint_probe.cpp` | paint probe: real `DividerModifier`/`DividerPainter` draw command + software raster |
 | `tree_seams.cpp` | host seams for unreachable service paths of the tree probe (no layout arithmetic) |
 | `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 18 negative controls; must exit 0 |
+| `controls.py` | 22 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
@@ -368,9 +408,12 @@ is not automatically a blocker.
   measures is therefore the real layout arithmetic, with `ScaleProperty` fixed at
   the no-container default. Stage 2a's tree probe stays on the same side of that
   seam: it feeds the real algorithm a `LayoutWrapper` double and answers the
-  unreachable service paths in `tree_seams.cpp`. Letting the engine **paint**
-  (Stage 2b) is different — that wants a real `FrameNode`, which is the 1226-ref
-  service/render core, and that closure is still open.
+  unreachable service paths in `tree_seams.cpp`. The engine's **paint** code runs
+  off-pipeline too (Stage 2b): `ace_paint_probe` drives a real `DividerModifier`
+  and captures its draw command with a recording canvas, but that is one painter,
+  not a tree. Painting a whole `FrameNode` (background/border/foreground) wants a
+  real `FrameNode` and a render context, which is the 1226-ref service/render core;
+  that closure is still open (Stage 2c).
 * **Link coverage is measured as a tool.** `linkclosure.py` maps undefined symbols
   in a linker failure to the `.cpp` files that appear to define them (tracking
   namespace scope and trimming Itanium ABI tags), with explicit policy (prefer

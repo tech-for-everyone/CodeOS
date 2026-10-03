@@ -307,3 +307,42 @@ if(X11_FOUND)
 else()
     message(STATUS "ace_window_demo: skipped (X11 not found)")
 endif()
+
+# Stage 2b: the engine's own paint code emits a draw command, we capture it and
+# rasterise it. See paint_probe.cpp and paint_capture.hpp.
+#
+# ContentModifier::Draw already lives in ace_layout (components_ng/base/modifier.cpp
+# is inside the base glob). The TUs below are the measured link closure of driving
+# a real DividerModifier off-pipeline:
+#
+#   divider_modifier.cpp       the paint logic (onDraw builds a DividerPainter).
+#   divider_painter.cpp        the engine arithmetic under test (DrawLine endpoints).
+#   drawing_prop_convertor.cpp ToRSColor / ToRSPoint / ToRSCapStyle.
+#   color.cpp                  Color/LinearColor statics (LinearColor::BLUE etc.).
+#   inspector_constants.cpp    the V2::*_ETS_TAG strings referenced from the
+#                              accessibility PropertyValue/vtable pulled by the
+#                              converter's closure.
+#   mock_log_wrapper.cpp       upstream's va_list log sink (see ace_tree_support).
+#   fake_modifier_adapter.cpp  upstream's no-Rosen ModifierAdapter::RemoveModifier
+#                              seam, called from Modifier::~Modifier.
+set(ACE_PAINT_ENGINE_SOURCES
+    ${ACE}/frameworks/core/components_ng/pattern/divider/divider_modifier.cpp
+    ${ACE}/frameworks/core/components_ng/render/divider_painter.cpp
+    ${ACE}/frameworks/core/components_ng/render/drawing_prop_convertor.cpp
+    ${ACE}/frameworks/core/components/common/properties/color.cpp
+    ${ACE}/frameworks/core/components_v2/inspector/inspector_constants.cpp
+    ${ACE}/test/mock/adapter/ohos/osal/mock_log_wrapper.cpp
+    ${ACE}/frameworks/core/components_ng/render/adapter/fake_modifier_adapter.cpp
+)
+add_library(ace_paint_support STATIC ${ACE_PAINT_ENGINE_SOURCES})
+target_link_libraries(ace_paint_support PRIVATE ace_layout)
+
+add_executable(ace_paint_probe paint_probe.cpp)
+target_link_libraries(ace_paint_probe PRIVATE
+    "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
+
+# Negative control on the paint probe's comparisons, exactly like the tree mutant.
+add_executable(ace_paint_probe_mutant paint_probe.cpp)
+target_link_libraries(ace_paint_probe_mutant PRIVATE
+    "-Wl,--start-group" ace_paint_support ace_layout "-Wl,--end-group")
+target_compile_definitions(ace_paint_probe_mutant PRIVATE ACE_PAINT_MUTANT=1)

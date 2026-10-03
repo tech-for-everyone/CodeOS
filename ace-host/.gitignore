@@ -4,3 +4,6 @@ __pycache__/
 
 # Raster written next to the probe by ace_tree_probe. Scratch output.
 tree_layout.ppm
+
+# Raster written next to the probe by ace_paint_probe. Scratch output.
+paint_probe.ppm

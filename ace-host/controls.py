@@ -23,11 +23,15 @@ Each control REMOVES one ingredient and requires a specific failure:
   C8  the live window                   -> links the real LinearLayoutUtils, and
                                            resizing makes the engine re-lay the
                                            tree out (pixel count tracks W/2)
+  C9  the paint probe                   -> links the real DividerPainter::DrawLine,
+                                           its PASS is a comparison that can fail,
+                                           and the raster contains the engine's
+                                           own draw command
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
-load-bearing rather than inert. C4, C7b and C8b are the ones that matter for the
-assertions: they prove a PASS from the probes is a real comparison that can come
-out false, rather than a program that ran and printed.
+load-bearing rather than inert. C4, C7b, C8b and C9b are the ones that matter for
+the assertions: they prove a PASS from the probes is a real comparison that can
+come out false, rather than a program that ran and printed.
 
 WHAT THESE CONTROLS DO NOT PROVE, per control, is printed with the result.
 Nothing here shows ace_engine computes the *right* numbers in an absolute sense --
@@ -357,6 +361,80 @@ if os.path.exists(window_demo) and shutil.which("xvfb-run"):
            "come from one hard-coded picture")
 else:
     print("  [skip] C8 window demo control (no ace_window_demo and/or no xvfb-run)")
+
+# --- C9: the PAINT probe runs the engine's own draw code ---------------------
+# Stage 2b. paint_probe drives a real DividerModifier off-pipeline and captures the
+# DrawLine the engine emits. Three things must hold for its PASS to mean anything:
+# the binary must contain the engine's DividerPainter::DrawLine (so the endpoint
+# arithmetic under test is the engine's, not the probe's), the PASS must be able to
+# fail, and the raster it reports must contain the engine-computed segment.
+paint_probe = f"{HERE}/build/ace_paint_probe"
+paint_mutant = f"{HERE}/build/ace_paint_probe_mutant"
+
+if os.path.exists(paint_probe):
+    nm = subprocess.run(["nm", "-C", paint_probe], capture_output=True, text=True).stdout
+    has_drawline = "OHOS::Ace::NG::DividerPainter::DrawLine" in nm
+    report("C9a  paint probe links the engine's DividerPainter::DrawLine",
+           has_drawline,
+           f"DividerPainter::DrawLine present={has_drawline} "
+           f"(present = linked, not garbage-collected, so actually called)",
+           "the captured endpoints were computed by the engine's painter, not by "
+           "arithmetic reimplemented in the probe")
+
+    d = tempfile.mkdtemp(prefix="acehost-c9-")
+    ppm = os.path.join(d, "paint.ppm")
+    p = subprocess.run([paint_probe, ppm], capture_output=True, text=True)
+    report("C9b  the real paint probe exits 0",
+           p.returncode == 0,
+           f"rc={p.returncode}, last line: {p.stdout.strip().splitlines()[-1]!r}",
+           "the engine's paint path runs to completion and its computed endpoints "
+           "match the asserted values")
+
+    ok_file = os.path.exists(ppm)
+    header_ok = False
+    pixels_ok = False
+    detail = "no PPM written"
+    if ok_file:
+        data = open(ppm, "rb").read()
+        header = data[:15].split(b"\n")
+        header_ok = header[:3] == [b"P6", b"240 240", b"255"]
+        pix = data[15:]
+        red = (0xFF, 0x00, 0x00)
+        bg = (0x10, 0x10, 0x18)
+        want = {
+            (10, 22): red, (209, 22): red,    # painted span [10, 210)
+            (9, 22): bg, (210, 22): bg,       # just outside it
+            (100, 20): red, (100, 23): red,   # 4px stroke rows [20, 24)
+            (100, 19): bg, (100, 24): bg,
+        }
+        pixels_ok = all(
+            tuple(pix[(y * 240 + x) * 3:(y * 240 + x) * 3 + 3]) == rgb
+            for (x, y), rgb in want.items())
+        detail = (f"header ok={header_ok}; the {len(want)} sampled pixels match the "
+                  f"engine-emitted segment={pixels_ok}")
+    report("C9c  the reported raster contains the engine's draw command",
+           ok_file and header_ok and pixels_ok,
+           detail,
+           "the software rasteriser draws the segment the engine emitted, so the "
+           "'paint proof' is the engine's draw output, not a hard-coded picture")
+    shutil.rmtree(d, ignore_errors=True)
+else:
+    report("C9a  paint probe links the engine's DividerPainter::DrawLine", False,
+           f"{paint_probe} not built", "n/a")
+    report("C9b  the real paint probe exits 0", False, f"{paint_probe} not built", "n/a")
+    report("C9c  the reported raster contains the engine's draw command", False,
+           f"{paint_probe} not built", "n/a")
+
+if os.path.exists(paint_mutant):
+    p = subprocess.run([paint_mutant], capture_output=True, text=True)
+    report("C9d  the paint mutant probe exits NON-zero",
+           p.returncode != 0 and "MUTANT" in p.stdout,
+           f"rc={p.returncode}; mutant line present: {'MUTANT' in p.stdout}",
+           "the paint probe's comparisons can come out false, so C9b's PASS is not "
+           "vacuous")
+else:
+    report("C9d  the paint mutant probe exits NON-zero", False,
+           f"{paint_mutant} not built", "n/a")
 
 print()
 failed = results.count(False)
