@@ -61,6 +61,16 @@ int  lgame_running(void);
 void lgame_title(const char *title);
 
 /* ── Timing ── */
+/* Target frames per second. lgame_frame_begin() paces the loop to this by
+ * sleeping off the remainder of the frame, so a game that redraws as fast as
+ * the blit allows does not peg a core. Set to 0 to disable pacing and get the
+ * old uncapped behaviour. */
+#define LGAME_TARGET_FPS 60
+/* Hard ceiling on a single frame's delta, so a frame that was delayed (a
+ * debugger, a mode switch, a long preemption) cannot teleport every moving
+ * object across the screen on the next update. */
+#define LGAME_MAX_DT_MS  100
+
 uint64_t lgame_time_ms(void);
 uint64_t lgame_delta_time_ms(void);
 void     lgame_frame_begin(void);
@@ -100,6 +110,158 @@ void lgame_draw_texture_tinted(lgame_texture_t *tex, int x, int y, lgame_color_t
 void lgame_texture_put_pixel(lgame_texture_t *tex, int x, int y, lgame_color_t color);
 lgame_color_t lgame_texture_get_pixel(lgame_texture_t *tex, int x, int y);
 
+/* ── 3D ── */
+/* All 3D maths is 16.16 signed fixed point. Not a stylistic choice: the kernel
+ * builds with -mno-sse, so there is no hardware float, and a soft-float
+ * pipeline in a per-pixel loop is not affordable. Fixed point is also what
+ * makes a frame reproducible, which the pixel assertions depend on -- the same
+ * vertex must land on the same pixel every run, or a check would be asserting
+ * against rounding noise. */
+typedef int32_t lgame_fp_t;
+#define LGAME_FP_SHIFT 16
+#define LGAME_FP_ONE   (1 << LGAME_FP_SHIFT)
+#define LGAME_FP_HALF  (1 << (LGAME_FP_SHIFT - 1))
+/* Handy world constants, so callers never write a float literal. */
+#define LGAME_FP_0     0
+#define LGAME_FP_1     LGAME_FP_ONE
+#define LGAME_FP_2     (2 * LGAME_FP_ONE)
+#define LGAME_FP_4     (4 * LGAME_FP_ONE)
+/* Angles, in radians, 16.16. Public because a game holding a yaw needs to wrap
+ * it into a known range -- an unbounded yaw both drifts in precision and makes
+ * the value the check reads ambiguous. */
+#define LGAME_FP_PI       205887     /* 3.14159 */
+#define LGAME_FP_HALF_PI  102944     /* 1.57080 */
+#define LGAME_FP_TWO_PI   411775     /* 6.28319 */
+/* Convert a plain C float to 16.16. Compile-time use only -- a float *value*
+ * in a hot loop defeats the whole point. */
+#define LGAME_FP(f)    ((lgame_fp_t)((f) * (double)LGAME_FP_ONE))
+
+/* Multiply and divide two 16.16 values. A game moving a position around a room
+ * needs these constantly, so they are here rather than hidden inside the
+ * renderer: a caller that forgets to use them gets a silently wrong position,
+ * and there is no compiler warning for `a * b` on two 16.16 operands.
+ *
+ * The multiply is 64-bit then arithmetic-shifted, so it floors like the rest of
+ * the fixed-point code (a negative product shifts toward -inf, where C's `/`
+ * would truncate toward zero). mul_div below is the one to reach for when
+ * dividing a product, because `(a * b) / c` in raw integers overflows where
+ * fp_mul then fp_div does not. */
+static inline lgame_fp_t lgame_fp_mul(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)(((int64_t)a * (int64_t)b) >> LGAME_FP_SHIFT);
+}
+static inline lgame_fp_t lgame_fp_add(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)((uint32_t)a + (uint32_t)b);
+}
+static inline lgame_fp_t lgame_fp_sub(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)((uint32_t)a - (uint32_t)b);
+}
+/* Fold an angle into (-PI, PI]. Keeping a yaw in one turn rather than letting
+ * it accumulate is what stops a long session drifting in the low bits, and it
+ * makes the number a check reads unambiguous. */
+static inline lgame_fp_t lgame_fp_wrap_pi(lgame_fp_t a) {
+    a %= LGAME_FP_TWO_PI;
+    if (a < 0) a += LGAME_FP_TWO_PI;
+    if (a > LGAME_FP_PI) a -= LGAME_FP_TWO_PI;
+    return a;
+}
+/* Saturates rather than dividing by zero. The saturation value is chosen to be
+ * large enough that a later 1/z comparison is still ordered, not a number a
+ * caller will accidentally use as a coordinate. */
+static inline lgame_fp_t lgame_fp_div(lgame_fp_t a, lgame_fp_t b) {
+    if (b == 0) return (a < 0) ? (lgame_fp_t)-0x7FFFFFFF : (lgame_fp_t)0x7FFFFFFF;
+    return (lgame_fp_t)((((int64_t)a) << LGAME_FP_SHIFT) / (int64_t)b);
+}
+/* (a * b) / c in one step, without overflowing on the intermediate product. */
+static inline lgame_fp_t lgame_fp_mul_div(lgame_fp_t a, lgame_fp_t b, lgame_fp_t c) {
+    if (c == 0) return (a * b < 0) ? (lgame_fp_t)-0x7FFFFFFF : (lgame_fp_t)0x7FFFFFFF;
+    return (lgame_fp_t)((((int64_t)a) * (int64_t)b) / (int64_t)c);
+}
+
+/* sin/cos of a 16.16 angle in radians, from a quarter-wave table with linear
+ * interpolation. Exact and deterministic -- the same angle gives the same bits
+ * on every run, which is what lets a pixel assertion state an expected value
+ * rather than a range. Accuracy is about 7.5e-5 radians, far below what a
+ * camera turn can show. Angles are taken modulo 2*PI. */
+lgame_fp_t lgame_fp_sin(lgame_fp_t a);
+lgame_fp_t lgame_fp_cos(lgame_fp_t a);
+
+typedef struct {
+    lgame_fp_t x, y, z;
+} lgame_vec3_t;
+
+static inline lgame_vec3_t lgame_vec3(lgame_fp_t x, lgame_fp_t y, lgame_fp_t z) {
+    lgame_vec3_t v; v.x = x; v.y = y; v.z = z; return v;
+}
+
+/* Depth buffer resolution. 16 bits is plenty: it is quantised on 1/z, which
+ * spreads precision towards the near plane where it is needed. */
+#define LGAME_3D_DEPTH_BITS 16
+
+/* Open a 3D viewport `view_w` x `view_h` with its top-left at (ox, oy) on the
+ * surface, and allocate its depth buffer. Returns LGAME_OK, or a negative
+ * lgame_error_t. Nothing outside the viewport rect is touched, so the caller
+ * still owns the rest of the screen (lgame_clear() for a sky, or draw there).
+ *
+ * The viewport is deliberately smaller than the surface: a software rasteriser
+ * pays per pixel, and a 320x240 viewport is 76k pixels against 1M for the full
+ * 1280x800 -- a 13x saving for no visible loss when the result is scaled up. */
+int  lgame_3d_begin(int view_w, int view_h, int ox, int oy);
+void lgame_3d_end(void);
+/* 1 while a viewport is open. */
+int  lgame_3d_active(void);
+
+/* Look from `eye` at `target`. `focal_px` is the focal length in *pixels*,
+ * not a field of view, because that is the form the projection actually wants
+ * and it avoids a tan() in a freestanding build. focal_px = view_h gives
+ * roughly a 53-degree vertical field. Degenerate cases (eye == target) leave
+ * the previous camera in place rather than producing a zero basis.
+ *
+ * `focal_px` is a plain int on purpose. It used to be an lgame_fp_t, which
+ * meant the caller had to pre-scale it into 16.16 while every other 3D
+ * coordinate was scaled at the call site -- a units trap with no compiler
+ * warning, which it duly fell into twice: lgame_3d_begin()'s own default
+ * camera passed view_h unscaled (so the default focal was the clamp floor and
+ * projected every triangle onto a single degenerate point), and a game passed
+ * 240 expecting pixels. The only symptom was `drawn=0` with a healthy
+ * `submitted`. */
+void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, int focal_px);
+
+/* Fill the viewport with `sky` and reset the depth buffer. */
+void lgame_3d_clear(lgame_color_t sky);
+
+/* Backface culling, off by default. The depth buffer alone resolves
+ * visibility, so culling is purely an optimisation; leaving it off means a
+ * caller with the wrong winding still gets a correct image, just slower. */
+void lgame_3d_cull(int on);
+
+/* Draw one flat-shaded triangle. Vertices are clipped against the near plane,
+ * then rasterised with a depth test, so order of submission does not matter
+ * and intersecting geometry resolves correctly. */
+void lgame_3d_tri(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c, lgame_color_t col);
+
+/* Flat shading. `lgame_3d_light()` sets one directional light; `dir` is
+ * normalised for you, and `ambient` is the fraction of full brightness a
+ * surface facing away from the light still gets, in 16.16 (LGAME_FP_1 == 1.0
+ * == no light contribution, 0 == fully black).
+ *
+ * `n` is the surface normal in the order of a->b->c, and need not be
+ * normalised. Faces pointing away from the light get exactly `ambient`;
+ * faces pointing straight at it get exactly 1.0, so a scene built from
+ * axis-aligned quads has exactly computable colours -- which is what lets the
+ * selftest assert a lit face's value rather than only that two faces differ.
+ */
+void lgame_3d_light(lgame_vec3_t dir, lgame_fp_t ambient);
+void lgame_3d_tri_shaded(lgame_vec3_t a, lgame_vec3_t b, lgame_vec3_t c,
+                         lgame_vec3_t n, lgame_color_t col);
+
+/* Counters, so a caller (and the selftest) can tell "nothing was drawn" from
+ * "everything was culled or clipped away". */
+int  lgame_3d_submitted(void);
+int  lgame_3d_drawn(void);
+int  lgame_3d_clipped(void);
+int  lgame_3d_culled(void);
+void lgame_3d_reset_counters(void);
+
 /* ── Audio ── */
 int  lgame_play_sound(int freq, int duration_ms);
 int  lgame_play_tone(int freq, int duration_ms, int volume);
@@ -109,6 +271,11 @@ void lgame_audio_error(void);
 void lgame_audio_success(void);
 
 /* ── Input ── */
+/* Keys are raw byte values, not scan codes: the PS/2 layer maps to ASCII
+ * before lgame sees it, and the serial drain delivers bytes as they arrive.
+ * Both paths therefore agree on 27 for ESC, which is what every title polls. */
+#define LGAME_KEY_ESC 27
+
 void lgame_input_poll(void);
 int  lgame_key_down(int key);
 int  lgame_key_pressed(int key);
@@ -121,5 +288,20 @@ int  lgame_mouse_button(int button);  /* 0=left, 1=right */
 /* ── Math helpers ── */
 int  lgame_rand(int min, int max);
 void lgame_srand(uint32_t seed);
+
+/* ── Self test ── */
+/* Renders a fixed, known frame and returns 0 on success, negative on the
+ * first failure. Exists because most of this API is otherwise unreachable
+ * from the shipped binary: the two games only use the rect, pixel and text
+ * primitives, so --gc-sections discards the entire texture path along with
+ * everything that calls it. A defect in code that no binary contains cannot
+ * be runtime-verified, and a fix to it is only build-verified.
+ *
+ * scripts/lgame_check.py asserts the resulting framebuffer against the
+ * colours named below, so this is a real pixel check, not a self-report.
+ * The probe rectangles are laid out in the top-left of a 1280x800 surface and
+ * each occupies a distinct 64x64 block; the test draws a half-transparent
+ * quad over a solid backdrop so the blend result is a known value. */
+int  lgame_selftest(void);
 
 #endif

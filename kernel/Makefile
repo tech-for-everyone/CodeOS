@@ -138,6 +138,7 @@ SRC_C   += $(QT_BACKEND_DIR)/updater.c
 SRC_C   += $(QT_BACKEND_DIR)/lgame.c
 SRC_C   += $(QT_BACKEND_DIR)/lgame_pong.c
 SRC_C   += $(QT_BACKEND_DIR)/lgame_snake.c
+SRC_C   += $(QT_BACKEND_DIR)/lgame_rooms.c
 SRC_C   += kernel/x11_server.c kernel/x11_stubs.c
     SRC_CXX = kernel/cxx_support.cpp kernel/stdcxx_support.cpp kernel/xserver.cpp arch/fb.cpp \
               kernel/desktop.cpp kernel/qt_desktop.cpp \

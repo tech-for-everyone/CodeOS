@@ -57,7 +57,16 @@ static int parse_shebang(const char *buf, int buflen, char *interp, int interp_s
     return 1;
 }
 
-#define ELF_MAX_PAGES 16
+#define ELF_MAX_PAGES 1024       /* 4 MiB of file; the ArkUI ELF is ~2.8 MiB */
+#define ELF_SEG_PAGES_MAX 4096   /* 16 MiB of mapped segment virtual address */
+
+/* The ELF loader runs single-threaded (exec is serial in this kernel), and a
+ * whole-file image plus the mapped-page bookkeeping no longer fit on a stack
+ * that also holds a 64 KiB ramfs buffer. Keep them at file scope. */
+static uint8_t *elf_file_pages[ELF_MAX_PAGES];
+static uint64_t elf_map_pa[ELF_SEG_PAGES_MAX];
+static uint64_t elf_map_phys[ELF_SEG_PAGES_MAX];
+static uint64_t elf_map_prot[ELF_SEG_PAGES_MAX];
 
 /* ── Internal: map PT_LOAD segments for one ELF, return entry+phdr info ── */
 /* Also checks for PT_INTERP; if found, stores path in interp_out. */
@@ -68,29 +77,44 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
                              uint64_t *entry_out, elf_auxv_info_t *auxv,
                              char *interp_out) {
     uint64_t entry = hdr->entry;
-    uint8_t *file_pages[ELF_MAX_PAGES];
     int page_count = 0;
     int file_len = 0;
 
     if (from_ramfs && ramfs_buf) {
         for (int p = 0; p < ELF_MAX_PAGES && p * 4096 < ramfs_len; p++) {
-            file_pages[p] = (uint8_t*)pmm_alloc_page();
-            if (!file_pages[p]) break;
+            elf_file_pages[p] = (uint8_t*)pmm_alloc_page();
+            if (!elf_file_pages[p]) break;
             page_count++;
             int chunk = ramfs_len - p * 4096;
             if (chunk > 4096) chunk = 4096;
-            memcpy((void*)phys_to_virt((uint64_t)file_pages[p]), ramfs_buf + p * 4096, chunk);
+            memcpy((void*)phys_to_virt((uint64_t)elf_file_pages[p]), ramfs_buf + p * 4096, chunk);
         }
         file_len = ramfs_len;
     } else {
-        for (int p = 0; p < ELF_MAX_PAGES; p++) {
-            file_pages[p] = (uint8_t*)pmm_alloc_page();
-            if (!file_pages[p]) break;
+        /* Read the whole file, page by page, at its true file offset. The old
+         * loop called ext2_read_file_path() with no offset, so every page got
+         * byte 0..4095 and any binary past the first read was corrupt. */
+        int fsz = ext2_read_file_path(path, NULL, 0);
+        if (fsz <= 0) return -1;
+        if ((uint64_t)fsz > (uint64_t)ELF_MAX_PAGES * 4096u) {
+            kprintf("elf: %s too large (%d bytes, max %d)\n",
+                    path, fsz, ELF_MAX_PAGES * 4096);
+            return -1;
+        }
+        file_len = fsz;
+        for (int p = 0; p < ELF_MAX_PAGES && p * 4096 < fsz; p++) {
+            elf_file_pages[p] = (uint8_t*)pmm_alloc_page();
+            if (!elf_file_pages[p]) break;
             page_count++;
-            int r = ext2_read_file_path(path, (void*)phys_to_virt((uint64_t)file_pages[p]), 4096);
-            if (r <= 0) { pmm_free_page((uint64_t)file_pages[p]); page_count--; break; }
-            if (r > file_len) file_len = p * 4096 + r;
-            if (r < 4096) break;
+            int want = fsz - p * 4096;
+            if (want > 4096) want = 4096;
+            int r = ext2_read_file_at(path, p * 4096,
+                                      (void*)phys_to_virt((uint64_t)elf_file_pages[p]), want);
+            if (r <= 0) { pmm_free_page((uint64_t)elf_file_pages[p]); page_count--; break; }
+        }
+        if (page_count == 0 || (uint64_t)page_count * 4096u < (uint64_t)fsz) {
+            for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)elf_file_pages[p]);
+            return -1;
         }
     }
 
@@ -104,7 +128,7 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
                 int pi = off / 4096;
                 int po = off % 4096;
                 if (pi < page_count) {
-                    const char *src = (const char*)phys_to_virt((uint64_t)file_pages[pi]) + po;
+                    const char *src = (const char*)phys_to_virt((uint64_t)elf_file_pages[pi]) + po;
                     int k = 0;
                     while (k < SHEBANG_MAX - 1 && src[k] && src[k] != '\n') {
                         interp_out[k] = src[k]; k++;
@@ -120,10 +144,6 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
      * and a read-only data segment begins mid-page), the loader must map one
      * physical page per page-address and let each segment copy into its own
      * offsets, then apply the union of segment protections. */
-    #define ELF_SEG_PAGES_MAX 512
-    uint64_t map_pa[ELF_SEG_PAGES_MAX];
-    uint64_t map_phys[ELF_SEG_PAGES_MAX];
-    uint64_t map_prot[ELF_SEG_PAGES_MAX];
     int n_map_pages = 0;
 
     for (int i = 0; i < hdr->phnum; i++) {
@@ -136,8 +156,8 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
         uint64_t offset = ph->offset;
 
         if (vaddr + memsz > 0x7FFFFFFFFFFFULL || vaddr + memsz < vaddr) {
-            for (int p = 0; p < n_map_pages; p++) pmm_free_page(map_phys[p]);
-            for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)file_pages[p]);
+            for (int p = 0; p < n_map_pages; p++) pmm_free_page(elf_map_phys[p]);
+            for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)elf_file_pages[p]);
             return -1;
         }
 
@@ -153,23 +173,23 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
         for (uint64_t pa = page_start; pa < page_end; pa += 0x1000) {
             int m = 0;
             for (; m < n_map_pages; m++)
-                if (map_pa[m] == pa) break;
+                if (elf_map_pa[m] == pa) break;
 
             if (m == n_map_pages) {
                 if (n_map_pages >= ELF_SEG_PAGES_MAX) {
-                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(map_phys[q]);
-                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)file_pages[q]);
+                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(elf_map_phys[q]);
+                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)elf_file_pages[q]);
                     return -1;
                 }
                 uint64_t page_phys = pmm_alloc_page();
                 if (!page_phys) {
-                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(map_phys[q]);
-                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)file_pages[q]);
+                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(elf_map_phys[q]);
+                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)elf_file_pages[q]);
                     return -1;
                 }
-                map_pa[n_map_pages] = pa;
-                map_phys[n_map_pages] = page_phys;
-                map_prot[n_map_pages] = prot;
+                elf_map_pa[n_map_pages] = pa;
+                elf_map_phys[n_map_pages] = page_phys;
+                elf_map_prot[n_map_pages] = prot;
                 n_map_pages++;
                 memset((void*)phys_to_virt(page_phys), 0, 0x1000);
                 /* Writable during the load copy; final (union) protection
@@ -177,12 +197,12 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
                 if (vmm_map_page(pa, page_phys, prot | PAGE_WRITE) < 0) {
                     pmm_free_page(page_phys);
                     n_map_pages--;
-                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(map_phys[q]);
-                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)file_pages[q]);
+                    for (int q = 0; q < n_map_pages; q++) pmm_free_page(elf_map_phys[q]);
+                    for (int q = 0; q < page_count; q++) pmm_free_page((uint64_t)elf_file_pages[q]);
                     return -1;
                 }
             } else {
-                map_prot[m] |= prot;
+                elf_map_prot[m] |= prot;
             }
         }
 
@@ -196,7 +216,7 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
             uint64_t chunk = 4096 - page_off;
             if (chunk > copy_size - j) chunk = copy_size - j;
             smap_stac();
-            memcpy((void *)(vaddr + j), (void*)(phys_to_virt((uint64_t)file_pages[page_idx]) + page_off), chunk);
+            memcpy((void *)(vaddr + j), (void*)(phys_to_virt((uint64_t)elf_file_pages[page_idx]) + page_off), chunk);
             smap_clac();
             j += chunk;
         }
@@ -204,9 +224,9 @@ static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
 
     /* Apply final protections (union of all overlapping segment flags). */
     for (int m = 0; m < n_map_pages; m++)
-        vmm_map_page(map_pa[m], map_phys[m], map_prot[m]);
+        vmm_map_page(elf_map_pa[m], elf_map_phys[m], elf_map_prot[m]);
 
-    for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)file_pages[p]);
+    for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)elf_file_pages[p]);
 
     /* Fill auxv info for this ELF */
     if (auxv) {
@@ -312,7 +332,15 @@ static int elf_load_depth(const char *path, uint64_t *entry_out, uint64_t *stack
         if (ph_end > (uint64_t)ramfs_len) return -1;
         memcpy(ph_buf, ramfs_buf + hdr.phoff, ph_end - hdr.phoff);
     } else {
-        if (ext2_read_file_path(path, ph_buf, ph_end) < (int)ph_end) {
+        /* ph_buf must hold the program-header table itself, starting at
+         * hdr.phoff. Reading from offset 0 left the ELF header at ph_buf[0]
+         * and every ph = ph_buf + i*phentsize then pointed past the table, so
+         * an ext2-hosted binary (as opposed to a ramfs-embedded one, whose
+         * branch above offsets correctly) mapped zero PT_LOAD segments and
+         * faulted on its first instruction. */
+        if (hdr.phoff >= ph_end) return -1;
+        if (ext2_read_file_at(path, (int)hdr.phoff, ph_buf,
+                              (int)(ph_end - hdr.phoff)) < (int)(ph_end - hdr.phoff)) {
             return -1;
         }
     }

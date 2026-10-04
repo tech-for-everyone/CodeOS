@@ -1,0 +1,3 @@
+[submodule "arkui"]
+	path = arkui
+	url = https://github.com/openharmony/arkui_ace_engine
