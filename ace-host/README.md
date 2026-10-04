@@ -18,7 +18,7 @@ cmake -S . -B build && cmake --build build -j"$(nproc)"   # GREEN
 ./build/ace_window_demo --size 800x600                    # live X11 window; resize re-runs the engine layout
 ./build/ace_gnustep_demo --size 800x600                   # the same layout in a GNUstep NSView
 ./build/ace_gnustep_demo --size 360x640 --events          # drive key/mouse/resize into the engine
-python3 controls.py                                       # 31 negative controls, exit 0
+python3 controls.py                                       # 34 negative controls, exit 0
 python3 classify.py <dir>                                 # compile-and-bucket any subtree
 ```
 
@@ -352,6 +352,85 @@ directly, not through the X server. This host has no `xdotool`/`xte`, and event
 *delivery* is GNUstep's job; what this port owns -- `NSResponder` -> model ->
 engine relayout -> `NSView` redraw -- is exactly what C12 measures.
 
+## Stage 5: the real engine runs inside CodeOS
+
+Stage 5 is the milestone the rest of the port was for: the *same* ArkUI source,
+built by the *same* CMake targets, loaded and executed by CodeOS itself. This is
+not the GNUstep shell cross-compiled; it is a second, freestanding consumer of the
+real engine, and the thing it proves is that the engine's arithmetic does not need
+the host, a C++ runtime, or TLS to be right.
+
+**Why the payload is raw-syscall and TLS-free.** CodeOS userspace has no C++
+runtime, no STL and no `libstdc++`, and its Linux personality has no glibc either.
+`arch_prctl` is a deliberate no-op there because the kernel owns `%fs` for its own
+TLS and has no `swapgs` (`kernel/kernel/syscall.c`), and there is no thread
+scheduler to hang a per-thread block off. So a normal static C++ binary faults the
+first time it touches TLS -- libstdc++'s prebuilt `std::string` objects read the
+`%fs:0x28` stack canary on entry. Stage 5 sidesteps this rather than solving it:
+the whole image runs with `%fs == 0`, and the pieces that would touch it are
+replaced.
+
+The freestanding runtime is split across three translation units so the kernel-free
+C and the C++ ABI do not collide over headers:
+
+| file | half | supplies |
+|---|---|---|
+| `codeos_runtime.cpp` | C++ | `operator new`/`delete` over the bump arena, the C++ ABI hooks libstdc++ expects, TLS-free `std::string::_M_create`/`_M_append`, `_start` |
+| `codeos_libc.cpp` | C (header-free) | allocator, `mem*`/`str*`, stdio, pthread, the stack-canary hook |
+| `codeos_string.cpp` | C++ | the `std::string` members, so libstdc++'s canary-reading object stays out of the link entirely |
+| `codeos_probe.cpp` | payload | calls the real layout path and prints the engine's computed geometry |
+
+`libstdc++.a` is still linked statically; only the glibc surface it actually
+touches is stubbed, and everything else is a link error rather than a silent
+no-op. The result is an `ET_EXEC` with four `PT_LOAD`s, no `PT_INTERP` and no
+dynamic section -- nothing runs an `arch_prctl` startup path.
+
+**The kernel loader had to grow.** `ace_codeos_elf` is ~2.8 MB, past the old
+`ELF_MAX_PAGES 16` (64 KiB) cap, so `kernel/kernel/elf.c` now reads the whole file
+page-by-page at its true offset (`ext2_read_file_at`, added in `ext2.c`) with
+`ELF_MAX_PAGES 1024` / `ELF_SEG_PAGES_MAX 4096`, and the file/map bookkeeping is at
+file scope instead of on a stack that already holds a 64 KiB ramfs buffer. A real
+bug surfaced the first time an **ext2**-hosted binary (as opposed to a
+ramfs-embedded one) was loaded: the ext2 branch filled `ph_buf` from file offset 0
+instead of `hdr.phoff`, so every `ph = ph_buf + i*phentsize` pointed past the
+program-header table, zero `PT_LOAD` segments were mapped, and the payload faulted
+on its first instruction. Offsetting the read by `hdr.phoff` is the whole fix, and
+it is why the boot check below is meaningful rather than an entry-point reachability
+test.
+
+**Boot evidence.** The payload is injected into a scratch copy of `kernel/disk.img`
+(the original is never touched) and run with the shell's `exec`. CodeOS then prints,
+from the engine's own computed tree:
+
+```
+ACEOS layout begin
+  [ok  ] root width got 360 want 360
+  [ok  ] root height got 640 want 640
+  [ok  ] a.y == 0 (first child) got 0 want 0
+  [ok  ] b.y == 50 (a height) got 50 want 50
+  [ok  ] row.y == 100 got 100 want 100
+  [ok  ] e.y == 160 (100 + row height 60) got 160 want 160
+  [ok  ] c.x == 0 (row first child) got 0 want 0
+  [ok  ] d.x == 80 (c width) got 80 want 80
+  [ok  ] c.y == 0 got 0 want 0
+  [ok  ] row width == 80+80 (measured from children) got 160 want 160
+  [ok  ] row height == 60 (max child height) got 60 want 60
+    root x=0 y=0 w=360 h=640
+    ... a/b/row/c/d/e
+ACEOS PASS: 0 failure(s)
+exec: process exited with status 0
+```
+
+That is the honest split: **the geometry is ArkUI's** -- measured by upstream's
+`LinearLayoutUtils` on the same `ProbeWrapper` scene Stages 2-4 use -- and the only
+thing this host contributed is the surrounding freestanding runtime and the raw
+`write`/`exit` syscalls that report it. No pixels are claimed this milestone.
+Controls C13a/C13b/C13c pin the three claims that would otherwise be assumed:
+the ELF runs and produces all 7 geometry lines (C13a), it is static with no
+interpreter or dynamic section (C13b), and a bare `%fs:0x28` read really does fault
+under these launch conditions (C13c) -- so C13a passing means the executed path
+touched no thread-local, rather than passing because TLS happened to work.
+
 ## Two measurements that changed the shape of the work
 
 **1. Use the compiler the project uses.** `frameworks/base` gets 32/63 files clean
@@ -386,7 +465,7 @@ side effect.** That gives a deliberate asymmetry:
 `securec.h` covers the three functions `frameworks/base` calls; anything else is a
 **link error, not a silent no-op**.
 
-## Negative controls (31/31)
+## Negative controls (34/34)
 
 An assertion never seen to fail is not an assertion, and a shim the compiler
 optimises away is not a shim. `controls.py` removes one ingredient at a time:
@@ -411,6 +490,9 @@ optimises away is not a shim. `controls.py` removes one ingredient at a time:
 | C11b | the GNUstep `NSView` render path | `draws >= 1` (AppKit's `drawRect:` ran) and the pixels match the C8 counts (`0.5*W` node, `0.8*W` engine-painted divider) at two sizes |
 | C12a | the GNUstep shell's dependence on events | a synthesized key/mouse event changes the engine's divider width and a resize changes the node's width (288→144→72, 240) |
 | C12b | the event handlers are what changes the model | the inert-handler mutant's `--events` run exits non-zero |
+| C13a | the freestanding ArkUI ELF runs and computes the engine geometry | the binary links `LinearLayoutUtils`; its run reports all 7 geometry lines and `ACEOS PASS` |
+| C13b | the CodeOS ELF is static with no interpreter | `PT_INTERP` absent and no dynamic section, so nothing runs an `arch_prctl` startup path |
+| C13c | any working TLS in the launch environment | a bare `%fs:0x28` read faults (`rc=-11`), so C13a's pass cannot be explained by a working thread-local |
 
 C4, C7d, C9d, C10d and C12b are the controls that protect the assertions:
 `ace_layout_probe_mutant`, `ace_tree_probe_mutant`, `ace_paint_probe_mutant`,
@@ -471,7 +553,7 @@ framebuffer.
 | 3a | a live host window shows the layout and relayouts on resize | `ace_window_demo` + control C8 | **done** |
 | 3b | a GNUstep app wraps that output in an NSView | `ace_gnustep_demo` + controls C11a/C11b | **done** |
 | 4 | mouse/keyboard/resize forwarded into ace_engine | `ace_gnustep_demo --events` + controls C12a/C12b | **done** |
-| 5 | bring it to CodeOS | boot-verified | not started |
+| 5 | the real engine runs freestanding inside CodeOS | `ace_codeos_elf` + boot serial + controls C13a/C13b/C13c | **done** |
 
 ## Environment (host)
 
@@ -504,8 +586,12 @@ blocker.
 | `window_demo.cpp` | live X11 window: presents the engine's layout, re-runs it on resize |
 | `ace_visual.hpp` | shared scene + engine layout/paint -> pixels, used by both the X11 and GNUstep shells |
 | `gnustep_demo.mm` | GNUstep `ArkUIView : NSView` hosting the same engine scene; events drive relayout |
+| `codeos_runtime.cpp` | freestanding C++ half: `operator new`/`delete`, ABI hooks, TLS-free `std::string`, `_start` |
+| `codeos_libc.cpp` | freestanding C half (header-free): allocator, `mem*`/`str*`, stdio, pthread, canary hook |
+| `codeos_string.cpp` | the `std::string` members, kept in their own TU so libstdc++'s canary-reading object stays out of the link |
+| `codeos_probe.cpp` | the CodeOS payload: runs the real layout path and prints the engine's geometry |
 | `demo.cpp` | minimal `ace_demo`: exercises the mock renderer seam |
-| `controls.py` | 31 negative controls; must exit 0 |
+| `controls.py` | 34 negative controls; must exit 0 |
 | `compat/ace_compat.hpp` | forced include covering five upstream missing-include bugs |
 | `compat/shims/` | `securec.h` (implemented), `hilog/log.h` (no-op), `refbase.h` (limited) |
 | `ohos-root/` | symlink tree so 7 files' `foundation/arkui/ace_engine/...` includes resolve |
@@ -540,4 +626,8 @@ blocker.
   window to the X screen, so headless checks must give Xvfb a screen at least as
   large as the window.
 * `securec.h` covers three functions. `refbase.h` does not share OHOS refcounting.
-* Nothing here has been run on CodeOS. That is stage 5.
+* The engine has now been run on CodeOS itself (Stage 5): `ace_codeos_elf` is
+  built by this host build and executed by the CodeOS kernel, and the serial log
+  shows its geometry. What that does **not** include is pixels -- the milestone
+  asserts computed geometry, not a rendered frame -- and TLS is still unavailable
+  in CodeOS, which is why the payload is TLS-free rather than threaded.

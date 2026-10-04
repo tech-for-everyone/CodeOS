@@ -39,6 +39,10 @@ Each control REMOVES one ingredient and requires a specific failure:
   C12 event forwarding                   -> AppKit key/mouse/resize events drive an
                                            engine relayout; an inert-handler mutant
                                            makes the control fail
+  C13 the freestanding CodeOS ELF        -> the real engine, linked with no libc and
+                                           no TLS, runs and prints the geometry; it is
+                                           static with no interpreter; and a bare %fs
+                                           read faults under the same launch
 
 C1-C3, C5 and C6 are compile/link-time and prove each shim/flag/TU swap is
 load-bearing rather than inert. C4, C7b, C8b, C9b, C10b, C11b and C12b are the ones
@@ -682,6 +686,84 @@ else:
     report("C11a the GNUstep view links ace_engine and defines ArkUIView", False,
            f"{gnustep_demo} not built", "n/a")
     print("  [skip] C11b GNUstep runtime pixel control: ace_gnustep_demo not built")
+
+# --- C13: the freestanding ArkUI ELF for CodeOS (Stage 5) ---------------------
+# CodeOS userspace has no C++ runtime and no TLS: arch_prctl(ARCH_SET_FS) is a
+# deliberate no-op in its Linux personality, so %fs stays 0. The engine is
+# therefore linked as a no-libc, raw-syscall static ELF. Three things have to
+# hold, and each is checked separately so a pass cannot be for the wrong reason:
+#   a) it runs and prints the geometry tree_probe.cpp expects -- the engine's
+#      own numbers, not a reimplementation;
+#   b) it is static with no interpreter, so no dynamic loader runs at startup to
+#      set up TLS (a static glibc binary would still call __libc_setup_tls);
+#   c) the launch environment really is TLS-hostile -- a bare `mov %fs:0x28`
+#      binary dies with SIGSEGV here, so (a)'s pass cannot be explained by TLS
+#      happening to work on the host.
+codeos_elf = f"{HERE}/build/ace_codeos_elf"
+WANT_GEOMETRY = [
+    "root x=0 y=0 w=360 h=640",
+    "a x=0 y=0 w=100 h=50",
+    "b x=0 y=50 w=100 h=50",
+    "row x=0 y=100 w=160 h=60",
+    "c x=0 y=100 w=80 h=60",
+    "d x=80 y=100 w=80 h=60",
+    "e x=0 y=160 w=100 h=50",
+]
+
+if os.path.exists(codeos_elf):
+    p = subprocess.run([codeos_elf], capture_output=True, text=True)
+    out = p.stdout + p.stderr
+    missing = [ln for ln in WANT_GEOMETRY if ln not in out]
+    passed = "ACEOS PASS: 0 failure(s)" in out
+    report("C13a the freestanding ArkUI ELF runs and computes the engine geometry",
+           p.returncode == 0 and not missing and passed,
+           f"rc={p.returncode}, geometry {len(WANT_GEOMETRY) - len(missing)}/"
+           f"{len(WANT_GEOMETRY)} lines, PASS line={passed}"
+           + (f", missing={missing}" if missing else ""),
+           "the real ArkUI layout engine, linked with no libc and no TLS, produces "
+           "the exact tree tree_probe.cpp expects -- these are the engine's numbers, "
+           "so the CodeOS payload is the engine and not a stand-in")
+
+    readelf_l = subprocess.run(["readelf", "-lW", codeos_elf],
+                               capture_output=True, text=True).stdout
+    readelf_d = subprocess.run(["readelf", "-dW", codeos_elf],
+                               capture_output=True, text=True)
+    has_interp = "INTERP" in readelf_l
+    no_dyn = "no dynamic section" in (readelf_d.stdout + readelf_d.stderr)
+    report("C13b the CodeOS ELF is static with no interpreter",
+           not has_interp and no_dyn,
+           f"PT_INTERP={has_interp}, no dynamic section={no_dyn}",
+           "with no interpreter and no dynamic section nothing runs an arch_prctl "
+           "startup path, which is what lets the image execute with %fs == 0")
+
+    # (c) Direct proof the launch conditions are hostile to TLS, so (a) is not
+    # passing because thread-locals happened to work on this host.
+    c13d = tempfile.mkdtemp(prefix="acehost-c13-")
+    c13s = os.path.join(c13d, "fsread.s")
+    c13e = os.path.join(c13d, "fsread")
+    with open(c13s, "w") as f:
+        f.write(".globl _start\n.text\n_start:\n"
+                "    movq %fs:0x28, %rax\n"
+                "    movq $60, %rax\n"
+                "    xorq %rdi, %rdi\n"
+                "    syscall\n")
+    comp = subprocess.run(["clang", "-nostdlib", "-static", "-Wl,-e,_start",
+                           c13s, "-o", c13e], capture_output=True, text=True)
+    run = (subprocess.run([c13e], capture_output=True, text=True)
+           if comp.returncode == 0 else None)
+    report("C13c a bare %fs read faults under these launch conditions",
+           comp.returncode == 0 and run is not None and run.returncode == -11,
+           f"control build rc={comp.returncode}, run rc="
+           f"{run.returncode if run is not None else 'n/a'} (want -11 = SIGSEGV)",
+           "the environment C13a runs in really does leave %fs at 0, so the ArkUI "
+           "ELF's pass means its executed path touches no thread-local; it did not "
+           "pass by having working TLS")
+    shutil.rmtree(c13d, ignore_errors=True)
+else:
+    report("C13a the freestanding ArkUI ELF runs and computes the engine geometry",
+           False, f"{codeos_elf} not built -- run cmake --build build", "n/a")
+    report("C13b the CodeOS ELF is static with no interpreter", False,
+           f"{codeos_elf} not built", "n/a")
 
 print()
 failed = results.count(False)

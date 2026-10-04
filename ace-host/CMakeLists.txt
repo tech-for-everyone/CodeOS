@@ -180,6 +180,10 @@ target_compile_options(ace_layout PUBLIC
     # default and to test/mock/.../testing_canvas.h under this flag. Without it
     # the layout core does not compile here -- see controls C5.
     -DACE_UNITTEST=1
+    # The CodeOS payload (Stage 5) links these objects as a raw-syscall ELF with
+    # no TLS. A stack canary is read from `%fs:0x28`, which does not exist there,
+    # so every engine object must be canary-free. Harmless for the host probes.
+    -fno-stack-protector
     -Wall -Wextra -Wno-unused-parameter
 )
 
@@ -453,4 +457,86 @@ if(GNUSTEP_GUI_FOUND AND GNUSTEP_CONFIG AND X11_FOUND)
     endif()
 else()
     message(STATUS "ace_gnustep_demo: skipped (gnustep-gui/gnustep-config/X11 not all found)")
+endif()
+
+# ---------------------------------------------------------------------------
+# Stage 5: the same real engine as a raw-syscall static ELF that CodeOS's Linux
+# personality can run. See codeos_probe.cpp (payload) and codeos_runtime.cpp
+# (runtime). No libc, no libstdc++ runtime, no TLS: CodeOS's arch_prctl cannot
+# set FS, so `_start`, `operator new`, the mem* functions, the libc symbols the
+# static archive reaches for, and std::string's two out-of-line members are all
+# supplied by hand.
+#
+# The payload is compiled by CMake (so it inherits the engine's exact include
+# roots and defines), then linked by a custom command that bypasses the normal
+# driver: -nostdlib means no crt0/libc, -Wl,-e,_start selects our entry point,
+# and the static libstdc++/libgcc archives fill in the container code, with our
+# std::string members stubbing out the one object that would read the canary.
+# ---------------------------------------------------------------------------
+foreach(_ace_static libstdc++.a libgcc.a libgcc_eh.a)
+    execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=${_ace_static}
+        OUTPUT_VARIABLE _ace_path OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT EXISTS "${_ace_path}")
+        find_program(ACE_GXX NAMES g++ c++ HINTS /usr/bin)
+        if(ACE_GXX)
+            execute_process(COMMAND ${ACE_GXX} -print-file-name=${_ace_static}
+                OUTPUT_VARIABLE _ace_path OUTPUT_STRIP_TRAILING_WHITESPACE)
+        endif()
+    endif()
+    set(ACE_STATIC_${_ace_static} "${_ace_path}")
+endforeach()
+
+if(EXISTS "${ACE_STATIC_libstdc++.a}" AND EXISTS "${ACE_STATIC_libgcc.a}"
+        AND EXISTS "${ACE_STATIC_libgcc_eh.a}")
+    # The payload drives the engine, so it inherits ace_layout's include roots
+    # and the forced compat header.
+    add_library(ace_codeos_payload OBJECT codeos_probe.cpp)
+    target_link_libraries(ace_codeos_payload PRIVATE ace_layout)
+
+    # The runtime must NOT inherit the forced compat header: it defines plain-C
+    # symbols (`strchr`, `fputc`, `stderr`, the pthread stubs) whose hosted
+    # declarations in <cstring>/<cstdio>/<pthread.h> would clash. It includes no
+    # engine header, so it stands alone with only the standard C++ headers.
+    add_library(ace_codeos_runtime OBJECT codeos_runtime.cpp codeos_libc.cpp codeos_string.cpp)
+
+    foreach(_ace_target ace_codeos_payload ace_codeos_runtime)
+        target_compile_options(${_ace_target} PRIVATE
+            # No C++ runtime is linked below, so exceptions and RTTI would have
+            # no implementation; -fno-use-cxa-atexit keeps static destructors
+            # from registering with an atexit that does not exist. Stack
+            # protection is off in the engine already (see ace_layout), and
+            # repeated here for our own frames -- a `%fs:0x28` read would fault
+            # on CodeOS.
+            -fno-exceptions -fno-rtti -fno-stack-protector -fno-use-cxa-atexit)
+    endforeach()
+
+    set(ACE_CODEOS_ELF ${CMAKE_BINARY_DIR}/ace_codeos_elf)
+    add_custom_command(
+        OUTPUT ${ACE_CODEOS_ELF}
+        COMMAND ${CMAKE_CXX_COMPILER}
+            -nostdlib -static -Wl,-e,_start -Wl,--gc-sections
+            -o ${ACE_CODEOS_ELF}
+            $<TARGET_OBJECTS:ace_codeos_payload>
+            $<TARGET_OBJECTS:ace_codeos_runtime>
+            -Wl,--start-group
+            $<TARGET_FILE:ace_tree_support>
+            $<TARGET_FILE:ace_layout>
+            # libstdc++.a provides the container/iostream code the engine's
+            # pulled objects reference (_Rb_tree, _Hash_bytes, operator<<,
+            # basic_ostringstream, ...) -- reimplementing those would be a port,
+            # not a runtime. What it drags in beyond that is the glibc surface
+            # (locale, wchar, printf-chk) the iostream tower touches; those
+            # symbols are stubbed in codeos_libc.cpp, so no glibc is linked.
+            "${ACE_STATIC_libstdc++.a}"
+            "${ACE_STATIC_libgcc.a}"
+            "${ACE_STATIC_libgcc_eh.a}"
+            -Wl,--end-group
+        DEPENDS ace_codeos_payload ace_codeos_runtime ace_tree_support ace_layout
+        COMMENT "Linking ace_codeos_elf (raw-syscall ELF for CodeOS)"
+        COMMAND_EXPAND_LISTS
+        VERBATIM)
+    add_custom_target(ace_codeos_elf_build ALL DEPENDS ${ACE_CODEOS_ELF})
+    message(STATUS "ace_codeos_elf: enabled (raw-syscall ELF; libstdc++ ${ACE_STATIC_libstdc++.a})")
+else()
+    message(STATUS "ace_codeos_elf: skipped (static libstdc++/libgcc not found)")
 endif()

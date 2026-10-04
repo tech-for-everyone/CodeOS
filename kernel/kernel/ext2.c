@@ -489,6 +489,13 @@ int ext2_read_file_path(const char *path, void *buf, int max) {
     return ext2_read_file(ent.inode, buf, max, 0);
 }
 
+int ext2_read_file_at(const char *path, int offset, void *buf, int max) {
+    ext2_dirent_t ent;
+    if (ext2_find(path, &ent) < 0 || !ent.valid) return -1;
+    if (ent.is_dir) return -1;
+    return ext2_read_file(ent.inode, buf, max, offset);
+}
+
 /* --- write support --- */
 
 static int write_sectors(uint32_t lba, uint32_t count, const void *buf) {
