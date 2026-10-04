@@ -99,3 +99,7 @@ kernel/bootloader/secureboot/*.key
 src/*.o
 src/*.d
 .opencode/
+
+# Local AUR build of gnustep-gui (Stage 3b host dependency). The recipe is
+# tracked at ace-host/deps/gnustep-gui/; the clone, tarball and packages are not.
+/gnustep-gui/

@@ -84,8 +84,8 @@ QEMU_ARGS=(
     -m "$MEM"
     -smp "$CPUS"
     -serial stdio
-    -enable-kvm
-    -accel kvm
+    # No -enable-kvm / -accel kvm: KVM is unavailable in this environment, so
+    # the VM runs under pure emulation (slower, but it boots the same images).
 )
 
 # USB devices

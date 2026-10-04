@@ -559,8 +559,11 @@ framebuffer.
 
 Arch Linux. `gnustep-make`, `gnustep-base`, `gnustep-gui` and `gnustep-back` are in
 `extra` and installed; `gnustep-back` is the drawing backend Stage 3b's runtime
-needs. `yay` and `makepkg` are present but installing needs root, and `sudo`
-requires a password here. QEMU 11.1.1 is available for the VM. GitHub is reachable.
+needs. (The 0.32.0 class library needs `CALL_NON_NULL_BLOCK` injected into
+`AppKitDefines.h` to build with the current toolchain; the AUR recipe carrying that
+patch is vendored at `ace-host/deps/gnustep-gui/`.) `yay` and `makepkg` are present
+but installing needs root, and `sudo` requires a password here. QEMU 11.1.1 is
+available for the VM. GitHub is reachable.
 No Skia is installed — which, per the `ACE_UNITTEST` finding, is not automatically a
 blocker.
 
