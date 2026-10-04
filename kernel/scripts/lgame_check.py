@@ -185,6 +185,78 @@ def parse_3d_spec(ser_text):
             "viewport": viewport, "counters": counters}
 
 
+# ── trigonometry ──
+#
+# Exact sin/cos at the cardinal angles. Unlike the 3D probe these are NOT a
+# second copy of what the kernel computed: they are identities in 16.16 that
+# can be written down on paper, and that is the whole point. A wrong ANGLE
+# SCALE -- the failure mode the table actually had, where every constant was
+# half what its name said and the function computed sin(2a) -- is invisible to
+# every self-consistency property there is, because sin^2+cos^2 = 1 holds just
+# as well for sin(2a) as for sin(a). Only an anchor at a cardinal angle can see
+# it. That is why this block exists and why `pyth` below is not enough.
+TRIG_ANCHORS = {
+    "zero":    (0,       65536),
+    "quarter": (65536,   0),
+    "half":    (0,      -65536),
+    "threeq":  (-65536,   0),
+    "negq":    (-65536,   0),
+    "wrap":    (0,       65536),   # sin(2*PI), cos(2*PI)
+    "wind":    (65536,   0),       # sin(300*2*PI + PI/2): wound round 300 times
+}
+
+# Worst tolerated |sin^2 + cos^2 - 1|, in 16.16 units.
+#
+# Derived, not fitted to whatever the build printed. One table step is
+# h = PI/128, and linear interpolation over a step of h costs at most h^2/8 =
+# 7.5e-5 rad; LGAME_FP_PI is rounded down from 2*pi*65536 by 0.385 of a unit,
+# a relative 1.9e-6, worth at most 1.2e-5 rad anywhere on the circle. Total
+# angular error 8.7e-5 rad, i.e. 5.7 units of 16.16. Since (s,c) sits on the
+# unit circle, s*ds + c*dc is bounded by max(|ds|,|dc|), so the identity
+# departs by at most ~2*5.7 = 12 units. 64 leaves room for fp_mul truncation and
+# is still 1000x below the 65530 that a single broken quarter-reduction
+# produces, so the margin separates the classes of failure it has to.
+TRIG_PYTH_MAX = 64
+
+# The interior of the bottom half turn has no cardinal anchor: `half`, `threeq`
+# and `wrap` all sit on quadrant boundaries where sine is exactly 0, so a sign
+# error on the mirrored quarters passes all three of them. `lowhalf` covers that
+# interval. Exact, not a tolerance -- the largest sine on [PI, 2*PI) is 0,
+# reached only at the two endpoints.
+# sin is odd, but not exactly: the interpolation weight truncates, and mirroring
+# through 2*PI lands on a different weight. One unit is the whole disagreement.
+TRIG_ODD_MAX = 1
+
+
+def parse_trig_spec(ser_text):
+    """Read the trig probe's computed values off the serial log.
+
+    The kernel measures and prints its own worst-case deviations rather than
+    dumping every sample of a sweep: four thousand values down a 115200-baud
+    line is milliseconds of frame budget spent on numbers nothing reads. So the
+    check asserts the measurements the kernel took, not the samples behind them
+    -- which is why the sweep's own tolerance lives here, where a reader can
+    see where the number came from, instead of inside the kernel.
+
+    Returns None when the lines are absent, which the caller treats as failure.
+    """
+    pts, extra = {}, {}
+    for line in ser_text.splitlines():
+        line = line.strip()
+        if not line.startswith("lgame: trig "):
+            continue
+        f = line.split()
+        # f = ['lgame:', 'trig', <name>, <value>, ...]
+        if f[2] in ("pyth", "odd", "mono", "lowhalf"):
+            extra[f[2]] = int(f[3])
+        else:
+            pts[f[2]] = (int(f[3]), int(f[4]))
+    if not pts or "pyth" not in extra:
+        return None
+    pts.update(extra)
+    return pts
+
+
 def count_colour(rgb, colour):
     """How many pixels of `rgb` are exactly `colour`. Pixel-aligned by
     construction: it steps 3 bytes at a time, so it cannot match a colour that
@@ -622,6 +694,74 @@ def check_selftest(rgb, w, h, ser_text=""):
                 fails.append(
                     f"3D counter {key}=0 ({why}), so that behaviour is not "
                     f"actually covered by this check")
+
+    # ── I: the trigonometry probe ────────────────────────────────────────
+    # No pixels here: sin/cos are a pure function, so the kernel prints its own
+    # measured values and this asserts those. Three groups, because they catch
+    # different bugs and none of them subsumes another.
+    #
+    # The anchor group is the one that cannot be replaced. sin^2 + cos^2 = 1
+    # holds just as happily for sin(2a) as for sin(a), and sin(2a) is what this
+    # code actually computed until the constants were fixed -- every PI constant
+    # was exactly half what its name said. No self-consistency property can see
+    # that; only sin(PI/2) == 1.0 can.
+    trig = parse_trig_spec(ser_text)
+    if trig is None:
+        fails.append(
+            "no `lgame: trig` lines on the serial log, so lgame_fp_sin/"
+            "lgame_fp_cos were not exercised at all")
+    else:
+        for name, want in TRIG_ANCHORS.items():
+            if name not in trig:
+                fails.append(
+                    f"trig probe `{name}` is missing from the serial log, so "
+                    f"that angle was never evaluated")
+                continue
+            got = trig[name]
+            if got != want:
+                fails.append(
+                    f"trig {name}: got sin={got[0]} cos={got[1]}, want "
+                    f"sin={want[0]} cos={want[1]}"
+                    + ("  <-- a wrong angle SCALE; sin^2+cos^2 would still be "
+                       "1 here, which is exactly why the anchors exist"
+                       if got[0] ** 2 + got[1] ** 2
+                          > 0.9 * 65536 ** 2 else ""))
+
+        for key, limit, why in (
+                ("pyth", TRIG_PYTH_MAX,
+                 f"worst |sin^2+cos^2-1| over a full turn is {{}}, above the "
+                 f"derived bound of {TRIG_PYTH_MAX}"),
+                ("odd", TRIG_ODD_MAX,
+                 f"worst |sin(-a)+sin(a)| is {{}}, above the "
+                 f"interpolation-rounding budget of {TRIG_ODD_MAX}")):
+            if key not in trig:
+                fails.append(f"trig `{key}` line is missing from the serial "
+                             f"log, so that sweep never ran")
+            elif trig[key] > limit:
+                fails.append(why.format(trig[key]))
+        # Monotonicity is what a mirrored quadrant reduction or a flipped sign
+        # looks like. The identity cannot see either: sin(-a) is just as valid
+        # a sine.
+        if "mono" not in trig:
+            fails.append("trig `mono` line is missing from the serial log, so "
+                         "the monotonicity sweep never ran")
+        elif trig["mono"] != 0:
+            fails.append(
+                f"trig monotonicity: {trig['mono']} downward steps on "
+                f"[0, PI/2], where sin must be non-decreasing")
+        # The only assertion that covers the interior of the bottom half turn.
+        # Verified, not assumed: the `q & 1` control fires `quarter` and `negq`
+        # (the only anchors in an odd quadrant) plus this, while `half`,
+        # `threeq` and `wrap` stay green because they sit on quadrant boundaries
+        # where sine is exactly 0.
+        if "lowhalf" not in trig:
+            fails.append("trig `lowhalf` line is missing from the serial log, "
+                         "so the bottom-half-turn sweep never ran")
+        elif trig["lowhalf"] > 0:
+            fails.append(
+                f"trig sign: sine reaches {trig['lowhalf']} somewhere on "
+                f"[PI, 2*PI), where it is negative throughout -- a wrong sign on "
+                f"the mirrored quarters, which nothing else here would catch")
 
     return (not fails), fails
 

@@ -2213,19 +2213,27 @@ static void cmd_lgame_game(int argc, char **argv) {
     (void)argc;
     extern int lgame_pong_run(void);
     extern int lgame_snake_run(void);
+    extern int lgame_rooms_run(void);
     if (!fb_available()) {
         kprintf("lgame: no framebuffer available (needs graphical boot)\n");
         return;
     }
     kprintf("lgame: fullscreen mode (ESC to quit back to shell)\n");
-    /* Both of this function's call sites already gate on a full strcmp, so
-     * argv[0] is only ever "pong" or "snake" and the first-character test was
-     * not actually a bug. Matching the whole name anyway: it is the form that
-     * stays correct if a third caller is ever added, and the cost is nil. */
+    /* Every call site gates on a full strcmp, so argv[0] can only be one of
+     * the three names below. Matching the whole name anyway, and dispatching on
+     * it rather than on argv[0][0]: the first-character form was not a bug
+     * while there were two games, and would silently become one the moment a
+     * third was added -- "rooms" and "rps" both start with 'r'. The unknown
+     * case prints rather than falling through to a game, so a typo here is
+     * visible instead of launching the wrong title. */
     if (strcmp(argv[0], "pong") == 0)
         lgame_pong_run();
-    else
+    else if (strcmp(argv[0], "snake") == 0)
         lgame_snake_run();
+    else if (strcmp(argv[0], "rooms") == 0)
+        lgame_rooms_run();
+    else
+        kprintf("lgame: no game called '%s'\n", argv[0]);
     kprintf("lgame: returned to shell\n");
 }
 
@@ -4172,6 +4180,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "gplay") == 0) cmd_gplay(argc, argv);
     else if (strcmp(cmd, "pong") == 0) cmd_lgame_game(argc, argv);
     else if (strcmp(cmd, "snake") == 0) cmd_lgame_game(argc, argv);
+    else if (strcmp(cmd, "rooms") == 0) cmd_lgame_game(argc, argv);
     else if (strcmp(cmd, "lgame-selftest") == 0) cmd_lgame_selftest();
     else if (strcmp(cmd, "sort") == 0) cmd_sort(argc, argv);
     else if (strcmp(cmd, "cp") == 0) cmd_cp(argc, argv);

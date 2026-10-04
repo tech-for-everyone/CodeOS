@@ -126,9 +126,64 @@ typedef int32_t lgame_fp_t;
 #define LGAME_FP_1     LGAME_FP_ONE
 #define LGAME_FP_2     (2 * LGAME_FP_ONE)
 #define LGAME_FP_4     (4 * LGAME_FP_ONE)
+/* Angles, in radians, 16.16. Public because a game holding a yaw needs to wrap
+ * it into a known range -- an unbounded yaw both drifts in precision and makes
+ * the value the check reads ambiguous. */
+#define LGAME_FP_PI       205887     /* 3.14159 */
+#define LGAME_FP_HALF_PI  102944     /* 1.57080 */
+#define LGAME_FP_TWO_PI   411775     /* 6.28319 */
 /* Convert a plain C float to 16.16. Compile-time use only -- a float *value*
  * in a hot loop defeats the whole point. */
 #define LGAME_FP(f)    ((lgame_fp_t)((f) * (double)LGAME_FP_ONE))
+
+/* Multiply and divide two 16.16 values. A game moving a position around a room
+ * needs these constantly, so they are here rather than hidden inside the
+ * renderer: a caller that forgets to use them gets a silently wrong position,
+ * and there is no compiler warning for `a * b` on two 16.16 operands.
+ *
+ * The multiply is 64-bit then arithmetic-shifted, so it floors like the rest of
+ * the fixed-point code (a negative product shifts toward -inf, where C's `/`
+ * would truncate toward zero). mul_div below is the one to reach for when
+ * dividing a product, because `(a * b) / c` in raw integers overflows where
+ * fp_mul then fp_div does not. */
+static inline lgame_fp_t lgame_fp_mul(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)(((int64_t)a * (int64_t)b) >> LGAME_FP_SHIFT);
+}
+static inline lgame_fp_t lgame_fp_add(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)((uint32_t)a + (uint32_t)b);
+}
+static inline lgame_fp_t lgame_fp_sub(lgame_fp_t a, lgame_fp_t b) {
+    return (lgame_fp_t)((uint32_t)a - (uint32_t)b);
+}
+/* Fold an angle into (-PI, PI]. Keeping a yaw in one turn rather than letting
+ * it accumulate is what stops a long session drifting in the low bits, and it
+ * makes the number a check reads unambiguous. */
+static inline lgame_fp_t lgame_fp_wrap_pi(lgame_fp_t a) {
+    a %= LGAME_FP_TWO_PI;
+    if (a < 0) a += LGAME_FP_TWO_PI;
+    if (a > LGAME_FP_PI) a -= LGAME_FP_TWO_PI;
+    return a;
+}
+/* Saturates rather than dividing by zero. The saturation value is chosen to be
+ * large enough that a later 1/z comparison is still ordered, not a number a
+ * caller will accidentally use as a coordinate. */
+static inline lgame_fp_t lgame_fp_div(lgame_fp_t a, lgame_fp_t b) {
+    if (b == 0) return (a < 0) ? (lgame_fp_t)-0x7FFFFFFF : (lgame_fp_t)0x7FFFFFFF;
+    return (lgame_fp_t)((((int64_t)a) << LGAME_FP_SHIFT) / (int64_t)b);
+}
+/* (a * b) / c in one step, without overflowing on the intermediate product. */
+static inline lgame_fp_t lgame_fp_mul_div(lgame_fp_t a, lgame_fp_t b, lgame_fp_t c) {
+    if (c == 0) return (a * b < 0) ? (lgame_fp_t)-0x7FFFFFFF : (lgame_fp_t)0x7FFFFFFF;
+    return (lgame_fp_t)((((int64_t)a) * (int64_t)b) / (int64_t)c);
+}
+
+/* sin/cos of a 16.16 angle in radians, from a quarter-wave table with linear
+ * interpolation. Exact and deterministic -- the same angle gives the same bits
+ * on every run, which is what lets a pixel assertion state an expected value
+ * rather than a range. Accuracy is about 7.5e-5 radians, far below what a
+ * camera turn can show. Angles are taken modulo 2*PI. */
+lgame_fp_t lgame_fp_sin(lgame_fp_t a);
+lgame_fp_t lgame_fp_cos(lgame_fp_t a);
 
 typedef struct {
     lgame_fp_t x, y, z;
@@ -155,12 +210,21 @@ void lgame_3d_end(void);
 /* 1 while a viewport is open. */
 int  lgame_3d_active(void);
 
-/* Look from `eye` at `target`. `focal` is the focal length in *pixels* rather
- * than a field of view, because that is the form the projection actually wants
- * and it avoids a tan() in a freestanding build. focal = view_h gives roughly a
- * 53-degree vertical field. Degenerate cases (eye == target) leave the previous
- * camera in place rather than producing a zero basis. */
-void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, lgame_fp_t focal);
+/* Look from `eye` at `target`. `focal_px` is the focal length in *pixels*,
+ * not a field of view, because that is the form the projection actually wants
+ * and it avoids a tan() in a freestanding build. focal_px = view_h gives
+ * roughly a 53-degree vertical field. Degenerate cases (eye == target) leave
+ * the previous camera in place rather than producing a zero basis.
+ *
+ * `focal_px` is a plain int on purpose. It used to be an lgame_fp_t, which
+ * meant the caller had to pre-scale it into 16.16 while every other 3D
+ * coordinate was scaled at the call site -- a units trap with no compiler
+ * warning, which it duly fell into twice: lgame_3d_begin()'s own default
+ * camera passed view_h unscaled (so the default focal was the clamp floor and
+ * projected every triangle onto a single degenerate point), and a game passed
+ * 240 expecting pixels. The only symptom was `drawn=0` with a healthy
+ * `submitted`. */
+void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, int focal_px);
 
 /* Fill the viewport with `sky` and reset the depth buffer. */
 void lgame_3d_clear(lgame_color_t sky);

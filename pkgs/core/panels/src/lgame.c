@@ -574,9 +574,10 @@ lgame_color_t lgame_texture_get_pixel(lgame_texture_t *tex, int x, int y) {
  * interpolated to a hair on the wrong side of the near plane -- it exists to
  * keep lgame_fp_div() away from a zero denominator, not to model anything. */
 #define LGAME_3D_ZV_MIN   (LGAME_FP_ONE / 64)
-/* Reject a degenerate focal length; 0 would divide by zero in the projection. */
-#define LGAME_3D_FOCAL_MIN (LGAME_FP_ONE / 8)
-#define LGAME_3D_INVZ_MAX  ((uint32_t)0xFFFFFFFFu)
+/* Smallest usable focal length, in pixels. 0 would divide by zero in the
+ * projection and anything under a few pixels collapses the frustum to a point,
+ * so degenerate triangles are all that survives. */
+#define LGAME_3D_FOCAL_MIN_PX 8
 
 static uint16_t *lgame_3d_depth;
 static int lgame_3d_vw, lgame_3d_vh, lgame_3d_ox, lgame_3d_oy;
@@ -621,14 +622,88 @@ static int lgame_3d_n_clipped, lgame_3d_n_culled;
  * MUST be 0 outside a deliberate control run. */
 volatile int lgame_3d_break = 0;
 
-/* ── fixed-point helpers ── */
-static inline lgame_fp_t lgame_fp_mul(lgame_fp_t a, lgame_fp_t b) {
-    return (lgame_fp_t)(((int64_t)a * (int64_t)b) >> LGAME_FP_SHIFT);
+/* lgame_fp_mul / lgame_fp_div / lgame_fp_mul_div live in lgame.h: a game file
+ * moving a player around a room needs them too, and a caller's only other
+ * option is raw integer maths on two 16.16 operands, which is wrong in a way
+ * the compiler will not warn about. */
+
+/* ── fixed-point trigonometry ──
+ *
+ * A 3D camera needs a direction vector from an angle, and the kernel has no
+ * float and no libm. This is a quarter-wave table of sin sampled every
+ * PI/128, reduced to a quadrant and interpolated linearly.
+ *
+ * Linear interpolation over 64 steps costs at most (PI/128)^2 / 8 ~= 7.5e-5
+ * radians of error, which is far below anything a camera turn can show. What
+ * matters more is that the result is a pure function of its input: a table plus
+ * integer arithmetic gives the same bits every run, so a pixel assertion can
+ * state exact expected values. A Newton or CORDIC iteration would be more
+ * accurate and would quietly put the answer at the mercy of iteration count.
+ *
+ * Angles are 16.16 radians and are taken modulo 2*PI, so callers may pass a
+ * yaw that has wound around any number of times.
+ */
+/* One table step is PI/128 radians. In 16.16 that is LGAME_FP_PI >> 7, i.e.
+ * 804 -- and 804 is NOT a divisor of LGAME_FP_HALF_PI: 64 steps is 51456,
+ * sixteen units short of 51472. So a remainder sitting right at the end of a
+ * quadrant lands on table index 64, and the table needs an entry to interpolate
+ * *against* for that index. 66 entries, not 65. */
+#define LGAME_SIN_STEP  (LGAME_FP_PI >> 7)          /* 804, in 16.16 */
+
+static const int32_t lgame_sin_tab[66] = {
+         0,   1608,   3216,   4821,   6424,   8022,   9616,  11204,
+     12785,  14359,  15924,  17479,  19024,  20557,  22078,  23586,
+     25080,  26558,  28020,  29466,  30893,  32303,  33692,  35062,
+     36410,  37736,  39040,  40320,  41576,  42806,  44011,  45190,
+     46341,  47464,  48559,  49624,  50660,  51665,  52639,  53581,
+     54491,  55368,  56212,  57022,  57798,  58538,  59244,  59914,
+     60547,  61145,  61705,  62228,  62714,  63162,  63572,  63944,
+     64277,  64571,  64827,  65043,  65220,  65358,  65457,  65516,
+     65536,  65536
+};
+
+lgame_fp_t lgame_fp_sin(lgame_fp_t a) {
+    /* Wrap into [0, 2*PI). C's % truncates toward zero, so a negative angle
+     * needs the divisor added first. */
+    a %= LGAME_FP_TWO_PI;
+    if (a < 0) a += LGAME_FP_TWO_PI;
+
+    /* q = which quarter turn, and a = how far into it, in [0, HALF_PI).
+     * A division, not two `if`s: there are four quarters, so two comparisons
+     * leave the remainder in the third quarter still above HALF_PI, and the
+     * table index then runs past the end of the table. FOUR times HALF_PI is
+     * 205888 and TWO_PI is 205887, so the quotient is always 0..3. */
+    int q = a / LGAME_FP_HALF_PI;
+    a -= q * LGAME_FP_HALF_PI;
+
+    /* Quarters 1 and 3 run backwards, because sin there is a cosine and
+     * cos(x) = sin(PI/2 - x). Mirroring has to happen AFTER the quadrant
+     * subtraction: done before, it pushed the remainder straight back out to
+     * HALF_PI, which is what made cos(0) return a table difference instead of
+     * 1.0. */
+    if (q & 1) a = LGAME_FP_HALF_PI - a;
+
+    int idx = a / LGAME_SIN_STEP;
+    int rem = a - idx * LGAME_SIN_STEP;
+    if (idx > 64) { idx = 64; rem = 0; }
+    if (rem < 0)   rem = 0;
+
+    /* Weight as 16.16, i.e. rem/STEP rescaled. rem is at most STEP, so the
+     * shift cannot overflow int32; the multiply below is int64 because
+     * (s1 - s0) can be 65536. */
+    lgame_fp_t w = (lgame_fp_t)(((int64_t)rem << LGAME_FP_SHIFT)
+                                / LGAME_SIN_STEP);
+    lgame_fp_t v = lgame_sin_tab[idx]
+                + lgame_fp_mul(lgame_sin_tab[idx + 1] - lgame_sin_tab[idx], w);
+
+    /* Only quarters 2 and 3 come out negative. Odd quarters read
+     * sin(PI/2 - x), which is a cosine and therefore never negative, so
+     * keying the sign off `q & 1` would flip quarters 1 and 3. */
+    return (q >= 2) ? -v : v;
 }
-static inline lgame_fp_t lgame_fp_div(lgame_fp_t a, lgame_fp_t b) {
-    if (b == 0) return a < 0 ? -LGAME_3D_INVZ_MAX : LGAME_3D_INVZ_MAX;
-    return (lgame_fp_t)((((int64_t)a) << LGAME_FP_SHIFT) / (int64_t)b);
-}
+
+lgame_fp_t lgame_fp_cos(lgame_fp_t a) { return lgame_fp_sin(a + LGAME_FP_HALF_PI); }
+
 /* Integer square root, exact, by the digit-by-digit restoring method. Used
  * instead of Newton-Raphson because a Newton seed has to be guessed and an
  * iteration count has to be guessed, and both were wrong here: the seed was
@@ -723,7 +798,7 @@ int lgame_3d_begin(int view_w, int view_h, int ox, int oy) {
      * view_h is roughly a 53-degree vertical field. */
     lgame_3d_camera(lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_4),
                     lgame_vec3(LGAME_FP_0, LGAME_FP_0, LGAME_FP_0),
-                    view_h);
+                    view_h);   /* focal in PIXELS, scaled inside */
     lgame_3d_reset_counters();
     return LGAME_OK;
 }
@@ -737,8 +812,11 @@ void lgame_3d_end(void) {
     lgame_3d_on = 0;
 }
 
-void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, lgame_fp_t focal) {
-    if (focal < LGAME_3D_FOCAL_MIN) focal = LGAME_3D_FOCAL_MIN;
+void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, int focal_px) {
+    /* Clamp before scaling. A focal of 0 would divide by zero in the
+     * projection; a focal of 1 collapses the frustum to a point, so 8 pixels
+     * is the smallest value that is still a camera. */
+    if (focal_px < LGAME_3D_FOCAL_MIN_PX) focal_px = LGAME_3D_FOCAL_MIN_PX;
     lgame_vec3_t fwd = lgame_vec3_normalize(lgame_vec3_sub(target, eye));
     if (fwd.x == 0 && fwd.y == 0 && fwd.z == 0)
         return;   /* eye == target: keep the previous camera, do not zero it */
@@ -757,7 +835,7 @@ void lgame_3d_camera(lgame_vec3_t eye, lgame_vec3_t target, lgame_fp_t focal) {
     lgame_3d_fwd = fwd;
     lgame_3d_right = right;
     lgame_3d_up = up;
-    lgame_3d_focal = focal;
+    lgame_3d_focal = (lgame_fp_t)focal_px * LGAME_FP_ONE;
 }
 
 void lgame_3d_clear(lgame_color_t sky) {
@@ -1082,7 +1160,7 @@ static int selftest_3d(void) {
     if (lgame_3d_begin(SELFTEST_3D_VW, SELFTEST_3D_VH,
                        SELFTEST_3D_OX, SELFTEST_3D_OY) != LGAME_OK)
         return -11;
-    lgame_3d_camera(eye, zero, (lgame_fp_t)SELFTEST_3D_FOCAL * LGAME_FP_ONE);
+    lgame_3d_camera(eye, zero, SELFTEST_3D_FOCAL);
     lgame_3d_cull(0);
     lgame_3d_reset_counters();
     /* Control 4: skip the sky fill. The quads are still drawn over whatever
@@ -1229,6 +1307,111 @@ static int selftest_3d(void) {
     /* Free the depth buffer now rather than holding ~300 KB for the life of
      * the frame. The check asserts the counters, which are plain ints. */
     lgame_3d_end();
+    return 0;
+}
+
+/* ── trigonometry probe ──
+ *
+ * Not optional. lgame_fp_sin/lgame_fp_cos shipped with no caller that could
+ * see the answer, and were wrong in three separate ways at once: the quarter
+ * reduction mirrored before subtracting (so cos(0) returned a table difference,
+ * 20, instead of 1.0), the sign was keyed off `q & 1` (which flips quarters 1
+ * and 3), and the PI constants were each exactly half what their names said, so
+ * the whole function returned sin(2a). The caller that exposed all three was a
+ * camera: cos(0) = 20 made normalize() compute mag = 0, so the basis came back
+ * zero, so lgame_3d_camera() hit its degenerate-target guard and silently kept
+ * the *previous* camera. The game ran, drew a whole room, and was lit from a
+ * camera 1.5 units below where the player was standing.
+ *
+ * Three kinds of assertion, because they catch different bugs:
+ *
+ *   - Exact values at the cardinal angles. These are the only assertions that
+ *     catch a wrong ANGLE SCALE, because sin^2+cos^2 = 1 holds just as well
+ *     for sin(2a) as for sin(a). A scale error is invisible to every
+ *     self-consistency property there is.
+ *   - sin^2 + cos^2 against 1 over a full turn, which catches general
+ *     inaccuracy and outright wrongness.
+ *   - Monotonicity of sin on the first quarter, which catches a flipped sign or
+ *     a mirrored quadrant reduction. The identity cannot: sin(-a) is just as
+ *     valid a sine.
+ */
+static int selftest_trig(void) {
+    struct { const char *name; lgame_fp_t a; } pts[] = {
+        { "zero",    LGAME_FP_0 },
+        { "quarter", LGAME_FP_HALF_PI },
+        { "half",    LGAME_FP_PI },
+        { "threeq",  LGAME_FP_PI + LGAME_FP_HALF_PI },
+        { "negq",    -LGAME_FP_HALF_PI },
+        { "wrap",    LGAME_FP_TWO_PI },
+        /* Wound round many times, which is the whole reason sin() takes mod
+         * 2*PI rather than demanding a wrapped argument. */
+        { "wind",    LGAME_FP_TWO_PI * 300 + LGAME_FP_HALF_PI },
+    };
+    for (int i = 0; i < (int)(sizeof(pts) / sizeof(pts[0])); i++)
+        /* NOTE: the angle is NOT printed, and that is a known gap, not a
+         * choice. The probe picks its angles from LGAME_FP_*, so a check that
+         * compares only sin/cos grades the kernel against its own constants:
+         * halve every PI constant and "quarter" still means whatever the code
+         * thinks PI/2 means, and every anchor still passes. Verified -- the
+         * `q & 1` control showed the anchors are sensitive to a wrong SIGN, and
+         * a halved-constant control fired only the `threeq` anchor by one unit,
+         * which is the truncation of TWO_PI, not a scale check. Printing the
+         * absolute 16.16 angle alongside the values is what makes the constants
+         * observable from outside; that is the next thing to do here. */
+        kprintf("lgame: trig %s %d %d\n", pts[i].name,
+                lgame_fp_sin(pts[i].a), lgame_fp_cos(pts[i].a));
+
+    /* Worst departure of sin^2 + cos^2 from 1, over a whole turn. The kernel
+     * measures it rather than printing every sample, because a sweep of 4000+
+     * values down a 115200-baud line is milliseconds of frame budget spent on
+     * a number nothing reads. */
+    lgame_fp_t worst = 0;
+    for (lgame_fp_t a = 0; a < LGAME_FP_TWO_PI; a += 97) {
+        lgame_fp_t s = lgame_fp_sin(a), c = lgame_fp_cos(a);
+        lgame_fp_t dev = lgame_fp_sub(lgame_fp_add(lgame_fp_mul(s, s),
+                                                  lgame_fp_mul(c, c)),
+                                      LGAME_FP_ONE);
+        lgame_fp_t err = dev < 0 ? -dev : dev;
+        if (err > worst) worst = err;
+    }
+    kprintf("lgame: trig pyth %d\n", worst);
+
+    /* sin must be an odd function, and it is not exactly so: the interpolation
+     * weight truncates, and mirroring through 2*PI lands on a different weight.
+     * One unit of 16.16 is the whole expected disagreement. */
+    lgame_fp_t odd = 0;
+    for (lgame_fp_t a = 0; a < LGAME_FP_HALF_PI; a += 101) {
+        lgame_fp_t e = lgame_fp_sin(-a) + lgame_fp_sin(a);
+        if (e < 0) e = -e;
+        if (e > odd) odd = e;
+    }
+    kprintf("lgame: trig odd %d\n", odd);
+
+    /* Non-decreasing over the first quarter, at a quarter of a table step. */
+    int bad = 0;
+    lgame_fp_t prev = lgame_fp_sin(LGAME_FP_0);
+    for (lgame_fp_t a = 402; a <= LGAME_FP_HALF_PI; a += 402) {
+        lgame_fp_t v = lgame_fp_sin(a);
+        if (v < prev) bad++;
+        prev = v;
+    }
+    kprintf("lgame: trig mono %d\n", bad);
+
+    /* The largest sine anywhere in the bottom half turn, which must be 0: sin is
+     * exactly zero at both ends of [PI, 2*PI) and negative throughout. Exact,
+     * not a tolerance: 0 is reached only at the endpoints.
+     *
+     * This one is here because the sign of sine is only *pinned* at the cardinal
+     * points: sin^2+cos^2 is 1 for a sine of either sign, and sin is monotone on
+     * [0, PI/2] whatever the sign is because that half-turn never leaves quarter
+     * 0. So a sign error confined to the interior of the bottom half turn would
+     * pass every other assertion in this probe. */
+    lgame_fp_t peak = lgame_fp_sin(LGAME_FP_PI);
+    for (lgame_fp_t a = LGAME_FP_PI; a < LGAME_FP_TWO_PI; a += 397) {
+        lgame_fp_t v = lgame_fp_sin(a);
+        if (v > peak) peak = v;
+    }
+    kprintf("lgame: trig lowhalf %d\n", peak);
     return 0;
 }
 
@@ -1456,6 +1639,11 @@ int lgame_selftest(void) {
         lgame_quit();
         return -20 + rc3d;   /* -31 if the viewport could not be opened */
     }
+
+    /* Trig is a pure function with no pixels, so it prints its own measured
+     * values and the check asserts those. It runs before lgame_present() so a
+     * failure still reaches the serial log with the frame on screen. */
+    selftest_trig();
 
     lgame_present();
 
