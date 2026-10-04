@@ -99,9 +99,36 @@ int proc_fork(void) {
     uint64_t *old_pml4 = child->pml4;
     memset((void *)phys_to_virt((uint64_t)new_pml4), 0, 0x1000);
 
+    /* Share the kernel half instead of copying it.
+     *
+     * The top half of the address space belongs to the kernel: the direct map
+     * at phys_to_virt_base, the kernel image, and the identity map. It used to
+     * be deep-copied and copy-on-written exactly like user pages, and that is
+     * why fork() reset the machine. The COW pass wrote
+     *     old_pt[l] = (old_pt[l] & ~PAGE_WRITE) | PAGE_COW
+     * into the *parent's* tables, and for the kernel half those are the live
+     * tables the CPU is using at that instant -- 0xffffffff80000000, the
+     * kernel image, is PML4[256] -> PDPT[0] -> PD[0] -> PT[0]. So fork cleared
+     * PAGE_WRITE on the running kernel's own code and data, the next write
+     * faulted, and the fault handler's stack was in that same read-only memory:
+     * double fault into triple fault, i.e. a silent reset with not one
+     * "PF at RIP" line reaching the serial port.
+     *
+     * Confirmed by instrumenting proc_fork: it walked all of PML4[0..255] and
+     * died entering i=256 j=1, with 209941 pages still free. Sharing is also
+     * what the rest of the kernel assumes -- vmm_kernel_pml4() exists so kernel
+     * threads run on one shared kernel half rather than a private copy. */
+    const int kernel_half = (int)((phys_to_virt_base >> 39) & 0x1FF); /* 39 == PML4_SHIFT, private to vmm.c */
+
     int fork_err = 0;
     for (int i = 0; i < 512; i++) {
         if (!(old_pml4[i] & PAGE_PRESENT)) continue;
+
+        if (i >= kernel_half) {
+            new_pml4[i] = old_pml4[i];   /* shared, not copied and not COW */
+            continue;
+        }
+
         uint64_t pdp_phys = old_pml4[i] & ~0xFFF;
         uint64_t *old_pdp = (uint64_t *)phys_to_virt(pdp_phys);
 
@@ -282,8 +309,13 @@ int proc_wait(int pid, int *status) {
                 int cpid = child->pid;
 
                 if (child->pml4) {
-                    /* Walk and free page tables without vmm_lock (single-threaded) */
+                    /* Walk and free page tables without vmm_lock (single-threaded).
+                     * The kernel half is shared with the parent since fork()
+                     * stopped copying it, so freeing it here would pull the
+                     * running kernel's own page tables out from under it. */
+                    const int kernel_half = (int)((phys_to_virt_base >> 39) & 0x1FF);
                     for (int pt = 0; pt < 512; pt++) {
+                        if (pt >= kernel_half) break;
                         if (!(child->pml4[pt] & PAGE_PRESENT)) continue;
                         uint64_t *pdp = (uint64_t *)phys_to_virt(child->pml4[pt] & ~0xFFF);
                         for (int pd = 0; pd < 512; pd++) {

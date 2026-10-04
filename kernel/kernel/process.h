@@ -82,6 +82,25 @@ typedef struct proc_fd {
 } proc_fd_t;
 
 /**
+ * struct proc_ctx - Saved user-mode CPU context for one process.
+ *
+ * Captured from the interrupt frame at the instant a process is switched out,
+ * so restoring it and executing iretq resumes that process exactly where it
+ * left off. This is what makes fork() possible: the child needs its own copy
+ * of the parent's context with rax forced to 0, so it resumes inside fork()
+ * and returns 0 while the parent resumes with the child's pid.
+ *
+ * All-zero with @has_ctx clear means "this process has never been switched
+ * out", which is the state of every process under the old single-context
+ * design. Nothing may iretq out of such a context.
+ */
+typedef struct {
+    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp;
+    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+    uint64_t rip, cs, rflags, rsp, ss;
+} proc_ctx_t;
+
+/**
  * struct process - Per-process state block.
  *
  * Contains everything the kernel needs to context-switch, manage memory,
@@ -108,6 +127,26 @@ typedef struct process {
     uint64_t kernel_rsp;
     uint64_t syscall_rsp;
     int preempt_ticks;
+
+    /* Saved user-mode context, valid only when has_ctx is set. Saved on
+     * switch-out, restored on switch-in. */
+    proc_ctx_t ctx;
+    int has_ctx;
+
+    /* This process's own kernel stack for the syscall path.
+     *
+     * NOT TSS.RSP0. Syscalls do not go through int 0x80 here: arch/
+     * syscall_entry.S is the LSTAR handler for the `syscall` instruction, and
+     * its first instruction switches to the single global syscall_kernel_rsp.
+     * So every process shares one stack today, and a per-process stack has to
+     * be swapped into that global on each switch or two processes would
+     * overwrite each other's trapframes. TSS.RSP0 is a separate problem: it is
+     * what IRQs and exceptions land on, and user_mode_enter() allocates 16
+     * fresh pages there on every entry instead of storing it per process (and
+     * leaks the previous one). Sized like thread_t's, via SYSCALL_STACK_SIZE.
+     * 0 == not allocated yet. */
+    uint64_t kstack_top;
+    uint64_t kstack_pages;
 
     /* personality (syscall translation) */
     int personality;
@@ -156,6 +195,35 @@ process_t *proc_current(void);
 process_t *proc_get(int pid);
 int proc_getpid(void);
 int proc_getppid(void);
+
+/* ── Process run queue / context switching ──
+ *
+ * The kernel has two independent schedulers: thread_t (kernel threads, each
+ * with its own stacks) and process_t (userspace address spaces). Until the
+ * fields above existed, current_process was assigned exactly once — by
+ * proc_create(), and only when no process was current — so a forked child
+ * could never run: proc_fork() built the child and returned its pid, and
+ * nothing ever made it current. sched_switch_to_process() was the only code
+ * that could, and it had no callers at all.
+ *
+ * An earlier version of this change also added proc_sched_runnable() /
+ * proc_sched_pick() plus a run_next linked list, and both were reverted. The
+ * accessors had no callers, so --gc-sections dropped them from the image
+ * (`nm codeos-1-kernel.bin | grep -c proc_sched` -> 0) — shipping uncalled
+ * functions is how jengine ended up as build-verified-but-dead. The list was
+ * never read, because the picker scanned the table. It was wrong besides: the
+ * "already queued" test (run_next != 0) misses a lone element or a tail, the
+ * tail search skipped run_next == 0 entries so it found the second-to-last
+ * node and orphaned the real last one, and with an empty or single-element
+ * queue the new process was never linked in at all.
+ *
+ * Readiness is therefore the predicate
+ * "state == PROC_READY && p != current_process" over proc_table; PROC_MAX is
+ * 64, so a linear scan is a few hundred instructions. Add a run-queue list
+ * only alongside a real consumer and a head/tail invariant.
+ *
+ * The fields above are inert until a switch path is wired to them.
+ */
 
 /* ── File descriptor management ── */
 int proc_fd_alloc(void);
