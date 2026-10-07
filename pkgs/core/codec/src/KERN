@@ -1,0 +1,25 @@
+Presence of this file is how kernel/Makefile discovers a package:
+
+    KERN_PKG_DIRS = $(filter-out ../pkgs/core/panels/src/,
+                       $(sort $(dir $(wildcard ../pkgs/core/*/src/KERN))))
+
+So creating pkgs/core/codec/src/KERN is the whole of the kernel integration --
+every .c in this directory is picked up and built with the kernel's freestanding
+flags (-nostdinc -nostdlib -nodefaultlibs -mno-sse -mno-sse2). No Makefile edit
+is needed, and none should be made: a package that has to be registered by hand
+is a package that silently stops building.
+
+The decoders here are written to that constraint deliberately:
+
+  * no libc headers, so nothing may use <string.h>, <stdlib.h> or <math.h>.
+    Allocation and string functions come through codec_alloc.h and codec_str.h,
+    which map onto kernel/mm.h and kernel/string.h.
+  * no float, because -mno-sse -mno-sse2 leaves no float ABI. codec_wav.c
+    converts IEEE 754 binary32 with integer shifts for this reason.
+  * no libc malloc in the hot path; CODEC_MAX_DIM / CODEC_MAX_PIXELS bound every
+    allocation up front, since a corrupt width/height header is the standard
+    way a decoder becomes an out-of-bounds write.
+
+See pkgs/core/codec/src/codec.h for why the decoders are hand-written rather
+than the lodepng/tjpgd copies already in the tree under kernel/lvgl/, and
+pkgs/core/codec/tests/run.sh for the host-side verification.
