@@ -5,7 +5,8 @@ layout, and **Zircon** app toolkit. Built for people who want to see how an OS
 works — not a bajillion distros, one approachable system.
 
 **Version:** 1.4.0
-**Internal Codename:** QTOS
+
+**Internal Codename:** Andromeda
 ## Features
 
 - **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
@@ -168,7 +169,7 @@ CodeOS/
 2. Broader Linux / Zircon app compatibility
 3. Wine-like Windows app translator
 4. Stronger desktop polish (macOS Big Sur / ThormiumOS-inspired GUI)
-5.Make CodeOS for mobile named Zircon
+5. Make CodeOS for mobile named Zircon
 ## Goals
 
 An OS whose code is approachable for non-experts and gamers alike — one clear
