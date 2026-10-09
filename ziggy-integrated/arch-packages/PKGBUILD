@@ -1,0 +1,51 @@
+# Maintainer: CodeOS Community <admin@codeos-community.org>
+# Contributor: Ziggy AI Integration
+
+pkgname=ziggy
+pkgver=1.0
+pkgrel=1
+pkgdesc="CodeOS AI — Ziggy backend with Jarvis integration"
+arch=('x86_64')
+url="https://github.com/CodeOS-Comunity/Ziggy"
+license=('MIT')
+
+depends=(
+    'python'
+    'python-threaded-http server'
+    'qt5-base'  # for the Qt renderer
+)
+
+makedepends=(
+    'python-setuptools'
+)
+
+source=("ziggy-${pkgver}.tar.gz")
+md5sums=('SKIP')
+
+package() {
+    cd "${srcdir}/ziggy-${pkgver}"
+    
+    # Install backend
+    install -d "${pkgdir}/opt/ziggy/backend"
+    cp -r backend "${pkgdir}/opt/ziggy/"
+    
+    # Install renderer
+    install -d "${pkgdir}/opt/ziggy/renderer"
+    # renderer/ziggy.cpp would be compiled separately
+    
+    # Install documentation
+    install -d "${pkgdir}/usr/share/doc/ziggy"
+    install -m 644 README.md "${pkgdir}/usr/share/doc/ziggy/"
+    
+    # Install license
+    install -d "${pkgdir}/usr/share/licenses/ziggy"
+    install -m 644 LICENSE "${pkgdir}/usr/share/licenses/ziggy/"
+    
+    # Create wrapper script
+    install -d "${pkgdir}/usr/bin"
+    cat > "${pkgdir}/usr/bin/ziggy-backend" << 'EOF'
+#!/bin/bash
+exec python3 /opt/ziggy/backend/server.py "\$@"
+EOF
+    chmod +x "${pkgdir}/usr/bin/ziggy-backend"
+}

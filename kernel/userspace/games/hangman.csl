@@ -1,0 +1,72 @@
+# hangman.csl — HANGMAN
+# csl game: guess the secret word one letter at a time. 6 wrong guesses max.
+print "=============================================="
+print " HANGMAN"
+print " Guess the secret word, one letter at a time."
+print " 6 wrong guesses and the machine wins."
+print "=============================================="
+
+let words = "zircon kernel codeos pong snake sprite spritescriptor ftech payload loop buffer stack tty mouse"
+let word = at(split(words, " "), rand(15))
+let wlen = len(word)
+print "The word has " + str(wlen) + " letters."
+
+let wrong = 0
+let guessed = ""
+let solved = 0
+
+while wrong < 6 and solved == 0 {
+    # show progress
+    let disp = ""
+    let i = 0
+    while i < wlen {
+        let ch = chrat(word, i)
+        if instr(guessed, ch) >= 0 {
+            disp = disp + ch + " "
+        } else {
+            disp = disp + "_ "
+        }
+        i = i + 1
+    }
+    print disp
+    print "Wrong guesses: " + str(wrong) + "/6"
+
+    print "Your letter:"
+    let g = lower(trim(readln()))
+    if len(g) != 1 {
+        print "Type a single letter."
+    } else {
+        if instr(guessed, g) >= 0 {
+            print "You already tried that."
+        } else {
+            guessed = guessed + g
+            if instr(word, g) >= 0 {
+                print "Good — " + str(g) + " is in the word."
+            } else {
+                wrong = wrong + 1
+                print "Nope, " + str(g) + " is not in the word."
+            }
+        }
+    }
+
+    # solved if every letter is in guessed
+    let done = 1
+    let j = 0
+    while j < wlen {
+        if instr(guessed, chrat(word, j)) < 0 {
+            done = 0
+        }
+        j = j + 1
+    }
+    if done == 1 {
+        solved = 1
+    }
+}
+
+print ""
+if solved == 1 {
+    print "You got it! The word was " + str(word) + "."
+} else {
+    print "Out of guesses. The word was " + str(word) + "."
+    print "Better luck next time!"
+}

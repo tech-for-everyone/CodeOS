@@ -1,0 +1,11 @@
+{
+  "name": "zircon-clock",
+  "version": "1.0.0",
+  "description": "Zircon clock widget — displays current time in the panel",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/zircon-clock",
+  "source": "src/"
+}

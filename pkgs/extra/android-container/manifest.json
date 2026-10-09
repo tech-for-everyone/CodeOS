@@ -1,0 +1,11 @@
+{
+  "name": "android-container",
+  "version": "1.0.0",
+  "description": "Android app container runtime — runs Android applications in an isolated environment",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c", "lib-android"],
+  "install_path": "/bin/android-container",
+  "source": "src/"
+}

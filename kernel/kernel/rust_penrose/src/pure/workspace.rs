@@ -1,0 +1,252 @@
+use crate::{
+    Error, Result, WinId,
+    core::layout::{IntoMessage, Layout, LayoutStack},
+    prelude::*,
+    pure::{Position, Stack, geometry::Rect},
+    stack,
+};
+use ::core::fmt;
+
+/// A wrapper around a [Stack] of windows belonging to a single "workspace" or virtual
+/// desktop. When this workspace is active on a given screen, the windows contained in
+/// its stack will be positioned using the active layout of its [LayoutStack].
+#[derive(Debug, Clone)]
+pub struct Workspace<T> {
+    pub(crate) id: usize,
+    pub(crate) tag: String,
+    pub(crate) layouts: LayoutStack,
+    pub(crate) stack: Option<Stack<T>>,
+}
+
+impl<T> Default for Workspace<T> {
+    fn default() -> Self {
+        Self {
+            id: Default::default(),
+            tag: Default::default(),
+            layouts: Default::default(),
+            stack: Default::default(),
+        }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Workspace<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let stack = self
+            .stack
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        write!(
+            f,
+            "Workspace({}, {}):\n  - layouts: {}\n  - stack: {}",
+            self.id, self.tag, self.layouts, stack
+        )
+    }
+}
+
+impl<T> Workspace<T> {
+    /// Create a new Workspace with the given layouts and stack.
+    pub fn new<S>(id: usize, tag: S, layouts: LayoutStack, stack: Option<Stack<T>>) -> Self
+    where
+        S: Into<String>,
+    {
+        Self {
+            id,
+            tag: tag.into(),
+            layouts,
+            stack,
+        }
+    }
+
+    // Used for padding workspaces when needed in a rescreen event (see detect_screens in src/core/handle.rs)
+    pub(crate) fn new_default(id: usize) -> Self {
+        Self {
+            id,
+            tag: format!("WS-{id}"),
+            ..Self::default()
+        }
+    }
+
+    /// A fixed integer ID for this workspace.
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    /// The string tag for this workspace.
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    /// The name of the currently active layout being used by this workspace
+    pub fn layout_name(&self) -> String {
+        self.layouts.focus.name()
+    }
+
+    /// Whether or not this workspace currently holds any windows
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_none()
+    }
+
+    /// An immutable reference to the focused window for this workspace if there is one
+    pub fn focus(&self) -> Option<&T> {
+        self.stack.as_ref().map(|s| &s.focus)
+    }
+
+    /// Apply the currently active layout to the given stack
+    pub fn apply_layout(
+        &mut self,
+        tag: &str,
+        stack: &Option<Stack<WinId>>,
+        r: Rect,
+    ) -> Vec<(WinId, Rect)> {
+        let (_, positions) = self.layouts.layout_workspace(tag, stack, r);
+        positions
+    }
+
+    /// An iterator over all windows in this workspace.
+    pub fn clients(&self) -> impl Iterator<Item = &T> {
+        self.stack.iter().flat_map(|s| s.iter())
+    }
+
+    /// Remove the focused client from this workspace if there is one.
+    pub fn remove_focused(&mut self) -> Option<T> {
+        let current = self.stack.take();
+        let (focus, new_stack) = current?.remove_focused();
+        self.stack = new_stack;
+
+        Some(focus)
+    }
+
+    /// Insert the given client as the focused element of the workspace's [Stack].
+    pub fn insert_as_focus(&mut self, c: T) {
+        self.stack = Some(match take(&mut self.stack) {
+            None => stack!(c),
+            Some(mut s) => {
+                s.insert_at(Position::Focus, c);
+                s
+            }
+        });
+    }
+
+    /// Insert the given client at the requested position of the workspace's [Stack].
+    pub fn insert_at(&mut self, pos: Position, c: T) {
+        self.stack = Some(match take(&mut self.stack) {
+            None => stack!(c),
+            Some(mut s) => {
+                s.insert_at(pos, c);
+                s
+            }
+        });
+    }
+
+    /// Obtain a reference to this workspace's current [Stack].
+    ///
+    /// Returns [None] if there a currently no clients in the workspace.
+    pub fn stack(&self) -> Option<&Stack<T>> {
+        self.stack.as_ref()
+    }
+
+    /// Obtain a mutable reference to this workspace's current [Stack].
+    ///
+    /// Returns [None] if there a currently no clients in the workspace.
+    pub fn stack_mut(&mut self) -> Option<&mut Stack<T>> {
+        self.stack.as_mut()
+    }
+
+    /// Pass the given message on to the currently focused layout.
+    pub fn handle_message<M>(&mut self, m: M)
+    where
+        M: IntoMessage,
+    {
+        self.layouts.handle_message(m)
+    }
+
+    /// Pass the given message on to _all_ layouts available to this workspace.
+    pub fn broadcast_message<M>(&mut self, m: M)
+    where
+        M: IntoMessage,
+    {
+        self.layouts.broadcast_message(m)
+    }
+
+    /// Switch to the next available layout for this workspace.
+    pub fn next_layout(&mut self) {
+        self.layouts.focus_down();
+    }
+
+    /// Switch to the previous available layout for this workspace.
+    pub fn previous_layout(&mut self) {
+        self.layouts.focus_up();
+    }
+
+    /// Obtain a reference to the layouts currently in use by this workspace.
+    pub fn layouts(&self) -> &LayoutStack {
+        &self.layouts
+    }
+
+    /// Obtain a mutable reference to the layouts currently in use by this workspace.
+    pub fn layouts_mut(&mut self) -> &mut LayoutStack {
+        &mut self.layouts
+    }
+
+    /// Replace the current [LayoutStack] with a new one, returning the layouts that
+    /// were previously active.
+    pub fn set_available_layouts(&mut self, mut layouts: LayoutStack) -> LayoutStack {
+        swap(&mut self.layouts, &mut layouts);
+
+        layouts
+    }
+
+    /// Attempt to set the active [Layout][0] by name if it is available.
+    ///
+    /// > Note that some layouts have a dynamically set name and this method will fail to
+    /// > locate such a layout if the current name does not match what you have provided.
+    ///
+    ///   [0]: crate::core::layout::Layout
+    pub fn set_layout_by_name(&mut self, name: &str) {
+        self.layouts.focus_element_by(|l| l.name() == name)
+    }
+}
+
+impl<T: PartialEq> Workspace<T> {
+    /// Check if a given window is currently part of this workspace
+    pub fn contains(&self, t: &T) -> bool {
+        match &self.stack {
+            Some(s) => s.contains(t),
+            None => false,
+        }
+    }
+
+    pub(crate) fn remove(&mut self, t: &T) -> Option<T> {
+        let current = self.stack.take();
+        let (maybe_t, new_stack) = current?.remove(t);
+        self.stack = new_stack;
+
+        maybe_t
+    }
+}
+
+pub(crate) fn check_workspace_invariants<T>(workspaces: &[Workspace<T>]) -> Result<()> {
+    let tags = workspaces.iter().map(|w| &w.tag);
+    let mut seen = vec![];
+    let mut duplicates = vec![];
+
+    for tag in tags {
+        if seen.contains(&tag) {
+            duplicates.push(tag.to_owned());
+        }
+        seen.push(tag);
+    }
+
+    if !duplicates.is_empty() {
+        duplicates.sort();
+        duplicates.dedup();
+
+        return Err(Error::NonUniqueTags { tags: duplicates });
+    }
+
+    Ok(())
+}
+

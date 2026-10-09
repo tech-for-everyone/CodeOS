@@ -1,0 +1,11 @@
+QT.gui_private.VERSION = 6.11.1
+QT.gui_private.name = QtGui
+QT.gui_private.module =
+QT.gui_private.libs = $$QT_MODULE_LIB_BASE
+QT.gui_private.includes = $$QT_MODULE_INCLUDE_BASE/QtGui/6.11.1 $$QT_MODULE_INCLUDE_BASE/QtGui/6.11.1/QtGui
+QT.gui_private.frameworks = 
+QT.gui_private.depends = core_private gui
+QT.gui_private.uses = 
+QT.gui_private.module_config = v2 staticlib internal_module
+QT.gui_private.enabled_features = emojisegmenter vkgen ico imageio-text-loading multiprocess raster-64bit raster-fp wayland-datadevice wayland-client-primary-selection
+QT.gui_private.disabled_features = accessibility-atspi-bridge directfb directwrite directwrite3 directwritecolrv1 direct2d direct2d1_1 evdev vxworksevdev freetype system-freetype fontconfig harfbuzz system-harfbuzz qqnx_imf integrityfb kms drm_atomic libinput integrityhid libinput-axis-api libinput-hires-wheel-support linuxfb vsp2 vnc mtdev vkkhrdisplay egl_x11 eglfs eglfs_brcm eglfs_egldevice eglfs_gbm eglfs_vsp2 eglfs_mali eglfs_viv eglfs_rcar eglfs_viv_wl eglfs_openwfd eglfs_x11 gif jpeg system-jpeg png system-png tslib tuiotouch xcb-glx xcb-egl-plugin xcb-xlib xcb-sm system-xcb-xinput xkbcommon-x11 xlib qtgui-threadpool graphicsframecapture wayland-client wayland-server wayland-egl wayland-brcm wayland-drm-egl-server-buffer wayland-libhybris-egl-server-buffer wayland-dmabuf-server-buffer wayland-shm-emulation-server-buffer wayland-vulkan-server-buffer wayland-client-fullscreen-shell-v1 wayland-client-wl-shell wayland-client-xdg-shell egl-extension-platform-wayland run-opengl-tests

@@ -1,0 +1,44 @@
+# guess.csl — GUESS THE NUMBER
+# csl game: pick a number 1-100, you guess with hints.
+print "=============================================="
+print " GUESS THE NUMBER"
+print " I am thinking of a number between 1 and 100."
+print "=============================================="
+
+function play_round() {
+    let target = rand(1, 101)
+    let tries = 0
+    let done = 0
+    while done == 0 {
+        print "Your guess:"
+        let g = num(trim(readln()))
+        if g >= 1 and g <= 100 {
+            tries = tries + 1
+            if g > target {
+                print "Too high!"
+            } else {
+                if g < target {
+                    print "Too low!"
+                } else {
+                    print "Correct! You got it in " + str(tries) + " tries."
+                    done = 1
+                }
+            }
+        } else {
+            print "Please enter a number between 1 and 100."
+        }
+    }
+}
+
+let keep_playing = 1
+while keep_playing == 1 {
+    play_round()
+    print "Play again? (y/n)"
+    let again = lower(trim(readln()))
+    if again == "y" {
+        print ""
+    } else {
+        keep_playing = 0
+    }
+}
+print "Thanks for playing. Goodbye!"

@@ -1,0 +1,5 @@
+QMAKE_PRL_TARGET = libqico.a
+QMAKE_PRL_CONFIG = static
+QMAKE_PRL_VERSION = 6.11.1
+QMAKE_PRL_LIBS = $$[QT_INSTALL_PREFIX]/lib/objects-Release/Gui_resources_1/.qt/rcc/qrc_qpdf_init.cpp.obj $$[QT_INSTALL_PREFIX]/lib/objects-Release/Gui_resources_2/.qt/rcc/qrc_gui_shaders_init.cpp.obj $$[QT_INSTALL_PLUGINS]/imageformats/libqico.a $$[QT_INSTALL_LIBS]/libQt6Gui.a $$[QT_INSTALL_LIBS]/libQt6Core.a $$[QT_INSTALL_LIBS]/libQt6BundledZLIB.a $$[QT_INSTALL_LIBS]/libQt6BundledPcre2.a
+QMAKE_PRL_LIBS_FOR_CMAKE = $$[QT_INSTALL_PREFIX]/lib/objects-Release/Gui_resources_1/.qt/rcc/qrc_qpdf_init.cpp.obj;$$[QT_INSTALL_PREFIX]/lib/objects-Release/Gui_resources_2/.qt/rcc/qrc_gui_shaders_init.cpp.obj;$$[QT_INSTALL_PLUGINS]/imageformats/libqico.a;$$[QT_INSTALL_LIBS]/libQt6Gui.a;$$[QT_INSTALL_LIBS]/libQt6Core.a;$$[QT_INSTALL_LIBS]/libQt6BundledZLIB.a;$$[QT_INSTALL_LIBS]/libQt6BundledPcre2.a

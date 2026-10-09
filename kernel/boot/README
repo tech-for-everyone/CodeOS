@@ -1,0 +1,1 @@
+Boot uses GRUB multiboot2 (see Makefile iso target). Kernel entry: arch/vectors.S + kernel/main.c.

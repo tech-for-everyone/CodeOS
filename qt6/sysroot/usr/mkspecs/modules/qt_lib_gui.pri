@@ -1,0 +1,19 @@
+QT.gui.VERSION = 6.11.1
+QT.gui.name = QtGui
+QT.gui.module = Qt6Gui
+QT.gui.libs = $$QT_MODULE_LIB_BASE
+QT.gui.ldflags = 
+QT.gui.includes = $$QT_MODULE_INCLUDE_BASE $$QT_MODULE_INCLUDE_BASE/QtGui
+QT.gui.frameworks = 
+QT.gui.bins = $$QT_MODULE_BIN_BASE
+QT.gui.plugin_types = accessiblebridge platforms platforms/darwin xcbglintegrations platformthemes platforminputcontexts generic iconengines imageformats egldeviceintegrations wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration
+QT.gui.depends =  core
+QT.gui.uses = 
+QT.gui.module_config = v2 staticlib
+QT.gui.DEFINES = QT_GUI_LIB
+QT.gui.enabled_features = emojisegmenter ico sessionmanager texthtmlparser textmarkdownreader textmarkdownwriter textodfwriter cssparser draganddrop action cursor clipboard wheelevent tabletevent im highdpiscaling validator standarditemmodel filesystemmodel imageformatplugin movie imageformat_bmp imageformat_ppm imageformat_xbm imageformat_xpm imageformat_png imageformat_jpeg image_heuristic_mask image_text picture colornames pdf desktopservices systemtrayicon accessibility whatsthis undocommand undostack undogroup waylandscanner
+QT.gui.disabled_features = accessibility-atspi-bridge freetype fontconfig harfbuzz opengles2 opengles3 opengles31 opengles32 dynamicgl opengl vulkan metal openvg egl xcb xcb-glx-plugin xkbcommon system-textmarkdownreader wayland
+QT_DEFAULT_QPA_PLUGIN = qxcb
+QT_CONFIG += emojisegmenter ico sessionmanager texthtmlparser textmarkdownreader textmarkdownwriter textodfwriter cssparser draganddrop action cursor clipboard wheelevent tabletevent im highdpiscaling validator standarditemmodel filesystemmodel imageformatplugin movie imageformat_bmp imageformat_ppm imageformat_xbm imageformat_xpm imageformat_png imageformat_jpeg image_heuristic_mask image_text picture colornames pdf desktopservices systemtrayicon accessibility whatsthis undocommand undostack undogroup waylandscanner
+QT_MODULES += gui
+

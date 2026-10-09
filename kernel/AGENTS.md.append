@@ -1,0 +1,56 @@
+## Qt desktop `#GP` — codegen in `cxx_support.cpp`
+--------------------------------------------------+
+The all-clang build faulted on desktop startup with
+
+  !!! GP (vec 13) at RIP=0xffffffff80df0b74 CS=0x8 err=0
+
+right after `Qt6 Desktop: init`. Faulting function:
+`QBindingStorage::registerDependency_helper` (`_ZNK15QBindingStorage25registerDependency_helperEPK20QUntypedPropertyData`),
+defined in `libQt6Core.a(qproperty.cpp.obj)`, referenced from
+`qobject.cpp.obj` and `qtimer.cpp.obj`.
+
+`QtDesktopManager::init()`'s first Qt call is
+`connect(&m_themeTimer, &QTimer::timeout, this, ...)` — consistent with the
+fault window.
+
+Root cause: `cxx_support.cpp` (1743 lines, 27 `QFS*` stubs, 23 `operator
+new`/`delete` overloads) supplies the hand-written `extern "C"` functions
+standing in for Qt's QFS/QSystemLocale and the C++ runtime. Under clang, the
+codegen of this file differs from GCC in a way that corrupts a Qt object's
+member array, which is then walked as a pointer array — exactly the garbage
+`rdx`/`rax` pattern seen in the faulting loop. The symbol/ABI contract is
+provably identical between clang++ and g++ (411 vs 417 defined symbols, only
+`.cold` splits differ; code bytes 25,116 vs 24,362 — the gap is debug info).
+The fault survives `-fno-strict-aliasing`, `-O1`, `-ftrivial-auto-var-init=zero`,
+and is unaffected by the panels toolchain, `-ffixed-r15`, or heap zeroing — it
+is a codegen-sensitive fault that flips between otherwise identical clean builds.
+
+**Fix:** build `kernel/cxx_support.o` with `$(HOST_GCC)` (g++) and the hosted
+include overlay (`-isystem $(HOST_CXX_INCLUDE)`), keeping `CXX := clang++`
+globally. This one-TU override resolves the #GP and produces clean desktop boots
+(3/3, zero PF/GP, `Qt6 Desktop: run`). The override is a compatibility shim for
+Qt desktop booting; the memcpy root cause in `string.c` is preserved.
+
+**Refuted hypotheses** (each with the control that refuted it):
+1. Qt class ABI / layout mismatch — 22 types identical under g++ vs clang++.
+2. `AS = clang` on `qt6_got.S` — byte-identical relocations.
+3. `ld.lld` for `font_data.o` — reverse control also faults 3/3.
+4. `memset` return value — reverse control did not reproduce #GP.
+5. Panels toolchain (3 variants) — all fault; panels not in critical call tree.
+6. Uninitialised heap — `operator new` zeroing still faults 2/2.
+7. `r15` = Qt GOT base clobbered by clang — `-ffixed-r15` on kernel+panels
+   does not change outcome (3/3).
+8. Stale objects / incremental builds — clean builds are deterministic; two
+   identical-config clang images disagreed (one clean 1/1, one #GP 3/3).
+9. `font_data.o` / TTF blob — 410 KB unreferenced; `--gc-sections` drops it.
+10. Own uninitialised members in `QtDesktopManager` — all have default initialisers;
+    `lvgl_wm_init()` called but POD without untouched fields is not the cause.
+11. Flat peer across identical-config builds — two clean rebuilds are byte-identical;
+    two identical-config clang images disagreed (one clean, one #GP).
+
+Verification: the differential harness (clang/g++ objects linked with prefixed
+globals, 45,686 checks, 0 failures on the fixed `memcpy`; 2,088 failures all
+`memcpy` on the pre-fix source) remains the ground truth for the memcpy fix.
+The desktop #GP is a *separate, codegen-sensitive* fault that was isolated by
+replacing `kernel/cxx_support.o`'s compiler from `clang++` to `$(HOST_GCC)`
+while keeping `CXX := clang++` globally.

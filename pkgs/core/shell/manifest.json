@@ -1,0 +1,11 @@
+{
+  "name": "shell",
+  "version": "1.0.0",
+  "description": "CodeOS interactive shell (command-line interpreter)",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/shell",
+  "source": "src/"
+}

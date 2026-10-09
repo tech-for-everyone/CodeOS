@@ -1,0 +1,11 @@
+{
+  "name": "freecode",
+  "version": "1.0.0",
+  "description": "CodeOS freecode app — system information and splash display",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/freecode",
+  "source": "src/"
+}

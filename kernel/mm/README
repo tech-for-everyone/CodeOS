@@ -1,0 +1,1 @@
+Memory management modular layout. Built implementation: kernel/mm.c, kernel/pmm.c, kernel/vmm.c.

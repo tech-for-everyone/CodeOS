@@ -1,0 +1,25 @@
+[package]
+name = "ncvm"
+version = "0.1.0"
+description = "ncvm portal device model (Rust memory handlers) for QEMU"
+resolver = "2"
+publish = false
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+common = { path = "../../../common" }
+util = { path = "../../../util" }
+bql = { path = "../../../bql" }
+qom = { path = "../../../qom" }
+migration = { path = "../../../migration" }
+system = { path = "../../../system" }
+hwcore = { path = "../../../hw/core" }
+glib-sys.workspace = true
+
+[lints]
+workspace = true

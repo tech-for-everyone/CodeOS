@@ -1,0 +1,11 @@
+{
+  "name": "code-music",
+  "version": "1.0.0",
+  "description": "CodeOS music player application",
+  "license": "MIT",
+  "type": "source",
+  "category": "Multimedia",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/code-music",
+  "source": "src/"
+}

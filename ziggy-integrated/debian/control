@@ -1,0 +1,18 @@
+Package: ziggy
+Version: 1.0
+Section: python
+Priority: optional
+Architecture: all
+Maintainer: CodeOS Community <admin@codeos-community.org>
+Depends: python3, python3-threaded-http, libqt5core5a, libqt5gui5, libqt5widgets5
+Description: CodeOS AI — Ziggy backend with Jarvis integration
+
+Ziggy is CodeOS's AI system. The brain runs as a Python backend on the dev host;
+the in-kernel Qt panel is just a renderer that ships the prompt over HTTP and
+prints the reply.
+
+This package provides the Ziggy AI backend server that uses Jarvis as the AI
+engine, compatible with CodeOS's kernel/ai.c HTTP transport.
+
+.
+WWW: https://github.com/CodeOS-Comunity/Ziggy

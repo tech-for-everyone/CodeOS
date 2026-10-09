@@ -1,0 +1,19 @@
+print "CodeOS Scripting Engine Test"
+
+let counter = 0
+while counter < 5 {
+    print "Count: " + counter
+    let counter = counter + 1
+}
+
+function square(n) {
+    return n * n
+}
+
+let total = 0
+let i = 1
+while i <= 5 {
+    total = total + square(i)
+    let i = i + 1
+}
+print "Sum of squares 1..5 = " + total

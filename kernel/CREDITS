@@ -1,0 +1,15 @@
+CodeOS Credits
+==============
+
+Lead Development
+  tech-for-everyone (github.com/tech-for-everyone)
+
+Tools & Boot
+  Limine bootloader
+  Pixman (pixel composition reference)
+  Multiboot2 / GRUB
+  QEMU for development and testing
+
+License
+  Kernel: GPLv3 (see LICENSE / COPYING)
+  Zircon toolkit: MIT (see Zircon/LICENSE)

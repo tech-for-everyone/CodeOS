@@ -1,0 +1,150 @@
+//! Built-in layout transformers.
+use crate::{
+    WinId,
+    core::layout::{Layout, LayoutTransformer},
+    pure::geometry::Rect,
+    prelude::*,
+    simple_transformer,
+};
+
+simple_transformer!(
+    /// Wrap an existing layout and reflect its window positions horizontally.
+    ReflectHorizontal,
+    reflect_horizontal,
+    "Reflected"
+);
+
+fn reflect_horizontal(r_s: Rect, positions: Vec<(WinId, Rect)>) -> Vec<(WinId, Rect)> {
+    let offset = (r_s.x + r_s.w as i32 / 2) * 2;
+
+    positions
+        .into_iter()
+        .map(|(id, mut r)| {
+            r.x = offset.saturating_sub(r.x).saturating_sub(r.w as i32);
+            (id, r)
+        })
+        .collect()
+}
+
+simple_transformer!(
+    /// Wrap an existing layout and reflect its window positions vertically.
+    ReflectVertical,
+    reflect_vertical,
+    "Flipped"
+);
+
+fn reflect_vertical(r: Rect, positions: Vec<(WinId, Rect)>) -> Vec<(WinId, Rect)> {
+    let offset = (r.y + r.h as i32 / 2) * 2;
+
+    positions
+        .into_iter()
+        .map(|(id, mut r)| {
+            r.y = offset.saturating_sub(r.y).saturating_sub(r.h as i32);
+            (id, r)
+        })
+        .collect()
+}
+
+/// Simple gaps around the window placement of the enclosed [Layout].
+///
+/// `outer_px` controls the width of the gap around the edge of the screen and `inner_px`
+/// controls the gap around each individual window. Set both equal to one another to have
+/// a consistant gap size in all places.
+#[derive(Debug, Clone)]
+pub struct Gaps {
+    /// The inner [Layout] having gaps applied to it.
+    pub layout: Box<dyn Layout>,
+    /// The desired outer gap size in pixels
+    pub outer_px: u32,
+    /// The desired inner gap size in pixels
+    pub inner_px: u32,
+}
+
+impl Gaps {
+    /// Wrap an existing [Layout] with the given gap sizes.
+    pub fn wrap(layout: Box<dyn Layout>, outer_px: u32, inner_px: u32) -> Box<dyn Layout> {
+        Box::new(Self {
+            layout,
+            outer_px,
+            inner_px,
+        })
+    }
+}
+
+fn shrink(r: Rect, px: u32) -> Rect {
+    if r.w == 0 || r.h == 0 {
+        return r;
+    }
+
+    Rect {
+        x: r.x + px as i32,
+        y: r.y + px as i32,
+        w: r.w - 2 * px,
+        h: r.h - 2 * px,
+    }
+}
+
+impl LayoutTransformer for Gaps {
+    fn transformed_name(&self) -> String {
+        self.layout.name()
+    }
+
+    fn inner_mut(&mut self) -> &mut Box<dyn Layout> {
+        &mut self.layout
+    }
+
+    fn transform_initial(&self, r: Rect) -> Rect {
+        shrink(r, self.outer_px)
+    }
+
+    fn transform_positions(
+        &mut self,
+        _: Rect,
+        positions: Vec<(WinId, Rect)>,
+    ) -> Vec<(WinId, Rect)> {
+        positions
+            .into_iter()
+            .map(|(id, r)| (id, shrink(r, self.inner_px)))
+            .collect()
+    }
+}
+
+/// Reserve `px` pixels at the top of the screen.
+///
+/// Typically used for providing space for a status bar.
+#[derive(Debug, Clone)]
+pub struct ReserveTop {
+    /// The wrapped inner layout
+    pub layout: Box<dyn Layout>,
+    /// The number of pixels to reserve at the top of the screen
+    pub px: u32,
+}
+
+impl ReserveTop {
+    /// Wrap an existing [Layout] with the given reserved area.
+    pub fn wrap(layout: Box<dyn Layout>, px: u32) -> Box<dyn Layout> {
+        Box::new(Self { layout, px })
+    }
+}
+
+impl LayoutTransformer for ReserveTop {
+    fn transformed_name(&self) -> String {
+        self.layout.name()
+    }
+
+    fn inner_mut(&mut self) -> &mut Box<dyn Layout> {
+        &mut self.layout
+    }
+
+    fn transform_initial(&self, mut r: Rect) -> Rect {
+        if r.w == 0 || r.h == 0 {
+            return r;
+        }
+
+        r.y += self.px as i32;
+        r.h -= self.px;
+
+        r
+    }
+}
+

@@ -1,0 +1,8 @@
+[package]
+name = "gdk4_x11"
+version = "0.1.0"
+edition = "2021"
+description = "GDK4 X11 backend stubs for HyperDE (no_std kernel port)"
+
+[lib]
+crate-type = ["rlib"]

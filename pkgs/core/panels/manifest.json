@@ -1,0 +1,11 @@
+{
+  "name": "panels",
+  "version": "1.0.0",
+  "description": "CodeOS GUI panels — compositor, window manager, dock, menubar, launcher",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c", "wm_protocol"],
+  "install_path": "/bin/panels",
+  "source": "src/"
+}

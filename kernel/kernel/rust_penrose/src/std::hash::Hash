@@ -1,0 +1,1045 @@
+use crate::{
+    Error, Result, WinId,
+    core::layout::LayoutStack,
+    pop_where,
+    pure::{
+        Position, Screen, Stack, Workspace,
+        diff::{ScreenState, Snapshot},
+        geometry::{Rect, RelativeRect, RelativeTo},
+        workspace::check_workspace_invariants,
+    },
+    stack,
+};
+use core::{Hash, Ordering, mem};
+
+/// The side-effect free internal state representation of the window manager.
+#[derive(Default, Debug, Clone)]
+pub struct StackSet<C>
+where
+    C: Clone + PartialEq + Eq + Hash,
+{
+    pub(crate) screens: Stack<Screen<C>>, // Workspaces visible on screens
+    pub(crate) hidden: VecDeque<Workspace<C>>, // Workspaces not currently on any screen
+    pub(crate) floating: HashMap<C, RelativeRect>, // Floating windows
+    pub(crate) previous_tag: String,      // The last tag to be focused before the current one
+    pub(crate) invisible_tags: Vec<String>, // Tags that should never be focused
+    pub(crate) killed_clients: Vec<C>, // clients that have been removed and need processing on the Conn side
+}
+
+impl<C> StackSet<C>
+where
+    C: Clone + PartialEq + Eq + Hash,
+{
+    /// Create a new [StackSet] of empty stacks with the given workspace names.
+    ///
+    /// # Errors
+    /// This method will error if there are not enough workspaces to cover the
+    /// attached screens or if no screens are attached.
+    pub fn try_new<I, J, T>(layouts: LayoutStack, ws_tags: I, screen_details: J) -> Result<Self>
+    where
+        T: Into<String>,
+        I: IntoIterator<Item = T>,
+        J: IntoIterator<Item = Rect>,
+    {
+        let workspaces: Vec<Workspace<C>> = ws_tags
+            .into_iter()
+            .enumerate()
+            .map(|(i, tag)| Workspace::new(i, tag, layouts.clone(), None))
+            .collect();
+
+        let screen_details: Vec<Rect> = screen_details.into_iter().collect();
+
+        Self::try_new_concrete(workspaces, screen_details, HashMap::new())
+    }
+
+    pub(crate) fn try_new_concrete(
+        mut workspaces: Vec<Workspace<C>>,
+        screen_details: Vec<Rect>,
+        floating: HashMap<C, RelativeRect>,
+    ) -> Result<Self> {
+        check_workspace_invariants(&workspaces)?;
+
+        match (workspaces.len(), screen_details.len()) {
+            (_, 0) => return Err(Error::NoScreens),
+            (n_ws, n_screens) if n_ws < n_screens => {
+                return Err(Error::InsufficientWorkspaces { n_ws, n_screens });
+            }
+            _ => (),
+        }
+
+        let hidden: VecDeque<Workspace<C>> = workspaces
+            .split_off(screen_details.len())
+            .into_iter()
+            .collect();
+
+        let screens =
+            Stack::from_iter_unchecked(workspaces.into_iter().zip(screen_details).enumerate().map(
+                |(index, (workspace, r))| Screen {
+                    workspace,
+                    index,
+                    r,
+                },
+            ));
+
+        let previous_tag = screens.focus.workspace.tag.clone();
+
+        Ok(Self {
+            screens,
+            hidden,
+            floating,
+            previous_tag,
+            invisible_tags: vec![],
+            killed_clients: vec![],
+        })
+    }
+
+    /// Set focus to the [Screen] with the specified index.
+    ///
+    /// If there is no matching screen then the [StackSet] is unmodified.
+    pub fn focus_screen(&mut self, screen_index: usize) {
+        let current = self.screens.focus.index;
+        if current == screen_index {
+            return;
+        }
+
+        loop {
+            self.screens.focus_down();
+            if [current, screen_index].contains(&self.screens.focus.index) {
+                break;
+            }
+        }
+    }
+
+    fn update_previous_tag(&mut self, new: String) {
+        if self.invisible_tags.contains(&new) {
+            return;
+        }
+        self.previous_tag = new;
+    }
+
+    /// Set focus to the [Workspace] with the specified tag.
+    ///
+    /// If there is no matching workspace or the provided tag for an invisible
+    /// workspace then the [StackSet] is unmodified. (See
+    /// [add_invisible_workspace](Self::add_invisible_workspace) for details).
+    /// If the [Workspace] is currently visible then focus moves to the screen
+    /// containing that workspace, otherwise the workspace replaces whatever
+    /// was on the active screen.
+    ///
+    /// If you always want to focus the given tag on the active screen, see
+    /// [StackSet::pull_tag_to_screen] instead.
+    pub fn focus_tag(&mut self, tag: impl AsRef<str>) {
+        let tag = tag.as_ref();
+
+        if self.screens.focus.workspace.tag == tag || self.invisible_tags.iter().any(|t| t == tag) {
+            return;
+        }
+
+        // If the tag is visible on another screen, focus moves to that screen
+        if !self.try_cycle_screen_to_tag(tag) {
+            // If the tag is hidden then it gets moved to the current screen
+            self.try_swap_on_screen_workspace_with_hidden(tag);
+        }
+
+        // If nothing matched by this point then the requested tag is unknown
+        // so there is nothing for us to do
+    }
+
+    fn try_cycle_screen_to_tag(&mut self, tag: &str) -> bool {
+        let current_tag = self.screens.focus.workspace.tag.clone();
+
+        loop {
+            self.screens.focus_down();
+            match &self.screens.focus.workspace.tag {
+                // we've found and focused the tag
+                t if t == tag => {
+                    self.update_previous_tag(current_tag);
+                    return true;
+                }
+
+                // we've looped so this tag isn't visible
+                t if t == &current_tag => return false,
+
+                // try the next tag
+                _ => (),
+            }
+        }
+    }
+
+    fn try_swap_on_screen_workspace_with_hidden(&mut self, tag: &str) {
+        if let Some(mut w) = pop_where!(self, hidden, |w: &Workspace<C>| w.tag == tag) {
+            self.update_previous_tag(self.screens.focus.workspace.tag.clone());
+            swap(&mut w, &mut self.screens.focus.workspace);
+            self.hidden.push_back(w);
+        }
+    }
+
+    // true if we swapped otherwise false
+    fn try_swap_focused_workspace_with_tag(&mut self, tag: &str) -> bool {
+        if self.screens.focus.workspace.tag == tag {
+            return false;
+        }
+
+        let p = |s: &&mut Screen<C>| s.workspace.tag == tag;
+
+        let in_up = self.screens.up.iter_mut().find(p);
+        let in_down = self.screens.down.iter_mut().find(p);
+
+        if let Some(s) = in_up.or(in_down) {
+            swap(&mut self.screens.focus.workspace, &mut s.workspace);
+            return true;
+        }
+
+        false
+    }
+
+    /// Focus the requested tag on the current screen, swapping the current
+    /// tag with it.
+    pub fn pull_tag_to_screen(&mut self, tag: impl AsRef<str>) {
+        let tag = tag.as_ref();
+
+        if self.screens.focus.workspace.tag == tag {
+            return;
+        }
+
+        if !self.try_swap_focused_workspace_with_tag(tag) {
+            self.try_swap_on_screen_workspace_with_hidden(tag);
+        }
+    }
+
+    /// Toggle focus back to the previously focused [Workspace] based on its tag
+    pub fn toggle_tag(&mut self) {
+        self.focus_tag(self.previous_tag.clone());
+    }
+
+    /// Focus the given client and set its [Workspace] as current (see
+    /// focus_tag).
+    ///
+    /// If the client is unknown or on an invisible tag then this is a no-op.
+    pub fn focus_client(&mut self, client: &C) {
+        if self.current_client() == Some(client) {
+            return; // already focused
+        }
+
+        let tag = match self.tag_for_client(client) {
+            Some(tag) if self.invisible_tags.iter().any(|t| t == tag) => return,
+            None => return, // unknown client
+            Some(tag) => tag.to_string(),
+        };
+
+        self.focus_tag(&tag);
+        debug_assert_eq!(
+            self.current_tag(),
+            tag,
+            "attempt to focus unknown or invisible tag for client"
+        );
+
+        while self.current_client() != Some(client) {
+            self.focus_up()
+        }
+    }
+
+    /// Insert the given client to the current [Stack] in a default [Position].
+    pub fn insert(&mut self, client: C) {
+        self.insert_at(Position::default(), client)
+    }
+
+    /// Insert the given client to the current [Stack] at the requested [Position].
+    /// If the client is already present somewhere in the [StackSet] the stack_set is unmodified.
+    pub fn insert_at(&mut self, pos: Position, client: C) {
+        if self.contains(&client) {
+            return;
+        }
+
+        self.modify(|current_stack| match current_stack {
+            Some(mut s) => {
+                s.insert_at(pos, client);
+                Some(s)
+            }
+            None => Some(stack!(client)),
+        })
+    }
+
+    pub(crate) fn float_unchecked<R: RelativeTo>(&mut self, client: C, r: R) {
+        let screen = self.screen_for_client(&client).expect("client to be known");
+        let r = r.relative_to(&screen.r);
+        debug!(?r, "setting floating position");
+        self.floating.insert(client, r);
+    }
+
+    /// Clear the floating status of a client, returning its previous preferred
+    /// screen position if the client was known, otherwise `None`.
+    pub fn sink(&mut self, client: &C) -> Option<Rect> {
+        self.floating
+            .remove(client)
+            .map(|rr| rr.applied_to(&self.screens.focus.r))
+    }
+
+    /// Check whether a given client is currently floating.
+    pub fn is_floating(&self, client: &C) -> bool {
+        self.floating.contains_key(client)
+    }
+
+    /// Check whether a given tag currently has any floating windows present.
+    ///
+    /// Returns false if the tag given is unknown to this StackSet.
+    pub fn has_floating_windows(&self, tag: impl AsRef<str>) -> bool {
+        self.workspace(tag.as_ref())
+            .map(|w| w.clients().any(|id| self.floating.contains_key(id)))
+            .unwrap_or(false)
+    }
+
+    /// Delete a client from this [StackSet].
+    pub fn remove_client(&mut self, client: &C) -> Option<C> {
+        self.sink(client); // Clear any floating information we might have
+
+        self.workspaces_mut()
+            .map(|w| w.remove(client))
+            .find(|opt| opt.is_some())
+            .flatten()
+    }
+
+    /// Remove the currently focused client from this stack if there is one.
+    ///
+    /// The client is returned to the caller as `Some(C)` if there was one.
+    pub fn remove_focused(&mut self) -> Option<C> {
+        let client = self.current_client()?.clone();
+        self.remove_client(&client)
+    }
+
+    /// Delete the currently focused client from this stack if there is one.
+    ///
+    /// The following diff will send a kill client message to this client on
+    /// refresh.
+    pub fn kill_focused(&mut self) {
+        if let Some(client) = self.remove_focused() {
+            self.killed_clients.push(client);
+        }
+    }
+
+    /// Move the focused client of the current [Workspace] to the focused position
+    /// of the workspace matching the provided `tag`.
+    pub fn move_focused_to_tag(&mut self, tag: impl AsRef<str>) {
+        let tag = tag.as_ref();
+        if self.current_tag() == tag || !self.contains_tag(tag) {
+            return;
+        }
+
+        let c = match self.screens.focus.workspace.remove_focused() {
+            None => return,
+            Some(c) => c,
+        };
+
+        self.insert_as_focus_for(tag, c)
+    }
+
+    /// Move the focused client of the current [Workspace] to the focused position
+    /// of the workspace on [Screen] `screen`.
+    pub fn move_focused_to_screen(&mut self, screen: usize) {
+        if self.screens.focus.index == screen {
+            return;
+        }
+
+        let c = match self.screens.focus.workspace.remove_focused() {
+            None => return,
+            Some(c) => c,
+        };
+
+        if let Some(s) = self.screens.iter_mut().find(|s| s.index == screen) {
+            s.workspace.insert_as_focus(c)
+        }
+    }
+
+    /// Move the given client to the focused position of the [Workspace] matching
+    /// the provided `tag`. If the client is already on the target workspace it is
+    /// moved to the focused position.
+    pub fn move_client_to_tag(&mut self, client: &C, tag: impl AsRef<str>) {
+        let tag = tag.as_ref();
+
+        if !self.contains_tag(tag) {
+            return;
+        }
+
+        // Not calling self.remove_client as that will also sink the client if it
+        // was floating
+        let maybe_removed = self
+            .workspaces_mut()
+            .map(|w| w.remove(client))
+            .find(|opt| opt.is_some())
+            .flatten();
+
+        let c = match maybe_removed {
+            None => return,
+            Some(c) => c,
+        };
+
+        self.insert_as_focus_for(tag, c)
+    }
+
+    /// Move the given client to the focused position of the current [Workspace].
+    /// If the client is already on the target workspace it is moved to the focused position.
+    pub fn move_client_to_current_tag(&mut self, client: &C) {
+        self.move_client_to_tag(client, self.screens.focus.workspace.tag.clone());
+    }
+
+    /// Insert a client as the current focus for the given tag.
+    ///
+    /// NOTE: This will silently fail if the tag is not in the StackSet which
+    ///       is why the method is not in the public API
+    pub(crate) fn insert_as_focus_for(&mut self, tag: &str, c: C) {
+        self.modify_workspace(tag, |w| w.insert_as_focus(c));
+    }
+
+    /// Is the given tag present in the [StackSet]?
+    pub fn contains_tag(&self, tag: &str) -> bool {
+        self.workspaces().any(|w| w.tag == tag)
+    }
+
+    /// All [Workspace] tags in this [StackSet] order by their id that have not been
+    /// marked as being invisible.
+    pub fn ordered_tags(&self) -> Vec<String> {
+        let mut indexed: Vec<_> = self
+            .workspaces()
+            .map(|w| (w.id, w.tag.clone()))
+            .filter(|(_, t)| !self.invisible_tags.contains(t))
+            .collect();
+
+        indexed.sort_by_key(|(id, _)| *id);
+
+        indexed.into_iter().map(|(_, tag)| tag).collect()
+    }
+
+    /// All Workspaces in this [StackSet] order by their id that have not been
+    /// marked as being invisible.
+    pub fn ordered_workspaces(&self) -> impl Iterator<Item = &Workspace<C>> {
+        let mut wss: Vec<_> = self
+            .workspaces()
+            .filter(|w| !self.invisible_tags.contains(&w.tag))
+            .collect();
+
+        wss.sort_by_key(|w| w.id());
+
+        wss.into_iter()
+    }
+
+    fn focus_adjacent_workspace(&mut self, tags: Vec<String>) {
+        let cur_tag = self.current_tag();
+        let mut it = tags.iter().skip_while(|t| *t != cur_tag);
+        // We should never be without at least our focused tag as a Screen requires a Workspace to
+        // be present on it, but handling things this way means we avoid having any unwrapping or
+        // raw indexing into vecs.
+        if let Some(new_tag) = it.nth(1).or(tags.first()) {
+            self.pull_tag_to_screen(new_tag)
+        }
+    }
+
+    /// Move focus to the [Workspace] after the currently focused workspace as defined by their
+    /// position in [StackSet::ordered_workspaces].
+    ///
+    /// As with the behaviour of [StackSet::pull_tag_to_screen], if the next tag is on another
+    /// screen then it will be pulled to the active screen rather than focus moving to the screen
+    /// where the tag is currently located.
+    pub fn focus_next_workspace(&mut self) {
+        self.focus_adjacent_workspace(self.ordered_tags())
+    }
+
+    /// Move focus to the [Workspace] before the currently focused workspace as defined by their
+    /// position in [StackSet::ordered_workspaces].
+    ///
+    /// As with the behaviour of [StackSet::pull_tag_to_screen], if the next tag is on another
+    /// screen then it will be pulled to the active screen rather than focus moving to the screen
+    /// where the tag is currently located.
+    pub fn focus_previous_workspace(&mut self) {
+        let mut tags = self.ordered_tags();
+        tags.reverse();
+        self.focus_adjacent_workspace(tags)
+    }
+
+    /// Find the tag of the [Workspace] currently displayed on [Screen] `index`.
+    ///
+    /// Returns [None] if the index is out of bounds
+    pub fn tag_for_screen(&self, index: usize) -> Option<&str> {
+        self.screens()
+            .find(|s| s.index == index)
+            .map(|s| s.workspace.tag.as_str())
+    }
+
+    /// Find the tag of the [Workspace] containing a given client.
+    /// Returns Some(tag) if the client is known otherwise None.
+    pub fn tag_for_client(&self, client: &C) -> Option<&str> {
+        self.workspaces()
+            .find(|w| {
+                w.stack
+                    .as_ref()
+                    .map(|s| s.iter().any(|elem| elem == client))
+                    .unwrap_or(false)
+            })
+            .map(|w| w.tag.as_str())
+    }
+
+    /// If the given client is currently visible on a screen return a
+    /// reference to that screen, otherwise None.
+    pub fn screen_for_client(&self, client: &C) -> Option<&Screen<C>> {
+        self.screens.iter().find(|s| s.workspace.contains(client))
+    }
+
+    /// Find the tag of the [Workspace] with the given NetWmDesktop ID.
+    pub fn tag_for_workspace_id(&self, id: usize) -> Option<String> {
+        self.workspaces()
+            .find(|w| w.id == id)
+            .map(|w| w.tag.clone())
+    }
+
+    /// Returns `true` if the [StackSet] contains an element equal to the given value.
+    pub fn contains(&self, client: &C) -> bool {
+        self.clients().any(|c| c == client)
+    }
+
+    /// Extract a reference to the focused element of the current [Stack]
+    pub fn current_client(&self) -> Option<&C> {
+        self.screens
+            .focus
+            .workspace
+            .stack
+            .as_ref()
+            .map(|s| &s.focus)
+    }
+
+    /// An immutable reference to the currently focused [Screen]
+    pub fn current_screen(&self) -> &Screen<C> {
+        &self.screens.focus
+    }
+
+    /// An immutable reference to the current [Workspace]
+    pub fn current_workspace(&self) -> &Workspace<C> {
+        &self.screens.focus.workspace
+    }
+
+    /// A mutable reference to the current [Workspace]
+    pub fn current_workspace_mut(&mut self) -> &mut Workspace<C> {
+        &mut self.screens.focus.workspace
+    }
+
+    /// An immutable reference to the current [Stack] if there is one
+    pub fn current_stack(&self) -> Option<&Stack<C>> {
+        self.screens.focus.workspace.stack.as_ref()
+    }
+
+    /// The `tag` of the current [Workspace]
+    pub fn current_tag(&self) -> &str {
+        &self.screens.focus.workspace.tag
+    }
+
+    /// Attempt to set a new tag for an existing [Workspace].
+    ///
+    /// This will error if the new tag collides with an existing one or if the
+    /// old tag is unknown.
+    pub fn try_rename_workspace(
+        &mut self,
+        old_tag: impl AsRef<str>,
+        new_tag: impl Into<String>,
+    ) -> Result<()> {
+        let new_tag = new_tag.into();
+        if old_tag.as_ref() == new_tag {
+            return Ok(());
+        }
+
+        if self.contains_tag(&new_tag) {
+            return Err(Error::NonUniqueTags {
+                tags: vec![new_tag],
+            });
+        }
+
+        match self.workspace_mut(old_tag.as_ref()) {
+            Some(ws) => {
+                ws.tag = new_tag;
+                Ok(())
+            }
+            None => Err(Error::UnknownWorkspace(old_tag.as_ref().to_string())),
+        }
+    }
+
+    /// Add a new [Workspace] to this [StackSet].
+    ///
+    /// The id assigned to this workspace will be max(workspace ids) + 1.
+    ///
+    /// # Errors
+    /// This function will error with `NonUniqueTags` if the given tag is already present.
+    pub fn add_workspace<T>(&mut self, tag: T, layouts: LayoutStack) -> Result<()>
+    where
+        T: Into<String>,
+    {
+        let tag = tag.into();
+        if self.contains_tag(&tag) {
+            return Err(Error::NonUniqueTags { tags: vec![tag] });
+        }
+
+        let id = self
+            .workspaces()
+            .map(|w| w.id)
+            .max()
+            .expect("at least one workspace")
+            + 1;
+        let ws = Workspace::new(id, tag, layouts, None);
+        self.hidden.push_front(ws);
+
+        Ok(())
+    }
+
+    /// Attempt to remove a [Workspace] from this [StackSet] by tag.
+    ///
+    /// Removing a workspace in this way will close all clients present on the workspace.
+    ///
+    /// If the workspace tag is unknown or if removal would result in insufficient workspaces
+    /// for the current number of screens then this method will return None, otherwise it will
+    /// return the Workspace that was removed.
+    pub fn remove_workspace(&mut self, tag: impl AsRef<str>) -> Option<Workspace<C>> {
+        let tag = tag.as_ref();
+
+        for s in self.screens.iter_mut() {
+            if s.workspace.tag != tag {
+                continue;
+            }
+
+            // If we don't have a replacement in hidden we cant remove
+            let mut ws = self.hidden.pop_front()?;
+            swap(&mut ws, &mut s.workspace);
+
+            if self.previous_tag == tag {
+                self.previous_tag = s.workspace.tag.clone();
+            }
+
+            return Some(ws);
+        }
+
+        let opt = pop_where!(self, hidden, |w: &Workspace<C>| w.tag == tag);
+
+        if self.previous_tag == tag {
+            self.previous_tag = self.screens.focus.workspace.tag.clone();
+        }
+
+        opt
+    }
+
+    /// Add a new invisible [Workspace] to this [StackSet].
+    ///
+    /// It will not be possible to focus this workspace on a screen but its
+    /// state will be tracked and clients can be placed on it.
+    /// The id assigned to this workspace will be max(workspace ids) + 1.
+    ///
+    /// # Errors
+    /// This function will error with `NonUniqueTags` if the given tag is already present.
+    pub fn add_invisible_workspace<T>(&mut self, tag: T) -> Result<()>
+    where
+        T: Into<String>,
+    {
+        let tag = tag.into();
+        self.add_workspace(tag.clone(), LayoutStack::default())?;
+        self.invisible_tags.push(tag);
+
+        Ok(())
+    }
+
+    /// A reference to the [Workspace] with a tag of `tag` if there is one
+    pub fn workspace(&self, tag: &str) -> Option<&Workspace<C>> {
+        self.workspaces().find(|w| w.tag == tag)
+    }
+
+    /// A mutable reference to the [Workspace] with a tag of `tag` if there is one
+    pub fn workspace_mut(&mut self, tag: &str) -> Option<&mut Workspace<C>> {
+        self.workspaces_mut().find(|w| w.tag == tag)
+    }
+
+    /// Switch to the next available [Layout][crate::core::layout::Layout] on the focused [Workspace]
+    pub fn next_layout(&mut self) {
+        self.screens.focus.workspace.next_layout()
+    }
+
+    /// Switch to the previous available [Layout][crate::core::layout::Layout] on the focused [Workspace]
+    pub fn previous_layout(&mut self) {
+        self.screens.focus.workspace.previous_layout()
+    }
+
+    /// Attempt to set the current [Layout][crate::core::layout::Layout] by name.
+    ///
+    /// This is a no-op if the requested layout is already active or if no layout with the given name
+    /// is available for the active workspace.
+    pub fn set_layout_by_name(&mut self, layout: impl AsRef<str>) {
+        self.screens
+            .focus
+            .workspace
+            .set_layout_by_name(layout.as_ref())
+    }
+
+    /// Move focus to the next [Screen]
+    pub fn next_screen(&mut self) {
+        if self.screens.len() == 1 {
+            return;
+        }
+
+        self.update_previous_tag(self.screens.focus.workspace.tag.clone());
+        self.screens.focus_down();
+    }
+
+    /// Move focus to the previous [Screen]
+    pub fn previous_screen(&mut self) {
+        if self.screens.len() == 1 {
+            return;
+        }
+
+        self.update_previous_tag(self.screens.focus.workspace.tag.clone());
+        self.screens.focus_up();
+    }
+
+    /// Drag the focused workspace onto the next [Screen], holding focus
+    pub fn drag_workspace_forward(&mut self) {
+        if self.screens.len() == 1 {
+            return;
+        }
+
+        // We stash the previous tag so that we can restore it after we've
+        // cycled the screens and pulled over tag we were on before.
+        let true_previous_tag = self.previous_tag.clone();
+        self.next_screen();
+        self.try_swap_focused_workspace_with_tag(&self.previous_tag.clone());
+        self.previous_tag = true_previous_tag;
+    }
+
+    /// Drag the focused workspace onto the previous [Screen], holding focus
+    pub fn drag_workspace_backward(&mut self) {
+        if self.screens.len() == 1 {
+            return;
+        }
+
+        // We stash the previous tag so that we can restore it after we've
+        // cycled the screens and pulled over tag we were on before.
+        let true_previous_tag = self.previous_tag.clone();
+        self.previous_screen();
+        self.try_swap_focused_workspace_with_tag(&self.previous_tag.clone());
+        self.previous_tag = true_previous_tag;
+    }
+
+    /// If the current [Stack] is [None], return `default` otherwise
+    /// apply the function to it to generate a value
+    pub fn with<T, F>(&self, default: T, f: F) -> T
+    where
+        F: Fn(&Stack<C>) -> T,
+    {
+        self.current_stack().map(f).unwrap_or_else(|| default)
+    }
+
+    /// Apply a function to modify the current [Stack] if there is one
+    /// or compute and inject a default value if it is currently [None]
+    pub fn modify<F>(&mut self, f: F)
+    where
+        F: FnOnce(Option<Stack<C>>) -> Option<Stack<C>>,
+    {
+        self.screens.focus.workspace.stack = f(take(&mut self.screens.focus.workspace.stack));
+    }
+
+    /// Apply a function to modify the current [Stack] if it is non-empty
+    /// without allowing for emptying it entirely.
+    pub fn modify_occupied<F>(&mut self, f: F)
+    where
+        F: FnOnce(Stack<C>) -> Stack<C>,
+    {
+        self.modify(|s| s.map(f))
+    }
+
+    fn modify_workspace<F>(&mut self, tag: &str, f: F)
+    where
+        F: FnOnce(&mut Workspace<C>),
+    {
+        self.workspaces_mut().find(|w| w.tag == tag).map(f);
+    }
+
+    /// Iterate over each [Screen] in this [StackSet] in an arbitrary order.
+    pub fn screens(&self) -> impl Iterator<Item = &Screen<C>> {
+        self.screens.iter()
+    }
+
+    /// Mutably iterate over each [Screen] in this [StackSet] in an arbitrary order.
+    pub fn screens_mut(&mut self) -> impl Iterator<Item = &mut Screen<C>> {
+        self.screens.iter_mut()
+    }
+
+    /// Iterate over each [Workspace] in this [StackSet] in an arbitrary order.
+    pub fn workspaces(&self) -> impl Iterator<Item = &Workspace<C>> {
+        self.screens
+            .iter()
+            .map(|s| &s.workspace)
+            .chain(self.hidden.iter())
+    }
+
+    /// Iterate over each non-hidden [Workspace] in this [StackSet] in an arbitrary order.
+    pub fn non_hidden_workspaces(&self) -> impl Iterator<Item = &Workspace<C>> {
+        self.workspaces()
+            .filter(|w| !self.invisible_tags.contains(&w.tag))
+    }
+
+    /// Mutably iterate over each [Workspace] in this [StackSet] in an arbitrary order.
+    pub fn workspaces_mut(&mut self) -> impl Iterator<Item = &mut Workspace<C>> {
+        self.screens
+            .iter_mut()
+            .map(|s| &mut s.workspace)
+            .chain(self.hidden.iter_mut())
+    }
+
+    /// Iterate over the [Workspace] currently displayed on a screen in an arbitrary order.
+    pub fn on_screen_workspaces(&self) -> impl Iterator<Item = &Workspace<C>> {
+        self.screens.iter().map(|s| &s.workspace)
+    }
+
+    /// Iterate over the currently hidden [Workspace] in this [StackSet] in an arbitrary order.
+    pub fn hidden_workspaces(&self) -> impl Iterator<Item = &Workspace<C>> {
+        self.hidden.iter()
+    }
+
+    /// Iterate over the currently hidden [Workspace] in this [StackSet] in an arbitrary order.
+    pub fn hidden_workspaces_mut(&mut self) -> impl Iterator<Item = &mut Workspace<C>> {
+        self.hidden.iter_mut()
+    }
+
+    /// Iterate over each client in this [StackSet] in an arbitrary order.
+    pub fn clients(&self) -> impl Iterator<Item = &C> {
+        self.workspaces().flat_map(|w| w.clients())
+    }
+
+    /// Iterate over clients present in on-screen Workspaces.
+    ///
+    /// *NOTE*: this does _not_ mean that every client returned by this iterator
+    /// is visible on the screen: only that it is currently assigned to a workspace
+    /// that is displayed on a screen.
+    pub fn on_screen_workspace_clients(&self) -> impl Iterator<Item = &C> {
+        self.on_screen_workspaces().flat_map(|w| w.clients())
+    }
+
+    /// Iterate over clients from workspaces not currently mapped to a screen.
+    pub fn hidden_workspace_clients(&self) -> impl Iterator<Item = &C> {
+        self.hidden_workspaces().flat_map(|w| w.clients())
+    }
+}
+
+
+impl StackSet<WinId> {
+    /// Record a known client as floating, giving its preferred screen position.
+    ///
+    /// # Errors
+    /// This method with return [Error::UnknownClient] if the given client is
+    /// not already managed in this stack_set.
+    ///
+    /// This method with return [Error::ClientIsNotVisible] if the given client is
+    /// not currently mapped to a screen. This is required to determine the correct
+    /// relative positioning for the floating client as is it is moved between
+    /// screens.
+    pub fn float(&mut self, client: WinId, r: Rect) -> Result<()> {
+        if !self.contains(&client) {
+            return Err(Error::UnknownClient(client));
+        }
+        if self.screen_for_client(&client).is_none() {
+            return Err(Error::ClientIsNotVisible(client));
+        }
+
+        self.float_unchecked(client, r);
+
+        Ok(())
+    }
+
+    /// If a known client is floating, sink it and return its previous preferred screen position.
+    /// Otherwise, record it as floating with its preferred screen position.
+    ///
+    /// # Errors
+    /// This method with return [Error::UnknownClient] if the given client is
+    /// not already managed in this stack_set.
+    ///
+    /// This method with return [Error::ClientIsNotVisible] if the given client is
+    /// not currently mapped to a screen. This is required to determine the correct
+    /// relative positioning for the floating client as is it is moved between
+    /// screens.
+    pub fn toggle_floating_state(&mut self, client: WinId, r: Rect) -> Result<Option<Rect>> {
+        let rect = if self.is_floating(&client) {
+            if self.screen_for_client(&client).is_none() {
+                return Err(Error::ClientIsNotVisible(client));
+            }
+
+            self.sink(&client)
+        } else {
+            self.float(client, r)?;
+            None
+        };
+
+        Ok(rect)
+    }
+
+    /// Update internal state to reflect changes to the available physical screens.
+    pub fn update_screens(&mut self, rects: Vec<Rect>) -> Result<()> {
+        let n_old = self.screens.len();
+        let n_new = rects.len();
+
+        if n_new == 0 {
+            return Err(Error::NoScreens);
+        }
+
+        match n_new.cmp(&n_old) {
+            // Just a change in dimensions
+            Ordering::Equal => (),
+
+            // We have more screens now: pull in hidden workspaces to fill them
+            // If we run out of workspaces we backfill using generated defaults
+            Ordering::Greater => {
+                let padding = self.take_from_hidden(n_new - n_old);
+                for (n, w) in padding.into_iter().enumerate() {
+                    self.screens.insert_at(
+                        Position::Tail,
+                        Screen {
+                            workspace: w,
+                            index: n_old + n,
+                            r: Rect::default(),
+                        },
+                    );
+                }
+            }
+
+            // We have fewer screens now: focus moves to the first screen and
+            // we drop from the back of the stack
+            Ordering::Less => {
+                let mut raw = take(&mut self.screens).flatten();
+                let removed = raw.split_off(n_new);
+                self.hidden.extend(removed.into_iter().map(|s| s.workspace));
+                self.screens = Stack::from_iter_unchecked(raw);
+            }
+        }
+
+        // self.screens.len() is now correct so update the screen dimensions
+        for (s, r) in self.screens.iter_mut().zip(rects) {
+            s.r = r;
+        }
+
+        Ok(())
+    }
+
+    // This is a little fiddly...
+    // Rather than hard erroring if we end up with new screens being detected that
+    // push us over the number of available workspaces, we pad the workspace set
+    // with ones we generate with default values. In doing this we need to make sure
+    // that any _invisible_ workspaces are kept to one side so that they do not end
+    // up focused on a screen by mistake.
+    fn take_from_hidden(&mut self, n: usize) -> Vec<Workspace<WinId>> {
+        let next_id = self.workspaces().map(|w| w.id).max().unwrap_or(0) + 1;
+        let mut tmp = Vec::with_capacity(self.hidden.len());
+        let mut hidden = VecDeque::new();
+
+        // Filter out any hidden tags first
+        for w in take(&mut self.hidden) {
+            if self.invisible_tags.contains(&w.tag) {
+                hidden.push_front(w);
+            } else {
+                tmp.push(w);
+            }
+        }
+
+        // Sort so that we populate the new screens with workspaces in order of ID.
+        // Without this we are basing things off of the order we ended up with after
+        // whatever workspace focus changes the user has made while we are running.
+        tmp.sort_by_key(|w| w.id);
+
+        // Pad the remaining workspace count with empty default workspaces if we are
+        // below the number we need.
+        if tmp.len() < n {
+            for m in 0..(n - tmp.len()) {
+                tmp.push(Workspace::new_default(next_id + m));
+            }
+        } else {
+            let extra = tmp.split_off(n);
+            hidden.extend(extra);
+        }
+
+        self.hidden = hidden;
+
+        tmp
+    }
+}
+
+impl<C> StackSet<C>
+where
+    C: Copy + Clone + PartialEq + Eq + Hash,
+{
+    /// Produce a [Snapshot] of the current pure state of this [StackSet].
+    pub fn snapshot(&mut self, positions: Vec<(C, Rect)>) -> Snapshot<C> {
+        let visible = self
+            .screens
+            .unravel()
+            .skip(1) // skip the focused element
+            .map(ScreenState::from)
+            .collect();
+
+        Snapshot {
+            focused_client: self.current_client().copied(),
+            focused: ScreenState::from(&self.screens.focus),
+            visible,
+            positions,
+            hidden_clients: self.hidden_workspace_clients().copied().collect(),
+            killed_clients: take(&mut self.killed_clients),
+        }
+    }
+}
+
+macro_rules! defer_to_current_stack {
+    ($(
+        $(#[$doc_str:meta])*
+        $method:ident
+    ),+) => {
+        impl<C> StackSet<C>
+        where
+            C: Clone + PartialEq + Eq + Hash
+        {
+            $(
+                $(#[$doc_str])*
+                pub fn $method(&mut self) {
+                    if let Some(ref mut stack) = self.screens.focus.workspace.stack {
+                        stack.$method();
+                    }
+                }
+            )+
+        }
+    }
+}
+
+defer_to_current_stack!(
+    /// Move focus from the current element up the [Stack], wrapping to
+    /// the bottom if focus is already at the top.
+    /// This is a no-op if the current stack is empty.
+    focus_up,
+    /// Move focus from the current element down the [Stack], wrapping to
+    /// the top if focus is already at the bottom.
+    /// This is a no-op if the current stack is empty.
+    focus_down,
+    /// Swap the position of the focused element with one above it.
+    /// The currently focused element is maintained by this operation.
+    /// This is a no-op if the current stack is empty.
+    swap_up,
+    /// Swap the position of the focused element with one below it.
+    /// The currently focused element is maintained by this operation.
+    /// This is a no-op if the current stack is empty.
+    swap_down,
+    /// Rotate all elements of the stack forward, wrapping from top to bottom.
+    /// The currently focused position in the stack is maintained by this operation.
+    /// This is a no-op if the current stack is empty.
+    rotate_up,
+    /// Rotate all elements of the stack back, wrapping from bottom to top.
+    /// The currently focused position in the stack is maintained by this operation.
+    /// This is a no-op if the current stack is empty.
+    rotate_down,
+    /// Rotate the Stack until the current focused element is in the head position.
+    /// This is a no-op if the current stack is empty.
+    rotate_focus_to_head,
+    /// Move focus to the element in the head position.
+    /// This is a no-op if the current stack is empty.
+    focus_head,
+    /// Swap the current head element with the focused element in the
+    /// stack order. Focus stays with the original focused element.
+    /// This is a no-op if the current stack is empty.
+    swap_focus_and_head
+);
+
+

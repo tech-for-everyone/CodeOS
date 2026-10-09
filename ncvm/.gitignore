@@ -1,0 +1,11 @@
+# QEMU checkout + build outputs
+/src/
+/build-*/
+/install-*/
+/bin/
+/share/
+
+# misc
+*.o
+*.a
+*.log

@@ -1,0 +1,8 @@
+[package]
+name = "x11_overlay"
+version = "0.1.0"
+edition = "2021"
+description = "X11 overlay windows for HyperDE effects (no_std kernel port)"
+
+[lib]
+crate-type = ["rlib"]

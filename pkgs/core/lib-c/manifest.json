@@ -1,0 +1,11 @@
+{
+  "name": "lib-c",
+  "version": "1.0.0",
+  "description": "CodeOS core C library — crt0, string, stdio, stdlib, and userspace headers (unistd.h, wm_protocol.h)",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "install_path": "/lib/",
+  "source": "src/"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "wayland-protocol",
+  "version": "1.49",
+  "description": "Wayland interface definitions for clients and compositors",
+  "license": "MIT",
+  "type": "source",
+  "category": "Development",
+  "repo": "ccp",
+  "provides": ["wayland"],
+  "homepage": "https://wayland.freedesktop.org",
+  "url": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
+  "source": "upstream",
+  "note": "Interface XML only (wl_compositor, xdg-shell, ...) plus generated headers. Nothing in the tree consumes this yet: Qt's Wayland support is compiled out and CodeOS drives its display through pkgs/core/wm_protocol. Listed so GUI packages have a real 'wayland' capability to depend on."
+}

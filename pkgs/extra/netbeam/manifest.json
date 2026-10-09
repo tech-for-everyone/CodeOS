@@ -1,0 +1,11 @@
+{
+  "archive": "tar.gz",
+  "description": "NetBeam: AirDrop-style peer-to-peer file sharing (UDP discovery, TCP transfer)",
+  "format": "xora-1",
+  "install_path": "/bin/netbeam",
+  "license": "MIT",
+  "name": "netbeam",
+  "source": "payload/",
+  "type": "binary",
+  "version": "1.0.0"
+}

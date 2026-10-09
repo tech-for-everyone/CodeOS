@@ -1,0 +1,10 @@
+menu "DevMarket Subsystem Configuration"
+
+config DEVMARKET_CORE
+    bool "Integrated DevMarket Package Engine Support"
+    default y
+    help
+      Enables built-in kernel-level package processing, security verification,
+      and local installations for your custom package manager storefront.
+
+endmenu

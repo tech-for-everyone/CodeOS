@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "CodeOS",
+    "createdAt": 1782241510892,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "/home/devos2/CodeOS"
+  ],
+  "reload": null
+}

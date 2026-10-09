@@ -1,0 +1,11 @@
+{
+  "name": "zircon-notify",
+  "version": "1.0.0",
+  "description": "Zircon notification daemon — displays desktop notifications",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/zircon-notify",
+  "source": "src/"
+}

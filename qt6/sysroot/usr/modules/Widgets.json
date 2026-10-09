@@ -1,0 +1,22 @@
+{
+    "schema_version": 3,
+    "name": "Widgets",
+    "repository": "qtbase",
+    "version": "6.11.1",
+    "plugin_types": ["styles"],
+    "platforms": [
+        {
+            "name": "CodeOS",
+            "version": null,
+            "compiler_id": "GNU",
+            "compiler_version": "16.1.0",
+            "targets": [
+                {
+                    "static": true,
+                    "architecture": "x86_64",
+                    "abi": "x86_64-little_endian-lp64"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+#include <QtCore/qmetasequence.h> // IWYU pragma: export
