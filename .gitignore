@@ -1,1 +1,17 @@
 /target/
+# Large files - exclude from git
+*.iso
+*.img
+*.bin
+*.a
+*.o
+*.so
+*.dll
+qt6/sysroot/usr/lib/*.a
+qt6/sysroot/usr/lib/*.o
+kernel/codeos-1*.bin
+kernel/codeos-1*.iso
+kernel/disk.img
+codeos-1*.iso
+codeos-1*.bin
+disk.img
