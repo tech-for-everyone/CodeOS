@@ -155,6 +155,7 @@ SRC_C   += $(QT_BACKEND_DIR)/lgame_rooms.c
 SRC_C   += $(QT_BACKEND_DIR)/devstore.c
 SRC_C   += kernel/x11_server.c kernel/x11_stubs.c
     SRC_CXX = kernel/cxx_support.cpp kernel/stdcxx_support.cpp kernel/xserver.cpp arch/fb.cpp \
+              arch/cursor_theme.cpp \
               kernel/desktop.cpp kernel/qt_desktop.cpp \
               $(QT_BACKEND_DIR)/pixelman.cpp $(PKG_SRC_CXX)
     SRC_ASM = $(shell find arch -maxdepth 1 -name "*.S")
@@ -312,7 +313,7 @@ $(JENGINE_OBJ): ../src/jengine.c
 endif
 
 .PHONY: all clean check run run-qemu iso arm64 arm64-run arm64-run-nographic sign-efi signed-iso run-sb sb-vars install-image install install-device run-installed
-.PHONY: codec-check codec-fuzz-check apk-parser-check ncvm-check jengine-check
+.PHONY: codec-check codec-fuzz-check apk-parser-check ncvm-check jengine-check cursor-check
 
 all: $(USER_ELF) $(TARGET) $(FLAT_BIN)
 
@@ -338,6 +339,14 @@ codec-check:
 
 codec-fuzz-check:
 	@sh ../pkgs/core/codec/tests/fuzz.sh
+
+# Boots the ISO (with the pre-baked disk.img attached) into QEMU, then checks the
+# Bibata cursor loader and the rendered arrow probe against the theme files
+# themselves: the kernel's per-style FNV-1a CRC must equal a host recomputation
+# of the same 24px Xcursor chunk, and the arrow readback must equal the alpha
+# blend at the hotspot the file declares. Needs QEMU and a built ISO.
+cursor-check:
+	@python3 scripts/cursor_check.py
 
 arm64:
 	$(MAKE) ARCH=arm64 all
@@ -482,7 +491,7 @@ LIVE_DISK_IMG = disk.img
 # and the legacy image silently inherited this one. Separate names, separate sizes.
 LIVE_DISK_SIZE_M ?= 128
 
-$(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/scripts/*.script) $(wildcard disk/etc/*)
+$(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/scripts/*.script) $(wildcard disk/etc/*) $(shell find disk/usr -type f 2>/dev/null)
 	@echo "Creating pre-baked disk image ($(LIVE_DISK_SIZE_M) MB)..."
 	rm -f $(LIVE_DISK_IMG) fs.img
 	FS_TREE=$$(mktemp -d); \
@@ -491,6 +500,7 @@ $(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/sc
 	cp userspace/ld-codeos $$FS_TREE/lib/ld-codeos.so 2>/dev/null || true; \
 	cp disk/scripts/*.script $$FS_TREE/scripts/ 2>/dev/null || true; \
 	cp disk/etc/* $$FS_TREE/etc/ 2>/dev/null || true; \
+	cp -r disk/usr/. $$FS_TREE/usr/ 2>/dev/null || true; \
 	chmod -R 755 $$FS_TREE/bin $$FS_TREE/lib $$FS_TREE/scripts $$FS_TREE/etc $$FS_TREE/home; \
 	mke2fs -d $$FS_TREE -F -q fs.img $(LIVE_DISK_SIZE_M)M; \
 	dd if=/dev/zero of=$(LIVE_DISK_IMG) bs=1M count=$(LIVE_DISK_SIZE_M) 2>/dev/null; \

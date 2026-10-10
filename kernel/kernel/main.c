@@ -673,6 +673,20 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     bootsplash_set_progress(72, "Storage ready");
     phase_end(&ph, 1);
 
+#ifndef __aarch64__
+    /* Load the Bibata Modern Classic cursor theme from the mounted volume.
+     * If it is absent (bare disk, headless boot) the framebuffer cursor keeps
+     * its built-in glyphs, so this is always safe to attempt. */
+    {
+        int loaded = fb_cursor_load_theme("/usr/share/icons/Bibata-Modern-Classic/cursors");
+        if (loaded > 0) {
+            kprintf("    cursor: Bibata-Modern-Classic (%d styles)\n",
+                    fb_cursor_theme_count());
+            fb_cursor_probe();
+        }
+    }
+#endif
+
 /* Linux-ABI syscall coverage probe (spike). Spawns a userspace
      * /bin/linux-probe process running under the Linux personality
      * translation — only when explicitly enabled (host tooling). */

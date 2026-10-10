@@ -64,6 +64,13 @@ void fb_cursor_show(void);
 void fb_cursor_invalidate(void);
 void fb_cursor_set_style(int style);
 int  fb_cursor_get_style(void);
+/* Load an Xcursor theme from `dir` (a theme's "cursors" directory). Returns the
+ * number of styles loaded; styles that fail keep the built-in glyph. */
+int  fb_cursor_load_theme(const char *dir);
+int  fb_cursor_theme_count(void);
+/* Draw the arrow style over a known background and dump the readback for the
+ * loader/blend boot check. Returns 0 on success, negative if it could not run. */
+int  fb_cursor_probe(void);
 
 int fb_backbuffer_init(void);
 void fb_backbuffer_begin(void);

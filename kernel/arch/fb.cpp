@@ -1,9 +1,11 @@
 extern "C" {
 #include "fb.h"
+#include "cursor_theme.h"
 #include "io.h"
 #include "../kernel/string.h"
 #include "../kernel/vmm.h"
 #include "../kernel/pmm.h"
+#include "../kernel/kprintf.h"
 #include "pixelman.h"
 #include "../kernel/xserver.h"
 }
@@ -396,12 +398,22 @@ void fb_fill_row(int row) {
 
 /* ---- software cursor ---- */
 
+/* Built-in fallback glyphs, used only for styles the theme loader did not
+ * provide. They are 16x16 1-bit bitmaps with no hotspot (top-left is the
+ * pointer position). The loaded Bibata theme supplies anti-aliased ARGB
+ * surfaces with real hotspots, and those take precedence. */
 #define CURSOR_W 16
 #define CURSOR_H 16
 
-static int cursor_x, cursor_y, cursor_old_x, cursor_old_y __attribute__((unused));
+static int cursor_x, cursor_y, cursor_old_x, cursor_old_y;
 static int cursor_visible;
-static uint32_t cursor_saved[CURSOR_H][CURSOR_W];
+
+/* Saved background for the rectangle the cursor currently covers. The size
+ * depends on the style (16x16 fallback, up to CURSOR_THEME_MAX_DIM loaded),
+ * and the origin depends on the hotspot, so the saved rect is recorded rather
+ * than assumed. */
+static uint32_t cursor_saved_bg[CURSOR_THEME_MAX_DIM][CURSOR_THEME_MAX_DIM];
+static int cursor_saved_x, cursor_saved_y, cursor_saved_w, cursor_saved_h;
 static int cursor_saved_valid;
 static int cursor_style;
 
@@ -738,6 +750,25 @@ static const void *cursor_masks[CURSOR_STYLE_COUNT] = {
     cursor_resize_nesw_mask,
 };
 
+/* Dimensions and hotspot of the active style: the loaded theme surface if there
+ * is one, otherwise the 16x16 built-in glyph at the pointer position. */
+static int cursor_w(void) {
+    const cursor_theme_image_t *im = cursor_theme_get(cursor_style);
+    return im ? im->width : CURSOR_W;
+}
+static int cursor_h(void) {
+    const cursor_theme_image_t *im = cursor_theme_get(cursor_style);
+    return im ? im->height : CURSOR_H;
+}
+static int cursor_hot_x(void) {
+    const cursor_theme_image_t *im = cursor_theme_get(cursor_style);
+    return im ? im->hotx : 0;
+}
+static int cursor_hot_y(void) {
+    const cursor_theme_image_t *im = cursor_theme_get(cursor_style);
+    return im ? im->hoty : 0;
+}
+
 void fb_cursor_init(void) {
     cursor_x = 0;
     cursor_y = 0;
@@ -745,6 +776,8 @@ void fb_cursor_init(void) {
     cursor_old_y = 0;
     cursor_visible = 0;
     cursor_saved_valid = 0;
+    cursor_saved_w = 0;
+    cursor_saved_h = 0;
 }
 
 static void cursor_save_bg(void);
@@ -767,31 +800,75 @@ static inline uint32_t *fb_ptr(int x, int y) {
     return fb_get_active_buffer() + y * (fb.pitch / 4) + x;
 }
 
+/* Save the on-screen rectangle the cursor will occupy. The origin is the
+ * pointer position minus the hotspot, clamped to the screen, so a hotspot that
+ * falls off the top-left edge still saves the visible part. */
 static void cursor_save_bg(void) {
+    if (!fb_initialized) { cursor_saved_valid = 0; cursor_saved_w = cursor_saved_h = 0; return; }
     int w = (int)fb.width, h = (int)fb.height;
-    for (int row = 0; row < CURSOR_H && (cursor_y + row) < h; row++) {
-        for (int col = 0; col < CURSOR_W && (cursor_x + col) < w; col++) {
-            cursor_saved[row][col] = *fb_ptr(cursor_x + col, cursor_y + row);
-        }
-    }
-    cursor_saved_valid = 1;
+    int x0 = cursor_x - cursor_hot_x();
+    int y0 = cursor_y - cursor_hot_y();
+    int x1 = x0 + cursor_w();
+    int y1 = y0 + cursor_h();
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > w) x1 = w;
+    if (y1 > h) y1 = h;
+    cursor_saved_x = x0;
+    cursor_saved_y = y0;
+    cursor_saved_w = (x1 > x0) ? x1 - x0 : 0;
+    cursor_saved_h = (y1 > y0) ? y1 - y0 : 0;
+    for (int row = 0; row < cursor_saved_h; row++)
+        for (int col = 0; col < cursor_saved_w; col++)
+            cursor_saved_bg[row][col] = *fb_ptr(x0 + col, y0 + row);
+    cursor_saved_valid = (cursor_saved_w > 0 && cursor_saved_h > 0);
     cursor_old_x = cursor_x;
     cursor_old_y = cursor_y;
 }
 
 static void cursor_restore_bg(void) {
     if (!cursor_saved_valid) return;
-    int w = (int)fb.width, h = (int)fb.height;
-    for (int row = 0; row < CURSOR_H && (cursor_old_y + row) < h; row++) {
-        for (int col = 0; col < CURSOR_W && (cursor_old_x + col) < w; col++) {
-            *fb_ptr(cursor_old_x + col, cursor_old_y + row) = cursor_saved[row][col];
-        }
-    }
+    for (int row = 0; row < cursor_saved_h; row++)
+        for (int col = 0; col < cursor_saved_w; col++)
+            *fb_ptr(cursor_saved_x + col, cursor_saved_y + row) = cursor_saved_bg[row][col];
     cursor_saved_valid = 0;
 }
 
+/* Alpha-composite one theme pixel over the framebuffer. The framebuffer is
+ * opaque 0x00RRGGBB, so the source alpha is resolved here rather than stored;
+ * writing the raw ARGB would leave a channel the scanout ignores. */
+static inline void cursor_blend(int x, int y, uint32_t p) {
+    uint32_t *dst = fb_ptr(x, y);
+    uint32_t a = p >> 24;
+    if (a == 0) return;
+    if (a == 255) { *dst = p & 0x00FFFFFFu; return; }
+    uint32_t d  = *dst;
+    uint32_t ia = 255u - a;
+    uint32_t r = (((p >> 16) & 0xFF) * a + ((d >> 16) & 0xFF) * ia) / 255u;
+    uint32_t g = (((p >> 8)  & 0xFF) * a + ((d >> 8)  & 0xFF) * ia) / 255u;
+    uint32_t b =  ((p        & 0xFF) * a +  (d        & 0xFF) * ia) / 255u;
+    *dst = (r << 16) | (g << 8) | b;
+}
+
 static void cursor_draw(void) {
+    if (!fb_initialized) return;
     int w = (int)fb.width, h = (int)fb.height;
+    const cursor_theme_image_t *im = cursor_theme_get(cursor_style);
+
+    if (im) {
+        int ox = cursor_x - im->hotx, oy = cursor_y - im->hoty;
+        for (int row = 0; row < im->height; row++) {
+            int py = oy + row;
+            if (py < 0 || py >= h) continue;
+            for (int col = 0; col < im->width; col++) {
+                int px = ox + col;
+                if (px < 0 || px >= w) continue;
+                cursor_blend(px, py, im->argb[row * im->width + col]);
+            }
+        }
+        return;
+    }
+
     const uint8_t (*bmp)[CURSOR_H][2] = (const uint8_t (*)[CURSOR_H][2])cursor_bitmaps[cursor_style];
     const uint8_t (*msk)[CURSOR_H][2] = (const uint8_t (*)[CURSOR_H][2])cursor_masks[cursor_style];
     for (int row = 0; row < CURSOR_H && (cursor_y + row) < h; row++) {
@@ -835,10 +912,12 @@ void fb_cursor_invalidate(void) {
 }
 
 void fb_cursor_set_style(int style) {
-    if (style < 0 || style >= CURSOR_STYLE_COUNT) return;
-    cursor_save_bg();
-    cursor_style = style;
+    if (style < 0 || style >= CURSOR_STYLE_COUNT || style == cursor_style) return;
+    int was_visible = cursor_visible && fb_initialized;
+    if (was_visible) cursor_restore_bg();  /* erase the old shape before resizing */
     cursor_saved_valid = 0;
+    cursor_style = style;
+    if (was_visible) { cursor_save_bg(); cursor_draw(); }
 }
 
 int fb_cursor_get_style(void) {
@@ -847,6 +926,82 @@ int fb_cursor_get_style(void) {
 
 int fb_cursor_style_count(void) {
     return CURSOR_STYLE_COUNT;
+}
+
+/* Load a theme and repaint, so a theme applied after fb_cursor_init() takes
+ * effect immediately. Returns the number of styles loaded. */
+int fb_cursor_load_theme(const char *dir) {
+    int n = cursor_theme_load(dir);
+    if (n > 0) {
+        cursor_saved_valid = 0;
+        if (fb_initialized && cursor_visible) { cursor_save_bg(); cursor_draw(); }
+    }
+    return n;
+}
+
+int fb_cursor_theme_count(void) {
+    return cursor_theme_loaded_count();
+}
+
+/* Draw the arrow style over a known background and dump the readback, so the
+ * on-screen result (hotspot placement + alpha blend) can be checked against the
+ * same Xcursor file the loader read. A loader that parses correctly but a
+ * renderer that ignores the hotspot or divides alpha by 256 would still produce
+ * every ARGB value correctly and only this catches it.
+ *
+ * Side-effect free: the touched rectangle is saved, filled, drawn, read back,
+ * and restored before anything is printed, so a caller may invoke it during
+ * boot. Returns 0 on success, or a negative code if it could not run. */
+int fb_cursor_probe(void) {
+    if (!fb_initialized || fb.bpp != 32) return -1;
+    const cursor_theme_image_t *im = cursor_theme_get(0);
+    if (!im || !im->argb) return -2;
+
+    int w = (int)fb.width, h = (int)fb.height;
+    int X = 640, Y = 400;                 /* pointer position (hotspot) */
+    int ox = X - im->hotx, oy = Y - im->hoty;
+    if (ox < 0 || oy < 0 || ox + im->width > w || oy + im->height > h) return -3;
+
+    static uint32_t backup[CURSOR_THEME_MAX_DIM * CURSOR_THEME_MAX_DIM];
+    static uint32_t readback[CURSOR_THEME_MAX_DIM * CURSOR_THEME_MAX_DIM];
+    const uint32_t bg = 0x00224466u;      /* asymmetric so a channel swap shows */
+
+    for (int r = 0; r < im->height; r++)
+        for (int c = 0; c < im->width; c++)
+            backup[r * im->width + c] = *fb_ptr(ox + c, oy + r);
+
+    for (int r = 0; r < im->height; r++)
+        for (int c = 0; c < im->width; c++)
+            *fb_ptr(ox + c, oy + r) = bg;
+
+    int saved_visible = cursor_visible;
+    int saved_style   = cursor_style;
+    cursor_visible = 0;
+    fb_cursor_set_style(0);
+    fb_cursor_move(X, Y);
+    fb_cursor_show();
+
+    for (int r = 0; r < im->height; r++)
+        for (int c = 0; c < im->width; c++)
+            readback[r * im->width + c] = fb_getpixel((uint32_t)(ox + c), (uint32_t)(oy + r));
+
+    fb_cursor_hide();
+    fb_cursor_set_style(saved_style);
+    cursor_visible = saved_visible;
+
+    for (int r = 0; r < im->height; r++)
+        for (int c = 0; c < im->width; c++)
+            *fb_ptr(ox + c, oy + r) = backup[r * im->width + c];
+
+    kprintf("cursor: probe style=arrow origin=%d,%d size=%dx%d bg=%08x\n",
+            ox, oy, im->width, im->height, (unsigned)bg);
+    for (int r = 0; r < im->height; r++) {
+        kprintf("cursor: prow %d", r);
+        for (int c = 0; c < im->width; c++)
+            kprintf(" %08x", (unsigned)readback[r * im->width + c]);
+        kprintf("\n");
+    }
+    return 0;
 }
 
 uint32_t *fb_get_active_buffer(void) {
