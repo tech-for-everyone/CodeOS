@@ -1,9 +1,11 @@
 #include "usb_uhci.h"
 #include "usb_ehci.h"
+#include "timer.h"
 #include "../arch/x86_64/io.h"
 #include "../arch/x86_64/pci.h"
 #include "../kernel/kprintf.h"
 #include "../kernel/string.h"
+#include "../kernel/vmm.h"
 #include "mouse.h"
 #include "keyboard.h"
 #include "hid_keys.h"
@@ -45,10 +47,15 @@ static uint8_t ctrl_data[512] __attribute__((aligned(16)));
 static struct usb_dev uhci_devs[MAX_UHCI_DEVS];
 static int num_uhci_devs;
 
-/* ───── Physical address helper (identity-mapped kernel) ───── */
-
+/* ───── Physical address helper ─────
+ * UHCI descriptors and buffers are DMA'd by the controller, so they must
+ * be addressed by their *physical* address.  The old helper just cast the
+ * pointer, which truncates the higher-half kernel virtual address to 32
+ * bits and hands the controller a bogus address -- the frame list and TD
+ * chains then read garbage and every transfer failed before the first
+ * byte.  EHCI already used virt_to_phys; UHCI now matches it. */
 static uint32_t v2p(void *v) {
-    return (uint32_t)(uintptr_t)v;
+    return (uint32_t)(virt_to_phys((uintptr_t)v) & 0xFFFFFFFFu);
 }
 
 /* ───── I/O port helpers ───── */
@@ -93,7 +100,15 @@ static void td_init(struct uhci_td *td, int pid, int dev_addr, int endpoint,
     memset(td, 0, sizeof(*td));
     (void)is_in;
     td->link = TD_LINK_TERMINATE;
-    td->ctrl = TD_CTRL_ACTIVE | TD_CTRL_SPD;
+    /* Active only.  Do NOT set TD_CTRL_SPD (short packet detect): when an
+     * IN data stage returns fewer bytes than the max packet -- which is the
+     * normal case for a control transfer, e.g. an 18-byte device descriptor
+     * against a 64-byte max packet -- QEMU completes the TD but returns
+     * TD_RESULT_NEXT_QH *without* advancing the QH element, so the chain
+     * stops at the data stage and the status stage never runs.  A UHCI HCD
+     * is expected to notice the short packet and rewrite the QH itself; this
+     * driver does not, so SPD must stay clear. */
+    td->ctrl = TD_CTRL_ACTIVE;
     if (low_speed)
         td->ctrl |= TD_CTRL_LS;
     td->token = TD_TOKEN_DEVADDR(dev_addr) |
@@ -155,19 +170,25 @@ static void start_schedule(void) {
 /* ───── Wait for a TD to complete (poll active bit) ───── */
 
 static int wait_td(struct uhci_td *td, int timeout_ms) {
-    int max_loops = timeout_ms * 100;
-    for (int i = 0; i < max_loops; i++) {
-        if (!(td->ctrl & TD_CTRL_ACTIVE)) {
+    /* Yield each millisecond rather than spinning on `pause`.  The
+     * controller advances its schedule from a QEMU timer, and a tight
+     * `pause` loop can keep the emulator from running that timer, so the
+     * transfer would time out while the device was perfectly healthy.
+     * timer_sleep_ms() halts the CPU, which lets the timer fire. */
+    uint64_t start = timer_get_milliseconds();
+    for (;;) {
+        uint32_t ctrl = td->ctrl;
+        if (!(ctrl & TD_CTRL_ACTIVE)) {
             /* Check for errors */
-            uint32_t err = td->ctrl & (TD_CTRL_STALLED | TD_CTRL_DBUFERR |
-                                       TD_CTRL_BABBLE | TD_CTRL_CRCTO);
-            if (err)
+            if (ctrl & (TD_CTRL_STALLED | TD_CTRL_DBUFERR |
+                        TD_CTRL_BABBLE | TD_CTRL_CRCTO))
                 return -1;
             return 0;
         }
-        for (volatile int w = 0; w < 1000; w++) asm volatile("pause");
+        if (timer_get_milliseconds() - start >= (uint64_t)timeout_ms)
+            return -1; /* timeout */
+        timer_sleep_ms(1);
     }
-    return -1; /* timeout */
 }
 
 /* ───── USB control transfer (using UHCI async schedule) ───── */
@@ -239,8 +260,18 @@ static int uhci_control_transfer(struct usb_dev *dev, int dir_in,
         }
     }
 
-    /* Status stage: opposite direction, toggle=1, maxlen=0 (zero-length) */
-    int status_pid = (dir_in || data_len == 0) ? UHCI_PID_OUT : UHCI_PID_IN;
+    /* Status stage: always the *opposite* direction of the request,
+     * zero-length, toggle=1.  This is load-bearing for OUT requests
+     * with no data stage (SET_ADDRESS, SET_CONFIGURATION): QEMU's
+     * control state machine only invokes the device's handle_control
+     * -- which actually performs dev->addr = value -- from the IN
+     * status token of an OUT request (do_token_in, SETUP_STATE_ACK).
+     * An OUT status token there is "additional output" and silently
+     * ignored, so SET_ADDRESS never takes effect, the device stays at
+     * address 0, and every later transfer to the new address fails
+     * with NODEV.  The old (dir_in || data_len == 0) ? OUT : IN got
+     * this case backwards. */
+    int status_pid = dir_in ? UHCI_PID_OUT : UHCI_PID_IN;
     int status_in = (status_pid == UHCI_PID_IN);
 
     td = td_alloc();
@@ -270,10 +301,8 @@ static int uhci_control_transfer(struct usb_dev *dev, int dir_in,
     int ret = wait_td(status_td, 500);
 
     if (ret < 0) {
-        kprintf("uhci: ctrl xfer fail: ctrl=0x%08x token=0x%08x buf=0x%08x\n",
-                status_td->ctrl, status_td->token, status_td->buffer);
-        kprintf("uhci: qh element=0x%08x head=0x%08x\n",
-                ctrl_qh.element, ctrl_qh.head);
+        kprintf("uhci: ctrl xfer fail: ctrl=0x%08x token=0x%08x\n",
+                status_td->ctrl, status_td->token);
     }
 
     /* Detach chain from QH */
@@ -603,22 +632,38 @@ static void enumerate_port(int port_idx) {
 
     kprintf("uhci: device on port %d\n", port_idx);
 
-    /* Reset port */
+    /* Reset the port.  USB 2.0 7.1.7.5 requires the reset to be held for
+     * at least 10 ms, and the controller raises Port Enabled only once the
+     * device has finished re-initialising.  The previous 500000-`pause`
+     * spin is a couple of milliseconds at best under TCG and sampled PE
+     * exactly once, so a perfectly healthy device lost the race and was
+     * reported as "not enabled".  Hold the reset, then poll for PE. */
     portsc &= ~(UHCI_PORT_PEC | UHCI_PORT_CSC);
     portsc |= UHCI_PORT_PR;
     uwritew(UHCI_PORTSC(port_idx), portsc);
-    for (volatile int i = 0; i < 500000; i++) asm volatile("pause");
+    timer_sleep_ms(20);
 
-    /* End reset */
+    /* End reset, then *enable* the port.  UHCI port enable is
+     * software-driven -- the HCD writes Port Enable (bit 2) once the
+     * reset is over (QEMU models PE as a writable bit and honours the
+     * write only when a device is connected).  Ending the reset without
+     * setting PE left every port disabled, which is why a perfectly
+     * enumerated device never progressed past this point. */
     portsc = ureadw(UHCI_PORTSC(port_idx));
     portsc &= ~UHCI_PORT_PR;
+    portsc |= UHCI_PORT_PE;
     uwritew(UHCI_PORTSC(port_idx), portsc);
-    for (volatile int i = 0; i < 500000; i++) asm volatile("pause");
 
-    /* Check if port is enabled */
-    portsc = ureadw(UHCI_PORTSC(port_idx));
-    if (!(portsc & UHCI_PORT_PE)) {
-        kprintf("uhci: port %d not enabled after reset\n", port_idx);
+    /* Confirm the port came up */
+    int port_enabled = 0;
+    for (int i = 0; i < 100; i++) {
+        portsc = ureadw(UHCI_PORTSC(port_idx));
+        if (portsc & UHCI_PORT_PE) { port_enabled = 1; break; }
+        timer_sleep_ms(1);
+    }
+    if (!port_enabled) {
+        kprintf("uhci: port %d not enabled after reset (portsc=0x%04x)\n",
+                port_idx, portsc);
         return;
     }
 
@@ -673,25 +718,36 @@ static void enumerate_port(int port_idx) {
     /* Parse config and find endpoints */
     get_config_desc(dev);
 
-    /* HID detection — differentiate keyboard (proto=1) vs mouse/tablet (proto=2/0) */
+    /* HID detection.  The interface protocol (bInterfaceProtocol) is the
+     * authoritative signal: QEMU's HID devices all carry the same
+     * descriptor shape but differ here -- keyboard = 1 (boot), mouse = 2
+     * (boot, 4-byte report), tablet = 0 (non-boot, 8-byte absolute
+     * report).  A tablet even shares the mouse's VID/PID (0x0627:0x0001),
+     * so the identity cannot tell them apart; the interface protocol and
+     * endpoint size can.  Do NOT fall back to bDeviceProtocol, which is 0
+     * for the tablet and would misclassify it as a keyboard. */
     if (dev->class_code == USB_HID_CLASS || dev->subclass == USB_HID_CLASS || dev->is_hid) {
-        int hid_proto = dev->hid_protocol ? dev->hid_protocol : dev->protocol;
-        kprintf("uhci: HID device detected (subclass=0x%02x proto=0x%02x)\n",
-                dev->hid_subclass, hid_proto);
+        int hid_proto = dev->hid_protocol;
+        kprintf("uhci: HID device detected (subclass=0x%02x proto=0x%02x maxp=%d)\n",
+                dev->hid_subclass, hid_proto, dev->ep_in_maxp);
         if (dev->ep_in_maxp > 0) {
-            if (hid_proto == 2) {
-                /* Mouse / touchscreen / tablet — differentiate by endpoint size */
-                if (dev->ep_in_maxp <= 8 && uhci_mouse_dev_idx < 0) {
-                    uhci_mouse_dev_idx = num_uhci_devs - 1;
-                    kprintf("uhci-mouse: relative input device ready (maxp=%d)\n",
-                            dev->ep_in_maxp);
-                } else {
-                    uhci_touch_dev_idx = num_uhci_devs - 1;
-                    kprintf("uhci-touch: absolute input device ready\n");
-                }
-            } else {
+            if (hid_proto == 1) {
+                /* Boot keyboard */
                 uhci_kbd_dev_idx = num_uhci_devs - 1;
-                kprintf("uhci-kbd: keyboard ready\n");
+                kprintf("uhci-kbd: keyboard ready (maxp=%d)\n",
+                        dev->ep_in_maxp);
+            } else if (hid_proto == 2 || dev->ep_in_maxp <= 4) {
+                /* Relative mouse: interface protocol 2, or a small
+                 * (<=4-byte) boot report. */
+                uhci_mouse_dev_idx = num_uhci_devs - 1;
+                kprintf("uhci-mouse: relative input device ready (maxp=%d)\n",
+                        dev->ep_in_maxp);
+            } else {
+                /* Absolute tablet: interface protocol 0 (non-boot HID)
+                 * with a larger report carrying absolute X/Y. */
+                uhci_touch_dev_idx = num_uhci_devs - 1;
+                kprintf("uhci-touch: absolute input device ready (maxp=%d)\n",
+                        dev->ep_in_maxp);
             }
 
             /* Set configuration 1 */

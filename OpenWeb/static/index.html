@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenWeb Browser</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="browser-shell">
+    <header class="chrome-bar">
+      <form id="navigation-form" class="navigation-form">
+        <button type="button" class="nav-button" id="back-button" title="Back" disabled>←</button>
+        <button type="button" class="nav-button" id="forward-button" title="Forward" disabled>→</button>
+        <button type="button" class="nav-button" id="reload-button" title="Reload">⟳</button>
+        <button type="button" class="nav-button" id="home-button" title="Home">⌂</button>
+        
+        <div class="address-box">
+          <span class="lock" id="lock-icon">🔒</span>
+          <input id="address-bar" type="text" value="https://google.com" autocomplete="off" spellcheck="false" />
+        </div>
+        
+        <button type="submit" class="go-button" title="Go">Go</button>
+        <div class="engine-picker">
+          <select id="engine-select" title="Search engine">
+            <option value="google">Google</option>
+            <option value="ddg">DuckDuckGo</option>
+            <option value="bing">Bing</option>
+          </select>
+        </div>
+      </form>
+      
+      <div class="tab-actions">
+        <button type="button" class="tab-action" id="new-tab-button" title="New Tab (Ctrl+T)">＋</button>
+        <button type="button" class="tab-action" id="bookmarks-button" title="Bookmarks (Ctrl+B)">★</button>
+        <button type="button" class="tab-action" id="history-button" title="History (Ctrl+H)">⏐</button>
+        <button type="button" class="tab-action" id="downloads-button" title="Downloads (Ctrl+J)">⬇</button>
+        <button type="button" class="tab-action" id="settings-button" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <section class="tab-row" id="tab-row" role="tablist"></section>
+
+    <main class="browser-body" id="browser-body">
+      <iframe id="browser-view" class="browser-view" title="OpenWeb view" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+      
+      <!-- New tab page -->
+      <div id="new-tab-page" class="new-tab-page hidden">
+        <div class="new-tab-content">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="ntp-search-input" placeholder="Search or enter address" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="shortcuts" id="shortcuts-grid"></div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="status-bar">
+      <div class="status-left">
+        <span id="status-text">Ready</span>
+        <span id="security-info" class="security-badge"></span>
+      </div>
+      <div class="status-right">
+        <span id="zoom-level">100%</span>
+        <button type="button" class="status-button" id="reader-mode-btn" title="Reader Mode (F9)" disabled>📖</button>
+      </div>
+    </footer>
+
+    <!-- Modal dialogs -->
+    <div id="bookmarks-modal" class="modal hidden">
+      <div class="modal-content">
+        <header><h2>Bookmarks</h2><button class="modal-close" aria-label="Close">×</button></header>
+        <div class="modal-body">
+          <div class="bookmarks-toolbar">
+            <input type="text" id="bookmark-search" placeholder="Search bookmarks..." />
+            <button id="add-bookmark-btn">Add Bookmark</button>
+            <button id="import-bookmarks-btn">Import</button>
+            <button id="export-bookmarks-btn">Export</button>
+          </div>
+          <div id="bookmarks-tree"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="history-modal" class="modal hidden">
+      <div class="modal-content">
+        <header><h2>History</h2><button class="modal-close" aria-label="Close">×</button></header>
+        <div class="modal-body">
+          <div class="history-toolbar">
+            <input type="text" id="history-search" placeholder="Search history..." />
+            <button id="clear-history-btn">Clear History</button>
+          </div>
+          <div id="history-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="downloads-modal" class="modal hidden">
+      <div class="modal-content">
+        <header><h2>Downloads</h2><button class="modal-close" aria-label="Close">×</button></header>
+        <div class="modal-body">
+          <div id="downloads-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-content wide">
+        <header><h2>Settings</h2><button class="modal-close" aria-label="Close">×</button></header>
+        <div class="modal-body">
+          <nav class="settings-nav" id="settings-nav"></nav>
+          <div class="settings-panels" id="settings-panels"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="add-bookmark-modal" class="modal hidden">
+      <div class="modal-content small">
+        <header><h2>Add Bookmark</h2><button class="modal-close" aria-label="Close">×</button></header>
+        <form id="add-bookmark-form">
+          <div class="form-group">
+            <label for="bm-name">Name</label>
+            <input type="text" id="bm-name" required />
+          </div>
+          <div class="form-group">
+            <label for="bm-url">URL</label>
+            <input type="url" id="bm-url" required />
+          </div>
+          <div class="form-group">
+            <label for="bm-folder">Folder</label>
+            <select id="bm-folder"></select>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary modal-close">Cancel</button>
+            <button type="submit" class="btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </div>
+</body>
+</html>
