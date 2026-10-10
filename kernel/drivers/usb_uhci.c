@@ -577,10 +577,15 @@ int uhci_touch_poll(int *x, int *y, int *btn) {
         if (ret < 0) return 0;
     }
 
-    int bx = (int)(int8_t)report[1] | ((int)report[2] << 8)
-           | ((int)report[3] << 16) | ((int)report[4] << 24);
-    int by = (int)(int8_t)report[5] | ((int)report[6] << 8)
-           | ((int)report[7] << 16) | ((int)report[8] << 24);
+    /* Tablet HID report (QEMU dev-tablet):
+     *   byte 0:       buttons (bit 0 = left, bit 1 = right)
+     *   bytes 1-2:    X (16-bit LE, unsigned, 0..32767)
+     *   bytes 3-4:    Y (16-bit LE, unsigned, 0..32767)
+     *   byte 5:       wheel (signed, -127..127)
+     *   (remaining bytes are padding/constant)
+     */
+    int bx = report[1] | (report[2] << 8);  /* X, unsigned 0..32767 */
+    int by = report[3] | (report[4] << 8);  /* Y, unsigned 0..32767 */
 
     if (bx < 0) bx = 0;
     if (by < 0) by = 0;

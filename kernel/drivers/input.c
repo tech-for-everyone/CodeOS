@@ -178,6 +178,15 @@ void input_poll(void) {
         static int prev_btn;
         int tx, ty, tbtn;
         if (usb_touch_poll(&tx, &ty, &tbtn)) {
+            #include "../kernel/kprintf.h"
+            kprintf("uhci-touch: polled x=%d y=%d btn=%d\n", tx, ty, tbtn);
+            /* Scale tablet absolute coordinates (0..32767) to screen
+             * resolution.  The kernel defaults to 1920x1080 VBE mode. */
+            int sx = tx * 1920 / 32768;
+            int sy = ty * 1080 / 32768;
+            kprintf("uhci-mouse: set_pos(%d,%d)\n", sx, sy);
+            mouse_set_pos(sx, sy);
+
             uint64_t now = timer_get_milliseconds();
             gesture_finger_t *finger = gesture_get_finger(&gesture_tracker, 0);
 
