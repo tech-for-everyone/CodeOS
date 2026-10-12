@@ -1,69 +1,190 @@
-# HyperDE
+# CodeOS
 
-HyperDE is a portable X11 desktop environment written in Rust.
+A from-scratch hobby operating system with its own kernel, desktop GUI, package
+layout, and **ZircApp** app toolkit. Built for people who want to see how an OS
+works — not a bajillion distros, one approachable system.
 
-It is split into two independent processes:
+**Version:** 1.4.0
 
-- `chroma` owns the X11 compositor selection and the Composite redirection path.
-- `hwms` runs the Penrose window manager through its `x11rb` backend.
+**Internal Codename:** Andromeda
+## Features
 
-Neither component calls Linux-specific APIs. The display connection, window
-ownership, event loop, and window management path are all X11 protocol APIs.
+- **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
+- **Desktop GUI** — menubar, dock, launcher, windows, OpenWeb browser panel
+- **Userspace** programs via initramfs (`init`, `shell`, Zircon helpers, ...)
+- **Package tree** under `pkgs/` (manifests + compressed `.xora` app archives)
+- **Zircon** — lightweight native C GUI toolkit (`Zircon/`)
+- **Networking** — TCP/IP stack, DNS, HTTP/HTTPS (TLS 1.3)
+- **Containers** — Docker-like container engine with namespaces and cgroups
+- **Android compat** — Binder IPC, ashmem, property system
+- **Security** — AdBlock, firewall, file integrity monitoring, ClamAV
 
-## Build
-
-Install a Rust toolchain, then run:
+## Roadmap
+1. Make NetBeam for every OS
+2. Make it as usable as Linux
+### Dependencies (host)
 
 ```sh
-cargo build --release
+# Arch / Manjaro-style
+sudo pacman -Syu base-devel qemu-system-x86_64 xorriso python
+
+# Ubuntu / Debian
+sudo apt install build-essential qemu-system-x86 xorriso python3
+
+# Cross compiler (x86_64 freestanding)
+# Install x86_64-elf-gcc / binutils somewhere on PATH
+# e.g. from AUR: x86_64-elf-gcc  x86_64-elf-binutils
 ```
 
-The resulting executable accepts one component name:
+You also need **Rust** (`cargo`) for the OpenWeb HTTP backend (`kernel/rust_ow`).
+
+### Build
 
 ```sh
-./target/release/hyperde chroma
-./target/release/hyperde hwms
+# From repo root — builds kernel + userspace + Limine ISO
+./build.sh
+# Artifacts land in ~/codeos/  (codeos.bin, codeos.iso, limine files)
+
+# Or use Make directly:
+make -C kernel all              # kernel + userspace ELFs
+make -C kernel codeos-1.0.iso
+make -C kernel run              # QEMU with KVM (needs disk.img)
+make -C kernel run-iso          # boot the ISO in QEMU
 ```
 
-## Configuration
+Root `Makefile` shortcuts:
 
-Edit `hyperde.toml` in the working directory, or use `conf.lua` for Lua-based
-configuration. HyperDE loads `hyperde.toml` first and falls back to `conf.lua`
-when TOML is absent. You can also point `HYPERDE_CONFIG` at either file. The
-configuration is declarative and does not require Rust knowledge:
+| Target       | What it does                        |
+|-------------|--------------------------------------|
+| `make`      | Build kernel + ISO                   |
+| `make run`  | Build kernel and run in QEMU         |
+| `make clean`| Clean kernel/userspace objects       |
+| `make help` | Show all available targets           |
 
-- `compositor.panel_height` controls the Chroma panel geometry.
-- `window_manager.workspaces` sets workspace names.
-- `window_manager.terminal_command` is launched by `Mod+Enter`.
-- `window_manager.launcher_command` is launched by `Mod+d` when non-empty.
-- `window_manager.normal_border` and `focused_border` use RGBA hex colors.
-- `window_manager.border_width` sets Penrose border width in pixels.
-- `window_manager.focus_follow_mouse` controls pointer focus behavior.
-- `window_manager.floating_classes` lists window classes that should float.
-- `applications.startup` lists commands started when HWMS launches.
-- `applications.commands` adds custom keybindings for commands.
-- Set `terminal = true` for terminal applications such as `btop`; HyperDE will
-	open them inside `window_manager.terminal_command`.
+### Run in QEMU
 
-For example, this starts a notes app and adds a browser shortcut:
+```sh
+# Quick launch script (auto-detects KVM, boots from kernel)
+./run.sh
 
-```toml
-[applications]
-startup = ["kcalc"]
-commands = [
-	{ name = "System monitor", key = "M-t", command = "btop", terminal = true },
-]
+# Or with options:
+./run.sh -m 1G -c 8     # 1GB RAM, 8 cores
+./run.sh -i              # Boot from ISO
+./run.sh -n              # Serial only (no display)
+./run.sh -g              # Use virtio-gpu
 ```
 
-Commands are launched directly, without a shell. Use an executable and its
-space-separated arguments, such as `firefox --private-window`.
+### Linux applications
 
-Lua files return one configuration table. They are evaluated without shell
-access, and only the documented configuration values are read.
+The x86_64 Linux personality supports statically linked ELF applications and
+the bundled `linux-runner` entrypoint. Copy an application into the CodeOS
+filesystem, then run:
 
-Start Chroma before HWMS in an X11 session. Only one compositor can own each
-screen, so an existing compositor must be stopped first. HWMS uses `Mod` as
-the modifier: `Mod+j/k` changes focus, `Mod+1..9` selects workspaces,
-`Mod+Shift+1..9` moves windows, `Mod+Space` changes layout, `Mod+Shift+q`
-closes a window, and `Mod+q` exits HWMS. `Mod+Shift` plus left or right mouse
-buttons moves or resizes the focused window.
+```sh
+linux-runner debian
+linux-runner /path/to/app [arguments]
+```
+
+`linux-runner debian` starts the bundled `debian-minimal` rootfs inside CodeOS
+namespaces, similar to the isolated userspace role of a crosvm guest. The
+compatibility layer currently targets command-line and lightweight userspace
+applications; it does not provide a full Linux kernel, glibc ABI, or hardware
+driver environment.
+
+### Package management
+
+`fetch` follows a Moss-style repository workflow with cached `stone.index`
+metadata and persistent installed-package state:
+
+```sh
+fetch sync -u
+fetch search <pattern>
+fetch install <package>
+fetch fetch <package>
+fetch upgrade
+```
+
+Installed state is stored in `/.pkg/db`; repository configuration and metadata
+are cached under `/.pkg` so package listings and dependency checks survive a
+reboot.
+
+### Xora application archives
+
+Installed applications are distributed as `.xora` files: gzip-compressed tar
+archives containing a root `manifest.json` and a `payload/` tree. The format
+preserves executable permissions while keeping downloaded applications small:
+
+```sh
+make xora-pack XORA_SOURCE=build/my-app XORA_OUTPUT=my-app-1.0.xora
+make xora-inspect XORA_ARCHIVE=my-app-1.0.xora
+make xora-unpack XORA_ARCHIVE=my-app-1.0.xora XORA_DESTINATION=staging/root
+make xora-install XORA_ARCHIVE=my-app-1.0.xora XORA_ROOT=staging/root
+make xora-audit XORA_ROOT=staging/root
+make xora-audit XORA_ROOT=staging/root XORA_REPAIR=1
+make xora-all
+```
+
+`XORA_SOURCE` should contain `manifest.json` and, for an install-ready app, a
+`payload/` directory whose paths are relative to the target filesystem root.
+Extraction rejects absolute, parent-traversal, device, and symlink entries.
+The `install` operation validates the manifest before placing payload files
+under the selected CodeOS root.
+Each install records SHA-256 baselines under `.xora/integrity/`. Auditing
+reports changed files; repair deletes changed executable/code files only.
+`make xora-all` packages every executable in `kernel/userspace/` into
+`pkgs/xora/`, including legacy apps that do not yet have a source manifest.
+
+### Release tarball
+
+```sh
+./release.sh   # packs ISO+bin into ~/Downloads/CodeOS-YYYY.MM.DD.tar.gz
+```
+
+## Repository layout
+
+```
+CodeOS/
+├── kernel/           # Kernel sources, drivers, arch, bootloader, userspace build
+│   ├── kernel/       # Core kernel C/C++ (mm, sched, syscall, desktop glue, ...)
+│   ├── drivers/      # PCI NICs, USB, input, audio, devstore, ...
+│   ├── arch/         # x86_64 + arm64 boot / low-level
+│   ├── gui/          # GUI primitives (desktop, windows, widgets)
+│   ├── userspace/    # crt0, libc stubs, link scripts → builds user ELFs
+│   └── bootloader/   # Limine assets
+├── pkgs/             # Userspace and kernel-injected packages
+│   └── core/         # Package definitions and source trees
+│       ├── graphics/ # Framebuffer + Virtio-GPU kernel drivers
+│       └── panels/   # GUI apps (calc, terminal, OpenWeb, installer, ...)
+├── Zircon/           # Zircon toolkit + daemon
+├── scripts/          # Helper build scripts (colors, gen_initramfs, etc.)
+├── version           # Version info (CODEOS_VERSION, CODEOS_BUILD)
+├── build.sh          # One-shot build → ~/codeos
+├── release.sh        # Package release archive
+├── run.sh            # QEMU launch script
+└── Makefile          # Root build targets
+```
+
+## Roadmap
+
+1. More packages (including Flatpak-style containers later)
+2. Broader Linux / Zircon app compatibility
+3. Wine-like Windows app translator
+4. Stronger desktop polish (macOS Big Sur / ThormiumOS-inspired GUI)
+5. Make CodeOS for mobile named Zircon
+## Goals
+
+An OS whose code is approachable for non-experts and gamers alike — one clear
+system, not a maze of distros.
+
+## License
+
+- Kernel: see `kernel/LICENSE` / `kernel/COPYING` (GPLv3)
+- Zircon: MIT — see `Zircon/LICENSE`
+
+## Credits
+
+See `kernel/CREDITS`.
+
+
+--tech4everyone
+      BYE Coders
