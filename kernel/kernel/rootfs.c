@@ -438,6 +438,22 @@ int rootfs_extract_debian_minimal(void) {
         "# loopback\nauto lo\niface lo inet loopback\n"
         "# container eth0\nauto eth0\niface eth0 inet dhcp\n", 96);
 
+    /* Placeholder binaries for common tools (replaced by apt install) */
+    const char *bins[] = {
+        "bash", "sh", "apt", "apt-get", "dpkg", "wget", "curl",
+        "chromium-browser", "chromium", "firefox-esr",
+        "vim", "nano", "git", "python3", "node",
+        NULL
+    };
+    for (int i = 0; bins[i]; i++) {
+        snprintf(path, sizeof(path), "%s/usr/bin/%s", base, bins[i]);
+        fs_mkfile(path);
+        char placeholder[128];
+        snprintf(placeholder, sizeof(placeholder),
+            "#!/bin/sh\necho 'Placeholder - install via: apt-get install %s'\nexit 1\n", bins[i]);
+        fs_write(path, placeholder, strlen(placeholder));
+    }
+
     /* Mark rootfs as ready */
     rootfs_entry_t *e = rootfs_find("debian-minimal");
     if (e) {

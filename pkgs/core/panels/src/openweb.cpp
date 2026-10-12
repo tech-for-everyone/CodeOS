@@ -39,6 +39,24 @@ extern "C" {
 #define C_OW_STATUS     0xFFF0F0F4
 #define C_OW_SHADOW     0x22000000
 
+/* ── Search engines ── */
+
+#define OW_MAX_ENGINES  5
+
+struct OwEngine {
+    const char *name;
+    const char *search_url;
+    const char *home_url;
+};
+
+static const OwEngine ow_engines[OW_MAX_ENGINES] = {
+    { "Google",      "https://www.google.com/search?q=%s",      "https://www.google.com" },
+    { "DuckDuckGo",  "https://duckduckgo.com/?q=%s",            "https://duckduckgo.com" },
+    { "Bing",        "https://www.bing.com/search?q=%s",        "https://www.bing.com" },
+    { "Brave",       "https://search.brave.com/search?q=%s",    "https://search.brave.com" },
+    { "Startpage",   "https://www.startpage.com/sp/search?q=%s","https://www.startpage.com" },
+};
+
 /* ── IP-only navigation (DNS is disabled in the kernel) ── */
 
 static int ow_is_ip_literal(const char *s) {
@@ -62,6 +80,7 @@ static int ow_is_ip_literal(const char *s) {
 static int ow_is_url(const char *s) {
     if (!s || !s[0]) return 0;
     if (strncmp(s, "http://", 7) == 0) return 1;
+    if (strncmp(s, "https://", 8) == 0) return 1;
     if (strncmp(s, "file://", 7) == 0) return 1;
     if (strncmp(s, "about:", 6) == 0) return 1;
     return ow_is_ip_literal(s);
@@ -72,7 +91,7 @@ static void ow_normalize_url(const char *input, char *output, int max_len) {
     const char *trimmed = input;
     while (*trimmed == ' ') trimmed++;
 
-    if (strncmp(trimmed, "http://", 7) == 0) {
+    if (strncmp(trimmed, "http://", 7) == 0 || strncmp(trimmed, "https://", 8) == 0) {
         strlcpy(output, trimmed, max_len);
     } else {
         /* Bare numeric IP or path → http:// form */
@@ -292,9 +311,9 @@ void openweb_close(void) {
 }
 
 /* ── Hover state tracking ── */
-static int ow_hover_btn = 0;  /* 0=none, 1=back, 2=forward, 3=home, 4=reload, 5=ai */
+static int ow_hover_btn = 0;  /* 0=none, 1=back, 2=forward, 3=home, 4=reload, 5=ai, 6=search, 7=chromium */
 static int ow_hover_tab = -1; /* -1=none, else tab index */
-static int ow_btn_x[5], ow_btn_y, ow_btn_w, ow_btn_h;
+static int ow_btn_x[7], ow_btn_y, ow_btn_w, ow_btn_h;
 static int ow_tab_x[OW_MAX_TABS], ow_tab_w_arr[OW_MAX_TABS];
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -418,6 +437,8 @@ void openweb_draw(void) {
     ow_btn_x[2] = btn_x + 68;
     ow_btn_x[3] = btn_x + 102;
     ow_btn_x[4] = btn_x + 140;
+    ow_btn_x[5] = btn_x + 174;  /* search engine selector (40px) */
+    ow_btn_x[6] = btn_x + 218;  /* chromium launcher (36px) */
 
     uint32_t btn_bg;
     /* Back */
@@ -450,6 +471,23 @@ void openweb_draw(void) {
         uint32_t ai_bg = (ow_hover_btn == 5) ? 0x33BF5AF2 : C_OW_TAB_BG;
         fb_fill_rounded_rect(btn_x + 140, btn_y, 30, btn_h, 8, ai_bg);
         fb_drawstr_px(btn_x + 148, aby + (OW_TOOLBAR_H - 14) / 2, "AI", C_MAUVE, 0);
+    }
+
+    /* Search engine selector */
+    {
+        uint32_t se_bg = (ow_hover_btn == 6) ? C_GLASS_HI : C_OW_TAB_BG;
+        fb_fill_rounded_rect(btn_x + 174, btn_y, 40, btn_h, 8, se_bg);
+        const char *se_name = ow_engines[ow.tabs[ow.active].search_engine].name;
+        char se_short[8];
+        snprintf(se_short, sizeof(se_short), "%.4s", se_name);
+        fb_drawstr_px(btn_x + 180, aby + (OW_TOOLBAR_H - 14) / 2, se_short, C_BLUE, 0);
+    }
+
+    /* Chromium launcher button */
+    {
+        uint32_t cr_bg = (ow_hover_btn == 7) ? 0x33E85D75 : C_OW_TAB_BG;
+        fb_fill_rounded_rect(btn_x + 218, btn_y, 36, btn_h, 8, cr_bg);
+        fb_drawstr_px(btn_x + 224, aby + (OW_TOOLBAR_H - 14) / 2, "CR", C_GREEN, 0);
     }
 
     /* ── Bookmarks bar ── */
@@ -575,6 +613,8 @@ void openweb_mousemove(int mx, int my) {
         else if (mx < ow_btn_x[2] + 30) new_btn = 3;
         else if (mx < ow_btn_x[3] + 30) new_btn = 4;
         else if (mx < ow_btn_x[4] + 30) new_btn = 5;
+        else if (mx < ow_btn_x[4] + 30 + 34) new_btn = 6;  /* search engine (40px wide) */
+        else if (mx < ow_btn_x[4] + 30 + 34 + 36) new_btn = 7;  /* chromium (36px wide) */
     }
     if (new_btn != ow_hover_btn) { ow_hover_btn = new_btn; changed = 1; }
 
@@ -701,6 +741,21 @@ int openweb_click(int mx, int my) {
         /* AI Summarize */
         if (mx >= btn_x + 140 && mx < btn_x + 170 && my >= btn_y && my < btn_y + btn_h) {
             freecode_gui_open();
+            desktop_redraw();
+            return 1;
+        }
+        /* Search engine selector */
+        if (mx >= btn_x + 174 && mx < btn_x + 214 && my >= btn_y && my < btn_y + btn_h) {
+            ow.tabs[ow.active].search_engine = (ow.tabs[ow.active].search_engine + 1) % OW_MAX_ENGINES;
+            snprintf(ow.tabs[ow.active].title, 64, "Search: %s",
+                     ow_engines[ow.tabs[ow.active].search_engine].name);
+            desktop_redraw();
+            return 1;
+        }
+        /* Chromium launcher */
+        if (mx >= btn_x + 218 && mx < btn_x + 254 && my >= btn_y && my < btn_y + btn_h) {
+            // Launch chromium via linux-runner
+            system("linux-runner /usr/bin/chromium-browser --no-sandbox --disable-gpu 2>/dev/null &");
             desktop_redraw();
             return 1;
         }

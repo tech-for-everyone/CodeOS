@@ -1,0 +1,10 @@
+{
+    "name": "chromium-launcher",
+    "version": "1.0.0",
+    "description": "Launches ungoogled-chromium via linux-runner in debian-minimal container",
+    "author": "CodeOS Team",
+    "license": "MIT",
+    "binaries": ["chromium-launcher"],
+    "dependencies": ["linux-runner", "container"],
+    "categories": ["network", "web", "browser"]
+}
