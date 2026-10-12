@@ -8,7 +8,7 @@
 #include "mbedtls/base64.h"
 
 #define PKG_REPOS_FILE   PKG_DIR "/repos.index"
-#define PKG_STONE_INDEX  PKG_CACHE_DIR "/stone.index"
+#define PKG_INDEX  PKG_CACHE_DIR "/pkg.index"
 #define PKG_STONE_EXT    ".stone"
 #define PKG_FTECH_EXT    ".ftech"
 #define PKG_PAYLOAD_DIR  PKG_CACHE_DIR "/payloads"
@@ -39,7 +39,7 @@ static void pkg_init_groups(void);
 static void pkg_seed_payloads(void);
 void pkg_txn_log(const char *name, const char *version, int action, const char *old_version);
 
-/* Network-fetched packages (parsed from stone.index) live in a dynamic
+/* Network-fetched packages (parsed from pkg.index) live in a dynamic
    table appended to all_repos[] as the last repo (REMOTE_REPO_IDX). */
 #define PKG_MAX_REMOTE 256
 #define REMOTE_REPO_IDX 6
@@ -162,7 +162,7 @@ static int pkg_repo_all_idx(const char *name) {
     return -1;
 }
 
-/* Add a remote package discovered via stone.index. Dedupes by name. */
+/* Add a remote package discovered via pkg.index. Dedupes by name. */
 static void pkg_remote_add(const char *name, const char *version,
                            uint32_t size, const char *src_repo) {
     if (remote_count >= PKG_MAX_REMOTE) return;
@@ -192,8 +192,8 @@ static void pkg_remote_add(const char *name, const char *version,
     remote_repo[remote_count].name = NULL; /* keep table terminated */
 }
 
-/* Parse a stone.index payload: one "name version size repo" line each. */
-static int pkg_parse_stone_index(const char *buf, int len, const char *src_repo) {
+/* Parse a pkg.index payload: one "name version size repo" line each. */
+static int pkg_parse_pkg_index(const char *buf, int len, const char *src_repo) {
     int added = 0;
     const char *p = buf;
     while (p && p < buf + len) {
@@ -224,7 +224,7 @@ static int pkg_parse_stone_index(const char *buf, int len, const char *src_repo)
     return added;
 }
 
-/* Fetch <repo_url>/stone.index over http(s) and merge into the remote table.
+/* Fetch <repo_url>/pkg.index over http(s) and merge into the remote table.
  * Returns the number of packages added, or -1 on failure. */
 static int pkg_fetch_repo_index(const repository_t *repo) {
     if (!repo || !repo->url[0]) return -1;
@@ -236,22 +236,22 @@ static int pkg_fetch_repo_index(const repository_t *repo) {
     char path[576];
     int plen = (int)strlen(u.path);
     if (plen == 0 || strcmp(u.path, "/") == 0)
-        sprintf(path, "/stone.index");
+        sprintf(path, "/pkg.index");
     else if (u.path[plen - 1] == '/')
-        sprintf(path, "%sstone.index", u.path);
+        sprintf(path, "%spkg.index", u.path);
     else
-        sprintf(path, "%s/stone.index", u.path);
+        sprintf(path, "%spkg.index", u.path);
 
     char buf[2048];
     int n = use_tls ? https_get(u.host, u.port, path, buf, sizeof(buf) - 1)
                     : http_get(u.host, u.port, path, buf, sizeof(buf) - 1);
     if (n <= 0) return -1;
     buf[n] = 0;
-    return pkg_parse_stone_index(buf, n, repo->name);
+    return pkg_parse_pkg_index(buf, n, repo->name);
 }
 
-/* Write the available-package index (moss: stone.index) for enabled repos. */
-static int pkg_write_stone_index(void) {
+/* Write the available-package index (moss: pkg.index) for enabled repos. */
+static int pkg_write_pkg_index(void) {
     char buf[FS_CONTENT_MAX];
     int n = 0, entries = 0;
     for (int i = 0; i < repo_count; i++) {
@@ -279,8 +279,8 @@ static int pkg_write_stone_index(void) {
     }
     if (entries == 0) return 0;
     fs_mkdir(PKG_CACHE_DIR);
-    fs_mkfile(PKG_STONE_INDEX);
-    if (fs_write(PKG_STONE_INDEX, buf, n) < 0) return 0;
+    fs_mkfile(PKG_INDEX);
+    if (fs_write(PKG_INDEX, buf, n) < 0) return 0;
     return entries;
 }
 
@@ -329,16 +329,16 @@ static void pkg_load_repo_config(void) {
     }
 }
 
-/* Load the cached stone.index written by a previous pkg_repo_update(), so
+/* Load the cached pkg.index written by a previous pkg_repo_update(), so
  * network-fetched metadata survives a reboot without needing to re-fetch. */
-static void pkg_load_stone_index(void) {
+static void pkg_load_pkg_index(void) {
     char buf[FS_CONTENT_MAX];
-    int len = fs_read(PKG_STONE_INDEX, buf, sizeof(buf) - 1);
+    int len = fs_read(PKG_INDEX, buf, sizeof(buf) - 1);
     if (len <= 0) return;
     buf[len] = 0;
     remote_count = 0;
     memset(remote_repo, 0, sizeof(remote_repo));
-    pkg_parse_stone_index(buf, len, "remote");
+    pkg_parse_pkg_index(buf, len, "remote");
 }
 
 /* ── Semantic version comparison ── */
@@ -662,7 +662,7 @@ void pkg_init(void) {
     fs_mkdir(PKG_CACHE_DIR);
     count_repo_pkgs();
     pkg_init_repos();
-    pkg_load_stone_index();
+    pkg_load_pkg_index();
     pkg_load_db();
     pkg_init_groups();
     pkg_seed_payloads();
@@ -1143,7 +1143,7 @@ void pkg_held_list(void) {
 
 void pkg_repo_update(void) {
     int repos_active = 0;
-    kprintf("Fetching repo metadata (stone.index)...\n");
+    kprintf("Fetching repo metadata (pkg.index)...\n");
     remote_count = 0;
     memset(remote_repo, 0, sizeof(remote_repo));
     for (int i = 0; i < repo_count; i++) {
@@ -1166,7 +1166,7 @@ void pkg_repo_update(void) {
     }
     pkg_metadata_ts = pkg_now();
     pkg_cache_updated = 1;
-    int indexed = pkg_write_stone_index();
+    int indexed = pkg_write_pkg_index();
     pkg_save_repo_config();
     kprintf("Repo metadata refreshed — %d packages indexed from %d repo(s), ts=%u\n",
             indexed, repos_active, pkg_metadata_ts);
@@ -1230,7 +1230,7 @@ void pkg_fetch(const char *name, const char *out_dir) {
     pkg_join_path(path, sizeof(path), dir, "");
     snprintf(path + (int)strlen(path), sizeof(path) - (int)strlen(path), "%s-%s%s", p->name, p->version, PKG_STONE_EXT);
 
-    /* Packages discovered over the network (stone.index) are downloaded
+    /* Packages discovered over the network (pkg.index) are downloaded
      * from their source repo. Static-table packages get a synthetic stone
      * built from the bundled metadata. */
     if (ri == REMOTE_REPO_IDX) {
@@ -1293,7 +1293,7 @@ void pkg_fetch(const char *name, const char *out_dir) {
 
     char stone[FS_CONTENT_MAX];
     int n = sprintf(stone,
-        "stone-index: 1\n"
+        "pkg-index: 1\n"
         "name: %s\n"
         "version: %s\n"
         "size: %u\n"
