@@ -204,7 +204,7 @@ endif
 ../pkgs/core/openssl/src/ossl_shim.o ../pkgs/core/openssl/src/ossl_https.o: \
         CFLAGS := -I../pkgs/core/openssl/freestd -I../pkgs/core/openssl/freestd/sys $(CFLAGS)
 
-USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard
+USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 
 # ── Rust backend (ow_http) ──
@@ -221,6 +221,15 @@ RUST_HD_LIB = $(RUST_HD_DIR)/target/x86_64-unknown-none/release/libhyperde_shell
 
 $(RUST_HD_LIB): $(wildcard $(RUST_HD_DIR)/src/*.rs) $(RUST_HD_DIR)/Cargo.toml ../userspace/hyperde/conf.lua
 	cd $(RUST_HD_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" cargo build --target x86_64-unknown-none --release
+
+# ── CDP Bridge for Chromium (runs in debian-minimal container) ──
+CDP_BRIDGE_SRC = ../pkgs/core/chromium-launcher/src/cdp_bridge.c
+CDP_BRIDGE_BIN = disk/usr/local/bin/cdp_bridge
+
+$(CDP_BRIDGE_BIN): $(CDP_BRIDGE_SRC)
+	@echo "Building CDP bridge for container..."
+	mkdir -p $(dir $@)
+	x86_64-linux-gnu-gcc -O2 -Wall -Wextra -std=c11 -D_GNU_SOURCE -o $@ $(CDP_BRIDGE_SRC) -lpthread
 
 # ── Rust tiling window manager (penrose) ──
 RUST_PR_DIR = kernel/rust_penrose
@@ -491,7 +500,7 @@ LIVE_DISK_IMG = disk.img
 # and the legacy image silently inherited this one. Separate names, separate sizes.
 LIVE_DISK_SIZE_M ?= 128
 
-$(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/scripts/*.script) $(wildcard disk/etc/*) $(shell find disk/usr -type f 2>/dev/null)
+$(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/scripts/*.script) $(wildcard disk/etc/*) $(shell find disk/usr -type f 2>/dev/null) $(CDP_BRIDGE_BIN)
 	@echo "Creating pre-baked disk image ($(LIVE_DISK_SIZE_M) MB)..."
 	rm -f $(LIVE_DISK_IMG) fs.img
 	FS_TREE=$$(mktemp -d); \
