@@ -20,6 +20,8 @@ static int sched_in_yield;
 static spinlock_t sched_lock = SPINLOCK_INIT;
 volatile int need_resched;
 
+static void fpu_reset_image(char *img);
+
 void sched_preempt_disable(void) { preemption_enabled = 0; }
 void sched_preempt_enable(void)  { preemption_enabled = 1; }
 
@@ -103,6 +105,11 @@ static uint64_t *alloc_syscall_stack(void) {
 
 void sched_init(void) {
     memset(threads, 0, sizeof(threads));
+    /* Every thread needs a valid FPU image, not an all-zero one -- see
+     * fpu_reset_image().  The idle thread is never created through
+     * sched_create_thread_prio(), so initialise all slots here. */
+    for (int i = 0; i < THREAD_MAX; i++)
+        fpu_reset_image(threads[i].fpu_state);
     for (int i = 0; i < SCHED_PRIO_COUNT; i++)
         ready_head[i] = ready_tail[i] = 0;
 
@@ -178,6 +185,7 @@ int sched_create_thread_prio(const char *name, void (*entry)(void), int priority
     if (!t) return -1;
 
     memset(t, 0, sizeof(thread_t));
+    fpu_reset_image(t->fpu_state);
     strncpy_safe(t->name, name, THREAD_NAME_MAX);
     t->state = THREAD_READY;
     t->tid = tid;
@@ -206,6 +214,25 @@ int sched_create_thread_prio(const char *name, void (*entry)(void), int priority
 }
 
 extern uint64_t syscall_kernel_rsp;
+
+/* The architectural reset image of the x87/SSE unit, which is what a new
+ * thread must start with.  An all-zero 512-byte FXSAVE area is NOT "FPU
+ * idle": FXRSTOR from zeros loads FCW=0x0000 -- every x87 exception
+ * unmasked, including precision -- FTW=0x00 (all eight x87 registers
+ * *valid*, not empty) and MXCSR=0x0000 (rather than the 0x1F80 default).
+ * The first inexact user computation then leaves an unmasked precision
+ * exception pending, and the very next x87 instruction re-raises #MF
+ * forever.  TCG does not model that delivery, so a zeroed image boots;
+ * KVM runs real x87 and wedges -- which is why the ZircApp self-test
+ * stalled at phone_event's `fucomcoip` only under -accel kvm.  These are
+ * FINIT's defaults: FCW=0x037F (all exceptions masked, extended
+ * precision), FTW=0xFF (all empty), MXCSR=0x1F80. */
+static void fpu_reset_image(char *img) {
+    *((uint16_t *)(void *)(img + 0))  = 0x037F; /* FCW */
+    *(uint8_t  *)(void *)(img + 4)    = 0xFF;   /* FTW (abridged) */
+    *(uint32_t *)(void *)(img + 24)   = 0x1F80; /* MXCSR */
+    *(uint32_t *)(void *)(img + 28)   = 0xFFFF; /* MXCSR_MASK */
+}
 
 static inline void fpu_save(thread_t *t) {
     __asm__ volatile("fxsave64 %0" : "=m"(*t->fpu_state) : : "memory");
