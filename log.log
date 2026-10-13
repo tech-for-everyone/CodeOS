@@ -1,0 +1,691 @@
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+[2J[H
+[2;34H[38;2;240;112;64mCodeOS v1.5.0[0m
+
+
+
+[9;1H                       [7m CodeOS [27m
+                        CodeOS (Recovery) [27m
+                        CodeOS (Safe Mode) [27m
+                        CodeOS (No Demos) [27m
+                        CodeOS (Shell + Framebuffer) [27m
+                        Zircon [27m
+                        Zircon (Debug) [27m
+                        Zircon ARM64 (S9 SM-G960U) [27m
+                        Zircon ARM64 (S9 SM-G960U Debug) [27m
+[4;22H[38;2;138;138;158mARROWS[0m Select    [38;2;138;138;158mENTER[0m Boot    [38;2;138;138;158mE[0m Edit[6;34H[38;2;138;138;158mB[0m Blank Entry[18;1H
+
+[22;28H[36mCodeOS desktop environment[0m[23;26H[2K[38;2;138;138;158mBooting automatically in [38;2;176;172;200m10[38;2;138;138;158m...[0m[2K[2J[H
+[2;34H[38;2;240;112;64mCodeOS v1.5.0[0m
+
+
+
+[9;1H                        CodeOS [27m
+                       [7m CodeOS (Recovery) [27m
+                        CodeOS (Safe Mode) [27m
+                        CodeOS (No Demos) [27m
+                        CodeOS (Shell + Framebuffer) [27m
+                        Zircon [27m
+                        Zircon (Debug) [27m
+                        Zircon ARM64 (S9 SM-G960U) [27m
+                        Zircon ARM64 (S9 SM-G960U Debug) [27m
+[4;22H[38;2;138;138;158mARROWS[0m Select    [38;2;138;138;158mENTER[0m Boot    [38;2;138;138;158mE[0m Edit[6;34H[38;2;138;138;158mB[0m Blank Entry[18;1H[23;23H[36mBoot into single-user recovery mode[0m[2J[H
+[2;34H[38;2;240;112;64mCodeOS v1.5.0[0m
+
+
+
+[9;1H                        CodeOS [27m
+                        CodeOS (Recovery) [27m
+                       [7m CodeOS (Safe Mode) [27m
+                        CodeOS (No Demos) [27m
+                        CodeOS (Shell + Framebuffer) [27m
+                        Zircon [27m
+                        Zircon (Debug) [27m
+                        Zircon ARM64 (S9 SM-G960U) [27m
+                        Zircon ARM64 (S9 SM-G960U Debug) [27m
+[4;22H[38;2;138;138;158mARROWS[0m Select    [38;2;138;138;158mENTER[0m Boot    [38;2;138;138;158mE[0m Edit[6;34H[38;2;138;138;158mB[0m Blank Entry[18;1H[23;22H[36mBoot with minimal drivers and services[0m[2J[H
+[2;34H[38;2;240;112;64mCodeOS v1.5.0[0m
+
+
+
+[9;1H                        CodeOS [27m
+                        CodeOS (Recovery) [27m
+                        CodeOS (Safe Mode) [27m
+                       [7m CodeOS (No Demos) [27m
+                        CodeOS (Shell + Framebuffer) [27m
+                        Zircon [27m
+                        Zircon (Debug) [27m
+                        Zircon ARM64 (S9 SM-G960U) [27m
+                        Zircon ARM64 (S9 SM-G960U Debug) [27m
+[4;22H[38;2;138;138;158mARROWS[0m Select    [38;2;138;138;158mENTER[0m Boot    [38;2;138;138;158mE[0m Edit[6;34H[38;2;138;138;158mB[0m Blank Entry[18;1H[23;18H[36mBoot the desktop without the self-test windows[0m[2J[Hlimine: Loading executable `boot():/boot/codeos-1-kernel.bin`...
+limine: Physical base:   0xb35a8000
+limine: Virtual base:    0xffffffff80200000
+limine: Slide:           0x0
+limine: ELF entry point: 0xffffffff80203dcc
+limine: Base revision:   0
+limine: Requests count:  6
+limine: Top of HHDM:     0x10000000000
+limine: Entry point at 0xffffffff80203dcc
+acpi: Found RSDP at 0xf64d0
+vbe: Initialising...
+vbe: Version: 3.0
+vbe: OEM: SeaBIOS VBE(C) 2011
+vbe: Graphics vendor: SeaBIOS Developers
+vbe: Product name: SeaBIOS VBE Adapter
+vbe: Product revision: Rev. 1
+edid: Success.
+vbe: EDID detected screen resolution of 1280x800
+vbe: Found matching mode 0x17a, attempting to set...
+vbe: Mode was already set, perfect!
+vbe: Framebuffer address: 0xfd000000
+edid: Success.
+paging: 1GiB pages are not supported!
+acpi: Found RSDP at 0xf64d0
+acpi: "DMAR" not found
+acpi: Found RSDP at 0xf64d0
+acpi: "IVRS" not found
+boot: HTTPS BOOT TEST requested via cmdline
+boot: no-demos -- self-test windows suppressed
+
+============================================================
+  CodeOS version Andromeda (#1 SMP CodeOS Andromeda x86_64 1.4.0) (x86_64)
+  Command line: (none)
+  BIOS/hardware provided memory info available.
+  x86_64 kernel built with GCC 4.2.1
+============================================================
+
+Limine: framebuffer 1280x800 32bpp at 0x0xffff8000fd000000
+Display: Framebuffer (Limine, 1280x800)
+GPU: Limine GOP 1280x800
+Limine: usable memory 12382476 KB
+Memory regions:
+  (using multiboot mem_upper: 12382476 KB)
+Total: 12382476 KB, Free: 12382476 KB (0 regions)
+
+PMM: 3095619 pages total (12092 MB), 3055663 free (11936 MB), kernel=734632-774076 (39444 pages)
+PMM: free_stack=32768 KB, bitmap=512 KB, BSS overhead=39444 pages
+mm: pre-seeded heap with 64 pages (256 KB)
+  SMEP off, SMAP off
+GDT/TSS: initialized (tss=0xffff800000240000)
+GDT: syscall MSRs configured
+slab: initialized 64 cache slots
+csl: CodeOS Scripting Language initialized
+ipc: subsystem initialized
+audit: subsystem initialized (max 64 rules, 1024 logs)
+inotify: subsystem initialized
+ns: initialized 7 namespaces, root cgroup
+vfs: initialized (512 fds, 32 mounts)
+uhci: no UHCI controller found
+ehci: no USB 2.0 controller with ports found
+wifi: registered driver 'virtio-wifi'
+ac97: no controller found
+mixer: initialized (8 sources, master=80)
+audio: initialized (speaker + ac97 + mixer)
+mixer: initialized (8 sources, master=80)
+Drivers:
+  serial   COM1 (arch)
+  timer    1000 Hz
+  ps2      keyboard + mouse
+  rtc      available
+  speaker  PC beeper
+  storage  none
+  nic      down
+  wifi     Disconnected
+  usb      none
+  bluetooth none
+  serial_acm none
+  audio     none
+  video     none
+  gamepad   none
+  printer   none
+  rndis     none
+  mtp       none
+  wacom     none
+  dfu       none
+tcp: 32 slots
+nic: probing e1000...
+e1000: link UP
+e1000: using INTx IRQ 11
+e1000: NIC at 00:03.0 BAR0=0xfebc0000 MAC=52:54:00:12:34:56
+nic: active = e1000 MAC=52:54:00:12:34:56
+DHCP: offered 10.0.2.15
+DHCP: lease 86400 sec, renew at 43201048 ms
+DHCP: IP 10.0.2.15 GW 10.0.2.2 DNS 10.0.2.3
+eth: init mac=52:54:00:12:34:56 mtu=1500
+arp: init 64 slots
+ip: init addr=0f02000a gw=0202000a
+udp: init 32 sockets
+icmp: init
+tcp: 32 slots
+netdev: init 8 slots
+socket: init 128 slots
+virtio-net: not found
+wifi: no driver found
+netstat: init
+block: ATA disk detected (129 MB, LBA )
+codefs: bad magic 0x00002005 (expected 0x434f4445)
+codefs: mount failed
+Hello from CodeOS disk!
+CodeOS Scripting Engine Test
+Count: 0
+Count: 1
+Count: 2
+Count: 3
+Count: 4
+Sum of squares 1..5 = 55
+initramfs: populating 46 files
+[rootfs] seeding android-stock container image (15520 bytes)
+[rootfs] android-stock: seeded /containers/images/android-stock/init
+[rootfs] android-stock: seeded /containers/images/android-stock/bin/sh
+[rootfs] android-stock: seeded /containers/images/android-stock/system/bin/run-as
+[rootfs] android-stock: wrote /containers/images/android-stock/system/build.prop
+[rootfs] android-stock: installed app android-launcher
+[rootfs] android-stock: installed app android-clock
+[rootfs] android-stock: installed app android-calculator
+[rootfs] android-stock: installed app android-settings
+[rootfs] android-stock: installed app android-dialer
+[rootfs] android-stock: installed app android-music
+[rootfs] android-stock: installed app android-browser
+[rootfs] android-stock: installed app android-camera
+[rootfs] android-stock: installed app android-calendar
+[rootfs] android-stock: installed app android-keyboard
+cursor: arrow left_ptr 24x24 hot=5,1 crc=a09ea7d6
+cursor: hand hand2 24x24 hot=10,1 crc=2c1b3724
+cursor: crosshair crosshair 24x24 hot=12,12 crc=544c348d
+cursor: text xterm 24x24 hot=12,12 crc=203b8877
+cursor: resize_h sb_h_double_arrow 24x24 hot=12,12 crc=0f7b1b48
+cursor: resize_v sb_v_double_arrow 24x24 hot=12,12 crc=910d0119
+cursor: resize_nwse bd_double_arrow 24x24 hot=12,12 crc=7cff5d25
+cursor: resize_nesw fd_double_arrow 24x24 hot=12,12 crc=43adbe6b
+cursor: loaded 8/8 styles from /usr/share/icons/Bibata-Modern-Classic/cursors
+    cursor: Bibata-Modern-Classic (8 styles)
+cursor: probe style=arrow origin=635,399 size=24x24 bg=00224466
+cursor: prow 0 00224466 00224466 00224466 00214365 00224466 00224466 00224466 00224466 00214365 00214365 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 1 00224466 00224466 00214365 00224466 00223f5c 0063717f 00727e8b 0030475e 00224466 00224466 00214365 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 2 00224466 00214365 00214365 00204060 00ccd0d3 00ffffff 00fafafa 00ffffff 007b8692 00204161 00224466 00214364 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 3 00224466 00214264 00224466 00364c61 00ffffff 00535455 000e0e0f 0089898a 00ffffff 00a0a7af 00203f5e 00224466 00214264 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 4 00224466 00214264 00224466 00536474 00fdfdfd 00161617 00000000 00000000 00636465 00ffffff 00bfc4c9 00223f5b 00224466 00214264 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 5 00224466 00214264 00224466 00576777 00ffffff 00171718 00010101 00060606 00000000 004c4c4d 00fbfbfb 00d9dcdf 0027415b 00224466 00214264 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 6 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00040404 00000000 00373838 00ececec 00f0f1f2 0030475e 00224466 00214264 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 7 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00040404 00000000 00232424 00d9d9d9 00ffffff 003e5266 00224466 00214364 00214365 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 8 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00040404 00000000 00141414 00c0c1c1 00ffffff 00526273 00224466 00214365 00214365 00224466 00224466 00224466 00224466 00224466
+cursor: prow 9 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00030303 00000000 00080808 00a8a9a9 00ffffff 006a7784 00214365 00224466 00214365 00224466 00224466 00224466 00224466
+cursor: prow 10 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00000000 00020202 00000000 00000000 00909091 00ffffff 0087919b 00204161 00224466 00214365 00224466 00224466 00224466
+cursor: prow 11 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00000000 00000000 00010101 00020202 00000000 00777878 00ffffff 00a5acb3 00203f5e 00224466 00214365 00224466 00224466
+cursor: prow 12 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00000000 00000000 00000000 00010101 00030303 00000000 005e5f60 00ffffff 00adb3ba 00204161 00214365 00214365 00224466
+cursor: prow 13 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00010101 00060606 00000000 00626364 00ffffff 00344a60 00224466 00214264 00224466
+cursor: prow 14 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00000000 00010101 00030303 00040404 00020202 00010101 00020202 00030303 000b0b0c 00f9f9fa 005b6a7a 00224466 00214264 00224466
+cursor: prow 15 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00000000 00020202 00000000 00000000 00000000 00000000 00000001 00000001 00000001 00393a3b 00ffffff 004c5e70 00224466 00214264 00224466
+cursor: prow 16 00224466 00214264 00224466 00576777 00ffffff 00161617 00000000 00020202 00000000 00030303 00000000 00020202 004d4d4e 00989898 00c2c2c2 00d4d4d4 00dbdbdb 00dddddd 00ffffff 00e9eaec 00213f5c 00214365 00214365 00224466
+cursor: prow 17 00224466 00214264 00224466 00576777 00ffffff 00171718 00000000 00020202 00040404 00000000 002d2e2e 00cecece 00ffffff 00e9eaec 00b9bec3 00a2aab1 0098a1a9 00939ca5 006e7b88 0025405b 00224466 00214365 00224466 00224466
+cursor: prow 18 00224466 00214264 00224466 00586878 00fdfdfd 00141415 00020202 00060606 00000000 003c3d3d 00f5f5f5 00e7e9ea 00415467 00203f5d 00214365 00224466 00224466 00224466 00224466 00224466 00214365 00224466 00224466 00224466
+cursor: prow 19 00224466 00214264 00224466 00435669 00ffffff 00363737 00000000 00000000 002e2f2f 00f4f4f4 00d2d6d9 00233f5a 00224466 00224466 00224466 00214365 00214365 00214365 00214264 00214365 00224466 00224466 00224466 00224466
+cursor: prow 20 00224466 00214365 00224466 00213f5d 00eceeef 00d1d1d1 0019191a 00272829 00e8e8e8 00e3e5e7 00233f5b 00224466 00214263 00214365 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 21 00224466 00224466 00214364 00224466 00354b61 00ffffff 00ffffff 00ffffff 00eaeced 0029425c 00224466 00214264 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 22 00224466 00224466 00224466 00214365 00224466 0027415b 006a7785 00677583 00233f5b 00224466 00214364 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+cursor: prow 23 00224466 00224466 00224466 00224466 00214365 00224466 00224466 00224466 00224466 00214365 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466 00224466
+LPROBE: spawned tid=2
+LPROBE: load /bin/linux-probe
+LPROBE: start entry=0x4000f0 rsp=0x8d5f2ed8
+LPROBE: entry page phys=0x31e000 flags=0x5
+LPROBE: bytes: 55 48 89 e5 41 57 41 56
+LPROBE: begin
+LP[OK  ] getpid: 1 OK
+LP[OK  ] getppid: 0 OK
+LP[OK  ] gettid: 1 OK
+LP[OK  ] getuid: 0 OK
+LP[OK  ] geteuid: 0 OK
+LP[OK  ] getgid: 0 OK
+LP[OK  ] getegid: 0 OK
+LP[OK  ] gettimeofday: 0 OK
+1 (sec)
+LP[OK  ] clock_gettime(CLOCK_REALTIME): 0 OK
+LP[RAW] brk(0): 1610612736
+LP[OK  ] mmap(RW|ANON): 0 OK
+LP[RAW] mmap_vaddr: 545460846592
+LP[OK  ] mprotect(RX): 0 OK
+LP[OK  ] munmap: 0 OK
+LP[OK  ] madvise: 0 OK
+LP[OK  ] openat(/bin/linux-probe): 3 OK
+LP[OK  ] read(16): 16 OK
+LP[RAW] data: 127
+LP[OK  ] lseek(SEEK_CUR): 16 OK
+LP[OK  ] close: 0 OK
+LP[OK  ] access(F_OK): 0 OK
+LP[OK  ] faccessat: 0 OK
+LP[OK  ] chdir(/): 0 OK
+LP[OK  ] getcwd: 4209456 OK
+LP[OK  ] newfstatat(/): 0 OK
+LP[RAW] statx(/): 0
+LP[OK  ] readlinkat(/proc/self/exe): 14 OK
+LP[OK  ] openat(/): 3 OK
+LP[RAW] getdents64(64B buf): -22
+LP[OK  ] fcntl: 0 OK
+LP[OK  ] rt_sigaction(1): 0 OK
+LP[OK  ] rt_sigprocmask: 0 OK
+LP[GAP] kill(0,sig=99 invalid): -22 (ENOSYS or stub)
+LP[FAIL] tgkill: -3 FAILED (expected >= 0)
+LP[GAP] futex: -38 (ENOSYS or stub)
+LP[OK  ] prctl(PR_GET_NAME?): 0 OK
+LP[OK  ] set_tid_address: 1 OK
+LP[OK  ] set_robust_list: 0 OK
+LP[OK  ] sigaltstack: 0 OK
+LP[GAP] pipe: -38 (ENOSYS or stub)
+LP[GAP] pipe2: -12 (ENOSYS or stub)
+LP[GAP] dup(stdout): -22 (ENOSYS or stub)
+LP[GAP] dup2(stdout): -22 (ENOSYS or stub)
+LP[GAP] dup3(stdout): -38 (ENOSYS or stub)
+LP[OK  ] uname: 0 OK
+LP[RAW] uname.sysname: 99
+LP[OK  ] getrandom(8): 8 OK
+LP[OK  ] prlimit64: 0 OK
+LP[OK  ] getrusage: 0 OK
+LP[OK  ] writev: 0 OK
+LP[OK  ] sched_yield: 0 OK
+LP[OK  ] nanosleep(1ms): 0 OK
+LP[RAW] ioctl: -38
+LP[GAP] getpriority: -38 (ENOSYS or stub)
+LP[GAP] sched_getaffinity: -38 (ENOSYS or stub)
+LP[UDP] socket: 1000
+LP[UDP] connect: 0
+LP[UDP] sendto: 71
+LP[UDP] recvfrom: -11
+LP[RAW] close(sock): 0
+LP[GAP] epoll_create1: 4 (ENOSYS or stub)
+LP[GAP] epoll_ctl: -38 (ENOSYS or stub)
+LP[GAP] epoll_wait: 0 (ENOSYS or stub)
+LP[GAP] eventfd2: -38 (ENOSYS or stub)
+LP[GAP] timerfd_create: -38 (ENOSYS or stub)
+LP[GAP] signalfd4: -38 (ENOSYS or stub)
+LP[GAP] ptrace: -38 (ENOSYS or stub)
+LP[GAP] memfd_create: -38 (ENOSYS or stub)
+LP[GAP] clone3: -38 (ENOSYS or stub)
+LP[GAP] statfs: -38 (ENOSYS or stub)
+LP[GAP] fstatfs: -38 (ENOSYS or stub)
+LP[GAP] setpriority: -38 (ENOSYS or stub)
+LP[GAP] inotify_init1: -38 (ENOSYS or stub)
+LP[RAW] socketpair: -38
+LP[GAP] arch_prctl: 0 (ENOSYS or stub)
+LP[GAP] pread64: -22 (ENOSYS or stub)
+LP[GAP] pwrite64: 16 (ENOSYS or stub)
+LPROBE: checks=39 failed=1 first_fail_at=28
+LPROBE: FAIL
+LPROBE: done status=1
+NCVM: spawned tid=3
+NCVM: portal io=0x740 ABSENT (magic=ffffffff) legacy/foreign emulator?
+NCVM: load /bin/ncvm
+NCVM: start entry=0x4020bc rsp=0x7f5ddea8
+ncvm: selftest start (pid 2)
+ncvm: selftest [ok  ] name validation accepts a plain name and rejects traversal
+ncvm: selftest [ok  ] argument validation accepts digits only
+ncvm: selftest [ok  ] the selftest scratch files were created
+ncvm: selftest [ok  ] sys_readdir reports a byte count for a populated directory
+ncvm: selftest readdir 8 of 8 planted names in 65 bytes
+ncvm: selftest [ok  ] sys_readdir returns every name whole, not just the first few
+ncvm: selftest [ok  ] the listing is packed NUL-separated names, not fixed-stride records
+ncvm: selftest checks=6 failed=0
+ncvm: selftest OK
+NCVM: done status=0
+ZIRCAPP: spawned tid=4
+ZIRCAPP: load /bin/zircapp
+ZIRCAPP: start entry=0x403d38 rsp=0x873d5ea8
+zircapp: Zircon application framework on CodeOS
+phone: initialized
+sms: initialized
+settings: initialized
+camera: initialized
+clock: initialized
+calc: initialized
+music: initialized
+gallery: initialized
+browser: initialized
+home: all apps registered (9 apps)
+zircapp: framework up (10 apps registered)
+zircapp: console mode
+zircapp: app[0] = 'Home'
+zircapp: app[1] = 'Phone'
+zircapp: app[2] = 'SMS'
+zircapp: app[3] = 'Settings'
+zircapp: app[4] = 'Camera'
+zircapp: app[5] = 'Clock'
+zircapp: app[6] = 'Calculator'
+zircapp: app[7] = 'Music'
+zircapp: app[8] = 'Gallery'
+zircapp: app[9] = 'Browser'
+phone: initialized
+sms: initialized
+settings: initialized
+camera: initialized
+clock: initialized
+calc: initialized
+music: initialized
+gallery: initialized
+browser: initialized
+zircapp: selftest launch 9/9
+home: launching Phone
+phone: dial 1
+settings: wifi off
+camera: flash on
+music: playing
+browser: URL bar touched
+clock: Thu Jan 01 00:00:01 1970
+zircapp: selftest apps=10 launched=9
+zircapp: relaunch Home registry 10 -> 10
+zircapp: done status=0
+ZIRCAPP: done status=0
+android: compatibility layer ready (binder + ashmem)
+[android-display] initialized
+[android-prop] initialized with 48 properties
+[android-rc] initialized
+[android-container] initialized
+ns: initialized 7 namespaces, root cgroup
+appvm: container engine ready (16 slots, namespaces + cgroups)
+vm: VM manager ready (16 slots)
+adb: ADB daemon initializing on serial
+adb: ready
+updater: auto-updater initialized (auto-check on)
+zircon_ipc: shared page at phys=0x428000 virt=0xffff800000428000
+zircon: app manager ready (12 built-in apps)
+[display-bridge] initialized
+X11: Server initialized with 77 builtin atoms
+Added group 'base' with 7 member(s)
+Added group 'base-devel' with 6 member(s)
+Added group 'networking' with 7 member(s)
+Added group 'desktop' with 4 member(s)
+Added group 'multimedia' with 4 member(s)
+Added group 'gaming' with 2 member(s)
+Added group 'android' with 14 member(s)
+Added group 'security' with 4 member(s)
+Added group 'sysutils' with 8 member(s)
+pkg: seeded base64 .ftech payload for zircon-pong (224 bytes b64)
+pkg: CCP ready — 201 packages across 10 categories
+B64TEST: begin
+B64TEST: round trip enc=72 dec=53 cmp=1 PASS
+fetched zircon-pong-0.1.0.ftech (166 bytes, base64) -> /.pkg/cache/zircon-pong-0.1.0.ftech
+B64TEST: .ftech decoded (166 bytes):
+NAME:zircon-pong
+VERSION:0.1.0
+DESC:Classic Pong game for Zircon console
+SIZE:89
+file:/usr/share/zircon-pong-README:Zircon Pong — official CodeOS CCP payload demo.
+B64TEST: seeded payload content matches PASS
+B64TEST: done
+SHELLTEST: sysfetch package in repo=1 (repo idx 3)
+SHELLTEST: running sysfetch...
+root@codeos
+--------------------------------------
+OS           : CodeOS Andromeda
+Kernel       : codeos-it Andromeda
+Uptime       : 00:00:01
+Packages     : 0 (CodeOS)
+Shell        : csl
+Resolution   : 1280x800
+CPU          : AuthenticAMD
+Memory       : 0 MiB / 12092 MiB (0%)
+Disk         : ATA  (PATA/IDE) (129 MB)
+Threads      : 3
+
+             🔄🔅🔆🔇🔈🔉🔊🔋
+Memory       [                              ] 0%
+SHELLTEST: testing fetch -S...
+Resolving dependencies for tree...
+  ↳ tree 2.2.0
+✓ tree installed successfully
+SHELLTEST: installed packages: 1
+SHELLTEST: testing fetch -L...
+Installed packages (1):
+NAME VERSION      SIZE CATEGORY DESCRIPTION
+=============================================================================
+tree 2.2.0        96  KB  Utilities Display directory trees in a compact format
+=============================================================================
+Total: 98304 bytes (0 MB)
+SHELLTEST: testing fetch -Ss...
+Searching 201 packages for 'curl'...
+NAME                   VERSION      CATEGORY DESCRIPTION
+======================================================================
+curl                   7.85.0       Network Data transfer tool (HTTP/FTP/etc)
+
+Found 1 package(s)
+SHELLTEST: testing xora list...
+Installed packages (1):
+NAME VERSION      SIZE CATEGORY DESCRIPTION
+=============================================================================
+tree 2.2.0        96  KB  Utilities Display directory trees in a compact format
+=============================================================================
+Total: 98304 bytes (0 MB)
+SHELLTEST: testing nettest...
+═══ Network Diagnostic ═══
+
+[NIC]     MAC=52:54:00:12:34:56  up=1
+[ARP]     gateway=10.0.2.2 -> OK [52:55:0a:00:02:02]
+[ICMP]    ping gateway: OK (2 ms)
+[DNS]     server=10.0.2.3 resolve(10.0.2.3): OK -> 10.0.2.3
+[TCP]     connect gateway:80: FAIL
+[HTTP]    GET 10.0.2.2:80/: FAIL
+
+═══ done ═══
+SHELLTEST: done
+https: CA store skipped root #3 (mbedtls 0x262e)
+https: CA store skipped root #8 (mbedtls 0x262e)
+https: CA store skipped root #10 (mbedtls 0x262e)
+https: CA store skipped root #14 (mbedtls 0x262e)
+https: CA store skipped root #15 (mbedtls 0x262e)
+https: CA store ready (11 roots, 5 skipped)
+HTTPSBOOT: TLS verification test start (ca=store ok)
+HTTPSBOOT: arp_resolve(10.0.2.2)=0
+e1000 rx: dst=52:54:00:12:34:56 src=52:55:0a:00:02:02 type=0800
+HTTPSBOOT: icmp_echo(10.0.2.2)=35 (>=0 means unicast RX+TX ok)
+https: tcp_connect 10.0.2.2:8443 FAILED
+HTTPSBOOT: stage1 self-signed verify-on        -> n=-1 (EXPECT<0)
+https: tcp_connect 10.0.2.2:8443 FAILED
+HTTPSBOOT: stage2 insecure=1 self-signed       -> n=-1 (EXPECT>0) body=''
+https[ossl]: default provider loaded
+https[ossl]: RAND_bytes=0 first=4b
+https[ossl]: CA store ready (16 roots, 0 skipped)
+https[ossl] ctx: code=0x1c8000ba lib=57 reason=186
+https[ossl] ctx: code=0x1c8000bd lib=57 reason=189
+https[ossl] ctx: code=0x1200006c lib=36 reason=108
+https[ossl] ctx: code=0x1c8000ba lib=57 reason=186
+https[ossl] ctx: code=0x1c8000bd lib=57 reason=189
+https[ossl] ctx: code=0x1200006c lib=36 reason=108
+https[ossl] ctx: code=0x1c8000ba lib=57 reason=186
+https[ossl] ctx: code=0x1c8000bd lib=57 reason=189
+HTTPSBOOT: stage3 example.com verify-on        -> n=-1 (EXPECT>0 w/ internet)
+HTTPSBOOT: done
+
+=== Phase Summary (1618 ms total) ===
+  [  0.000s] memory ok
+  [  0.000s] cpu ok
+  [  0.000s] framebuffer ok
+  [  0.000s] kernel_core ok
+  [  0.032s] drivers ok
+  [  1.030s] network ok
+  [  0.099s] storage ok
+  [  0.013s] security_compat ok
+  [  0.288s] userspace ok
+========================================
+
+xserver: compositor screen 1280x800 stride=5120
+Qt6 Desktop: init
+Qt6 Desktop: run
+font_embed: using CodeOS bitmap font (no TTF needed)
+codeos_create_font_database: created CodeOSFontDatabase
+CodeOSFontDatabase: registering Liberation Sans
+CodeOSFontDatabase: done
+Qt6: Full desktop running (1280x800)
+HYPERDE: rust shell ready fb=1280x800 bpp=32HYPERDE: compositor active=1HYPERDE: srvf selftest startHYPERDE: srvf wl_display.sync obj=1HYPERDE: srvf wl_display.get_registry obj=1 -> 2 (res 1)HYPERDE: srvf wl_registry.bind obj=2 iface_magic=0x0 ver=1 new=3HYPERDE: srvf wl_compositor.create_surface obj=3 -> surf obj=4 (surf 0)HYPERDE: srvf wl_surface.attach obj=4 buf=0 x=10 y=12HYPERDE: srvf wl_surface.damage obj=4 d#1 x=0 y=240HYPERDE: srvf wl_surface.set_title obj=4 title=SelfTestHYPERDE: srvf wl_surface.commit obj=4 dmg=1 attach=1 visible=1HYPERDE: srvf protocol_err code=1 arg=99HYPERDE: srvf DROPPED obj=3 op=0 (client error)HYPERDE: srvf selftest doneHYPERDE CONFIG: failed to parse Lua configpenrose: start #1
+penrose: conn ok
+penrose: init ok
+penrose: demos suppressed by no-demos
+penrose: pending done
+HYPERDE: render #1QPA poll: type=2 key=3 mouse=(3,1) btn=0
+POSTM b=0 pos=(3,1) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=8 mouse=(8,3) btn=0
+POSTM b=0 pos=(8,3) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=13 mouse=(13,5) btn=0
+POSTM b=0 pos=(13,5) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=19 mouse=(19,8) btn=0
+POSTM b=0 pos=(19,8) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=22 mouse=(22,9) btn=0
+POSTM b=0 pos=(22,9) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=26 mouse=(26,10) btn=0
+POSTM b=0 pos=(26,10) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=29 mouse=(29,11) btn=0
+POSTM b=0 pos=(29,11) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=35 mouse=(35,13) btn=0
+POSTM b=0 pos=(35,13) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=38 mouse=(38,14) btn=0
+POSTM b=0 pos=(38,14) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=41 mouse=(41,16) btn=0
+POSTM b=0 pos=(41,16) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=43 mouse=(43,16) btn=0
+POSTM b=0 pos=(43,16) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=51 mouse=(51,18) btn=0
+POSTM b=0 pos=(51,18) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=53 mouse=(53,18) btn=0
+POSTM b=0 pos=(53,18) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=55 mouse=(55,18) btn=0
+POSTM b=0 pos=(55,18) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=56 mouse=(56,18) btn=0
+POSTM b=0 pos=(56,18) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=62 mouse=(62,20) btn=0
+POSTM b=0 pos=(62,20) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=67 mouse=(67,21) btn=0
+POSTM b=0 pos=(67,21) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=70 mouse=(70,22) btn=0
+POSTM b=0 pos=(70,22) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=77 mouse=(77,23) btn=0
+POSTM b=0 pos=(77,23) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=82 mouse=(82,23) btn=0
+POSTM b=0 pos=(82,23) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=88 mouse=(88,26) btn=0
+POSTM b=0 pos=(88,26) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=91 mouse=(91,28) btn=0
+POSTM b=0 pos=(91,28) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=93 mouse=(93,28) btn=0
+POSTM b=0 pos=(93,28) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=94 mouse=(94,28) btn=0
+POSTM b=0 pos=(94,28) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=95 mouse=(95,28) btn=0
+POSTM b=0 pos=(95,28) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=98 mouse=(98,31) btn=0
+POSTM b=0 pos=(98,31) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=99 mouse=(99,32) btn=0
+POSTM b=0 pos=(99,32) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=101 mouse=(101,35) btn=0
+POSTM b=0 pos=(101,35) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=103 mouse=(103,36) btn=0
+POSTM b=0 pos=(103,36) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=105 mouse=(105,37) btn=0
+POSTM b=0 pos=(105,37) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=106 mouse=(106,39) btn=0
+POSTM b=0 pos=(106,39) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=109 mouse=(109,43) btn=0
+POSTM b=0 pos=(109,43) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=112 mouse=(112,47) btn=0
+POSTM b=0 pos=(112,47) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=120 mouse=(120,59) btn=0
+POSTM b=0 pos=(120,59) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=125 mouse=(125,65) btn=0
+POSTM b=0 pos=(125,65) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=133 mouse=(133,78) btn=0
+POSTM b=0 pos=(133,78) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=141 mouse=(141,90) btn=0
+POSTM b=0 pos=(141,90) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=146 mouse=(146,96) btn=0
+POSTM b=0 pos=(146,96) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=154 mouse=(154,104) btn=0
+POSTM b=0 pos=(154,104) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=158 mouse=(158,110) btn=0
+POSTM b=0 pos=(158,110) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=161 mouse=(161,112) btn=0
+POSTM b=0 pos=(161,112) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=164 mouse=(164,115) btn=0
+POSTM b=0 pos=(164,115) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=166 mouse=(166,116) btn=0
+POSTM b=0 pos=(166,116) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=167 mouse=(167,118) btn=0
+POSTM b=0 pos=(167,118) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=168 mouse=(168,119) btn=0
+POSTM b=0 pos=(168,119) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=171 mouse=(171,123) btn=0
+POSTM b=0 pos=(171,123) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=172 mouse=(172,125) btn=0
+POSTM b=0 pos=(172,125) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=175 mouse=(175,129) btn=0
+POSTM b=0 pos=(175,129) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=177 mouse=(177,131) btn=0
+POSTM b=0 pos=(177,131) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=179 mouse=(179,133) btn=0
+POSTM b=0 pos=(179,133) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=181 mouse=(181,134) btn=0
+POSTM b=0 pos=(181,134) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=187 mouse=(187,140) btn=0
+POSTM b=0 pos=(187,140) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=190 mouse=(190,146) btn=0
+POSTM b=0 pos=(190,146) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=197 mouse=(197,154) btn=0
+POSTM b=0 pos=(197,154) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=201 mouse=(201,161) btn=0
+POSTM b=0 pos=(201,161) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=205 mouse=(205,165) btn=0
+POSTM b=0 pos=(205,165) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=214 mouse=(214,176) btn=0
+POSTM b=0 pos=(214,176) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=231 mouse=(231,191) btn=0
+POSTM b=0 pos=(231,191) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=239 mouse=(239,198) btn=0
+POSTM b=0 pos=(239,198) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=252 mouse=(252,208) btn=0
+POSTM b=0 pos=(252,208) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=259 mouse=(259,214) btn=0
+POSTM b=0 pos=(259,214) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=267 mouse=(267,221) btn=0
+POSTM b=0 pos=(267,221) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=273 mouse=(273,228) btn=0
+POSTM b=0 pos=(273,228) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=292 mouse=(292,246) btn=0
+POSTM b=0 pos=(292,246) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=307 mouse=(307,256) btn=0
+POSTM b=0 pos=(307,256) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=325 mouse=(325,269) btn=0
+POSTM b=0 pos=(325,269) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=345 mouse=(345,280) btn=0
+POSTM b=0 pos=(345,280) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=418 mouse=(418,321) btn=0
+POSTM b=0 pos=(418,321) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=466 mouse=(466,345) btn=0
+POSTM b=0 pos=(466,345) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=488 mouse=(488,354) btn=0
+POSTM b=0 pos=(488,354) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=520 mouse=(520,373) btn=0
+POSTM b=0 pos=(520,373) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=532 mouse=(532,380) btn=0
+POSTM b=0 pos=(532,380) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=534 mouse=(534,381) btn=0
+POSTM b=0 pos=(534,381) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=536 mouse=(536,383) btn=0
+POSTM b=0 pos=(536,383) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=537 mouse=(537,384) btn=0
+POSTM b=0 pos=(537,384) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=539 mouse=(539,385) btn=0
+POSTM b=0 pos=(539,385) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=540 mouse=(540,388) btn=0
+POSTM b=0 pos=(540,388) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=541 mouse=(541,389) btn=0
+POSTM b=0 pos=(541,389) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=542 mouse=(542,389) btn=0
+POSTM b=0 pos=(542,389) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+QPA poll: type=2 key=544 mouse=(544,390) btn=0
+POSTM b=0 pos=(544,390) tgt=0xffff8000002894c0 geo=(0,0 1280x800) tit=
+HYPERDE: render #2HYPERDE: render #3HYPERDE: render #4HYPERDE: render #5HYPERDE: render #6HYPERDE: render #7HYPERDE: render #8HYPERDE: render #9HYPERDE: render #10HYPERDE: render #11HYPERDE: render #12HYPERDE: render #13HYPERDE: render #14HYPERDE: render #15HYPERDE: render #16HYPERDE: render #17HYPERDE: render #18HYPERDE: render #19HYPERDE: render #20HYPERDE: bar #20 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #21HYPERDE: render #22HYPERDE: render #23HYPERDE: render #24HYPERDE: render #25HYPERDE: render #26HYPERDE: render #27HYPERDE: render #28HYPERDE: render #29HYPERDE: render #30HYPERDE: render #31HYPERDE: render #32HYPERDE: render #33HYPERDE: render #34HYPERDE: render #35HYPERDE: render #36HYPERDE: render #37HYPERDE: render #38HYPERDE: render #39HYPERDE: render #40HYPERDE: bar #40 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #41HYPERDE: render #42HYPERDE: render #43HYPERDE: render #44HYPERDE: render #45HYPERDE: render #46HYPERDE: render #47HYPERDE: render #48HYPERDE: render #49HYPERDE: render #50HYPERDE: render #51HYPERDE: render #52HYPERDE: render #53HYPERDE: render #54HYPERDE: render #55HYPERDE: render #56HYPERDE: render #57HYPERDE: render #58HYPERDE: render #59HYPERDE: render #60HYPERDE: bar #60 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #61HYPERDE: render #62HYPERDE: render #63HYPERDE: render #64HYPERDE: render #65HYPERDE: render #66HYPERDE: render #67HYPERDE: render #68HYPERDE: render #69HYPERDE: render #70HYPERDE: render #71HYPERDE: render #72HYPERDE: render #73HYPERDE: render #74HYPERDE: render #75HYPERDE: render #76HYPERDE: render #77HYPERDE: render #78HYPERDE: render #79HYPERDE: render #80HYPERDE: bar #80 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #81HYPERDE: render #82HYPERDE: render #83HYPERDE: render #84HYPERDE: render #85HYPERDE: render #86HYPERDE: render #87HYPERDE: render #88HYPERDE: render #89HYPERDE: render #90HYPERDE: render #91HYPERDE: render #92HYPERDE: render #93HYPERDE: render #94HYPERDE: render #95HYPERDE: render #96HYPERDE: render #97HYPERDE: render #98HYPERDE: render #99HYPERDE: render #100HYPERDE: bar #100 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #101HYPERDE: render #102HYPERDE: render #103HYPERDE: render #104HYPERDE: render #105HYPERDE: render #106HYPERDE: render #107HYPERDE: render #108HYPERDE: render #109HYPERDE: render #110HYPERDE: render #111HYPERDE: render #112HYPERDE: render #113HYPERDE: render #114HYPERDE: render #115HYPERDE: render #116HYPERDE: render #117HYPERDE: render #118HYPERDE: render #119HYPERDE: render #120HYPERDE: bar #120 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #121HYPERDE: render #122HYPERDE: render #123HYPERDE: render #124HYPERDE: render #125HYPERDE: render #126HYPERDE: render #127HYPERDE: render #128HYPERDE: render #129HYPERDE: render #130HYPERDE: render #131HYPERDE: render #132HYPERDE: render #133HYPERDE: render #134HYPERDE: render #135HYPERDE: render #136HYPERDE: render #137HYPERDE: render #138HYPERDE: render #139HYPERDE: render #140HYPERDE: bar #140 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #141HYPERDE: render #142HYPERDE: render #143HYPERDE: render #144HYPERDE: render #145HYPERDE: render #146HYPERDE: render #147HYPERDE: render #148HYPERDE: render #149HYPERDE: render #150HYPERDE: render #151HYPERDE: render #152HYPERDE: render #153HYPERDE: render #154HYPERDE: render #155HYPERDE: render #156HYPERDE: render #157HYPERDE: render #158HYPERDE: render #159HYPERDE: render #160HYPERDE: bar #160 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #161HYPERDE: render #162HYPERDE: render #163HYPERDE: render #164HYPERDE: render #165HYPERDE: render #166HYPERDE: render #167HYPERDE: render #168HYPERDE: render #169HYPERDE: render #170HYPERDE: render #171HYPERDE: render #172HYPERDE: render #173HYPERDE: render #174HYPERDE: render #175HYPERDE: render #176HYPERDE: render #177HYPERDE: render #178HYPERDE: render #179HYPERDE: render #180HYPERDE: bar #180 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #181HYPERDE: render #182HYPERDE: render #183HYPERDE: render #184HYPERDE: render #185HYPERDE: render #186HYPERDE: render #187HYPERDE: render #188HYPERDE: render #189HYPERDE: render #190HYPERDE: render #191HYPERDE: render #192HYPERDE: render #193HYPERDE: render #194HYPERDE: render #195HYPERDE: render #196HYPERDE: render #197HYPERDE: render #198HYPERDE: render #199HYPERDE: render #200HYPERDE: bar #200 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #201HYPERDE: render #202HYPERDE: render #203HYPERDE: render #204HYPERDE: render #205HYPERDE: render #206HYPERDE: render #207HYPERDE: render #208HYPERDE: render #209HYPERDE: render #210HYPERDE: render #211HYPERDE: render #212HYPERDE: render #213HYPERDE: render #214HYPERDE: render #215HYPERDE: render #216HYPERDE: render #217HYPERDE: render #218HYPERDE: render #219HYPERDE: render #220HYPERDE: bar #220 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #221HYPERDE: render #222HYPERDE: render #223HYPERDE: render #224HYPERDE: render #225HYPERDE: render #226HYPERDE: render #227HYPERDE: render #228HYPERDE: render #229HYPERDE: render #230HYPERDE: render #231HYPERDE: render #232HYPERDE: render #233HYPERDE: render #234HYPERDE: render #235HYPERDE: render #236HYPERDE: render #237HYPERDE: render #238HYPERDE: render #239HYPERDE: render #240HYPERDE: bar #240 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #241HYPERDE: render #242HYPERDE: render #243HYPERDE: render #244HYPERDE: render #245HYPERDE: render #246HYPERDE: render #247HYPERDE: render #248HYPERDE: render #249HYPERDE: render #250HYPERDE: render #251HYPERDE: render #252HYPERDE: render #253HYPERDE: render #254HYPERDE: render #255HYPERDE: render #256HYPERDE: render #257HYPERDE: render #258HYPERDE: render #259HYPERDE: render #260HYPERDE: bar #260 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #261HYPERDE: render #262HYPERDE: render #263HYPERDE: render #264HYPERDE: render #265HYPERDE: render #266HYPERDE: render #267HYPERDE: render #268HYPERDE: render #269HYPERDE: render #270HYPERDE: render #271HYPERDE: render #272HYPERDE: render #273HYPERDE: render #274HYPERDE: render #275HYPERDE: render #276HYPERDE: render #277HYPERDE: render #278HYPERDE: render #279HYPERDE: render #280HYPERDE: bar #280 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #281HYPERDE: render #282HYPERDE: render #283HYPERDE: render #284HYPERDE: render #285HYPERDE: render #286HYPERDE: render #287HYPERDE: render #288HYPERDE: render #289HYPERDE: render #290HYPERDE: render #291HYPERDE: render #292HYPERDE: render #293HYPERDE: render #294HYPERDE: render #295HYPERDE: render #296HYPERDE: render #297HYPERDE: render #298HYPERDE: render #299HYPERDE: render #300HYPERDE: bar #300 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #301HYPERDE: render #302HYPERDE: render #303HYPERDE: render #304HYPERDE: render #305HYPERDE: render #306HYPERDE: render #307HYPERDE: render #308HYPERDE: render #309HYPERDE: render #310HYPERDE: render #311HYPERDE: render #312HYPERDE: render #313HYPERDE: render #314HYPERDE: render #315HYPERDE: render #316HYPERDE: render #317HYPERDE: render #318HYPERDE: render #319HYPERDE: render #320HYPERDE: bar #320 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #321HYPERDE: render #322HYPERDE: render #323HYPERDE: render #324HYPERDE: render #325HYPERDE: render #326HYPERDE: render #327HYPERDE: render #328HYPERDE: render #329HYPERDE: render #330HYPERDE: render #331HYPERDE: render #332HYPERDE: render #333HYPERDE: render #334HYPERDE: render #335HYPERDE: render #336HYPERDE: render #337HYPERDE: render #338HYPERDE: render #339HYPERDE: render #340HYPERDE: bar #340 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #341HYPERDE: render #342HYPERDE: render #343HYPERDE: render #344HYPERDE: render #345HYPERDE: render #346HYPERDE: render #347HYPERDE: render #348HYPERDE: render #349HYPERDE: render #350HYPERDE: render #351HYPERDE: render #352HYPERDE: render #353HYPERDE: render #354HYPERDE: render #355HYPERDE: render #356HYPERDE: render #357HYPERDE: render #358HYPERDE: render #359HYPERDE: render #360HYPERDE: bar #360 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #361HYPERDE: render #362HYPERDE: render #363HYPERDE: render #364HYPERDE: render #365HYPERDE: render #366HYPERDE: render #367HYPERDE: render #368HYPERDE: render #369HYPERDE: render #370HYPERDE: render #371HYPERDE: render #372HYPERDE: render #373HYPERDE: render #374HYPERDE: render #375HYPERDE: render #376HYPERDE: render #377HYPERDE: render #378HYPERDE: render #379HYPERDE: render #380HYPERDE: bar #380 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #381HYPERDE: render #382HYPERDE: render #383HYPERDE: render #384HYPERDE: render #385HYPERDE: render #386HYPERDE: render #387HYPERDE: render #388HYPERDE: render #389HYPERDE: render #390HYPERDE: render #391HYPERDE: render #392HYPERDE: render #393HYPERDE: render #394HYPERDE: render #395HYPERDE: render #396HYPERDE: render #397HYPERDE: render #398HYPERDE: render #399HYPERDE: render #400HYPERDE: bar #400 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #401HYPERDE: render #402HYPERDE: render #403HYPERDE: render #404HYPERDE: render #405HYPERDE: render #406HYPERDE: render #407HYPERDE: render #408HYPERDE: render #409HYPERDE: render #410HYPERDE: render #411HYPERDE: render #412HYPERDE: render #413HYPERDE: render #414HYPERDE: render #415HYPERDE: render #416HYPERDE: render #417HYPERDE: render #418HYPERDE: render #419HYPERDE: render #420HYPERDE: bar #420 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #421HYPERDE: render #422HYPERDE: render #423HYPERDE: render #424HYPERDE: render #425HYPERDE: render #426HYPERDE: render #427HYPERDE: render #428HYPERDE: render #429HYPERDE: render #430HYPERDE: render #431HYPERDE: render #432HYPERDE: render #433HYPERDE: render #434HYPERDE: render #435HYPERDE: render #436HYPERDE: render #437HYPERDE: render #438HYPERDE: render #439HYPERDE: render #440HYPERDE: bar #440 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #441HYPERDE: render #442HYPERDE: render #443HYPERDE: render #444HYPERDE: render #445HYPERDE: render #446HYPERDE: render #447HYPERDE: render #448HYPERDE: render #449HYPERDE: render #450HYPERDE: render #451HYPERDE: render #452HYPERDE: render #453HYPERDE: render #454HYPERDE: render #455HYPERDE: render #456HYPERDE: render #457HYPERDE: render #458HYPERDE: render #459HYPERDE: render #460HYPERDE: bar #460 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #461HYPERDE: render #462HYPERDE: render #463HYPERDE: render #464HYPERDE: render #465HYPERDE: render #466HYPERDE: render #467HYPERDE: render #468HYPERDE: render #469HYPERDE: render #470HYPERDE: render #471HYPERDE: render #472HYPERDE: render #473HYPERDE: render #474HYPERDE: render #475HYPERDE: render #476HYPERDE: render #477HYPERDE: render #478HYPERDE: render #479HYPERDE: render #480HYPERDE: bar #480 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #481HYPERDE: render #482HYPERDE: render #483HYPERDE: render #484HYPERDE: render #485HYPERDE: render #486HYPERDE: render #487HYPERDE: render #488HYPERDE: render #489HYPERDE: render #490HYPERDE: render #491HYPERDE: render #492HYPERDE: render #493HYPERDE: render #494HYPERDE: render #495HYPERDE: render #496HYPERDE: render #497HYPERDE: render #498HYPERDE: render #499HYPERDE: render #500HYPERDE: bar #500 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #501HYPERDE: render #502HYPERDE: render #503HYPERDE: render #504HYPERDE: render #505HYPERDE: render #506HYPERDE: render #507HYPERDE: render #508HYPERDE: render #509HYPERDE: render #510HYPERDE: render #511HYPERDE: render #512HYPERDE: render #513HYPERDE: render #514HYPERDE: render #515HYPERDE: render #516HYPERDE: render #517HYPERDE: render #518HYPERDE: render #519HYPERDE: render #520HYPERDE: bar #520 hh=3 mm=18 cpu=0 mem=172HYPERDE: render #521HYPERDE: render #522HYPERDE: render #523HYPERDE: render #524HYPERDE: render #525HYPERDE: render #526HYPERDE: render #527HYPERDE: render #528HYPERDE: render #529HYPERDE: render #530HYPERDE: render #531HYPERDE: render #532HYPERDE: render #533HYPERDE: render #534HYPERDE: render #535HYPERDE: render #536HYPERDE: render #537HYPERDE: render #538HYPERDE: render #539HYPERDE: render #540HYPERDE: bar #540 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #541HYPERDE: render #542HYPERDE: render #543HYPERDE: render #544HYPERDE: render #545HYPERDE: render #546HYPERDE: render #547HYPERDE: render #548HYPERDE: render #549HYPERDE: render #550HYPERDE: render #551HYPERDE: render #552HYPERDE: render #553HYPERDE: render #554HYPERDE: render #555HYPERDE: render #556HYPERDE: render #557HYPERDE: render #558HYPERDE: render #559HYPERDE: render #560HYPERDE: bar #560 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #561HYPERDE: render #562HYPERDE: render #563HYPERDE: render #564HYPERDE: render #565HYPERDE: render #566HYPERDE: render #567HYPERDE: render #568HYPERDE: render #569HYPERDE: render #570HYPERDE: render #571HYPERDE: render #572HYPERDE: render #573HYPERDE: render #574HYPERDE: render #575HYPERDE: render #576HYPERDE: render #577HYPERDE: render #578HYPERDE: render #579HYPERDE: render #580HYPERDE: bar #580 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #581HYPERDE: render #582HYPERDE: render #583HYPERDE: render #584HYPERDE: render #585HYPERDE: render #586HYPERDE: render #587HYPERDE: render #588HYPERDE: render #589HYPERDE: render #590HYPERDE: render #591HYPERDE: render #592HYPERDE: render #593HYPERDE: render #594HYPERDE: render #595HYPERDE: render #596HYPERDE: render #597HYPERDE: render #598HYPERDE: render #599HYPERDE: render #600HYPERDE: bar #600 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #601HYPERDE: render #602HYPERDE: render #603HYPERDE: render #604HYPERDE: render #605HYPERDE: render #606HYPERDE: render #607HYPERDE: render #608HYPERDE: render #609HYPERDE: render #610HYPERDE: render #611HYPERDE: render #612HYPERDE: render #613HYPERDE: render #614HYPERDE: render #615HYPERDE: render #616HYPERDE: render #617HYPERDE: render #618HYPERDE: render #619HYPERDE: render #620HYPERDE: bar #620 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #621HYPERDE: render #622HYPERDE: render #623HYPERDE: render #624HYPERDE: render #625HYPERDE: render #626HYPERDE: render #627HYPERDE: render #628HYPERDE: render #629HYPERDE: render #630HYPERDE: render #631HYPERDE: render #632HYPERDE: render #633HYPERDE: render #634HYPERDE: render #635HYPERDE: render #636HYPERDE: render #637HYPERDE: render #638HYPERDE: render #639HYPERDE: render #640HYPERDE: bar #640 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #641HYPERDE: render #642HYPERDE: render #643HYPERDE: render #644HYPERDE: render #645HYPERDE: render #646HYPERDE: render #647HYPERDE: render #648HYPERDE: render #649HYPERDE: render #650HYPERDE: render #651HYPERDE: render #652HYPERDE: render #653HYPERDE: render #654HYPERDE: render #655HYPERDE: render #656HYPERDE: render #657HYPERDE: render #658HYPERDE: render #659HYPERDE: render #660HYPERDE: bar #660 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #661HYPERDE: render #662HYPERDE: render #663HYPERDE: render #664HYPERDE: render #665HYPERDE: render #666HYPERDE: render #667HYPERDE: render #668HYPERDE: render #669HYPERDE: render #670HYPERDE: render #671HYPERDE: render #672HYPERDE: render #673HYPERDE: render #674HYPERDE: render #675HYPERDE: render #676HYPERDE: render #677HYPERDE: render #678HYPERDE: render #679HYPERDE: render #680HYPERDE: bar #680 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #681HYPERDE: render #682HYPERDE: render #683HYPERDE: render #684HYPERDE: render #685HYPERDE: render #686HYPERDE: render #687HYPERDE: render #688HYPERDE: render #689HYPERDE: render #690HYPERDE: render #691HYPERDE: render #692HYPERDE: render #693HYPERDE: render #694HYPERDE: render #695HYPERDE: render #696HYPERDE: render #697HYPERDE: render #698HYPERDE: render #699HYPERDE: render #700HYPERDE: bar #700 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #701HYPERDE: render #702HYPERDE: render #703HYPERDE: render #704HYPERDE: render #705HYPERDE: render #706HYPERDE: render #707HYPERDE: render #708HYPERDE: render #709HYPERDE: render #710HYPERDE: render #711HYPERDE: render #712HYPERDE: render #713HYPERDE: render #714HYPERDE: render #715HYPERDE: render #716HYPERDE: render #717HYPERDE: render #718HYPERDE: render #719HYPERDE: render #720HYPERDE: bar #720 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #721HYPERDE: render #722HYPERDE: render #723HYPERDE: render #724HYPERDE: render #725HYPERDE: render #726HYPERDE: render #727HYPERDE: render #728HYPERDE: render #729HYPERDE: render #730HYPERDE: render #731HYPERDE: render #732HYPERDE: render #733HYPERDE: render #734HYPERDE: render #735HYPERDE: render #736HYPERDE: render #737HYPERDE: render #738HYPERDE: render #739HYPERDE: render #740HYPERDE: bar #740 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #741HYPERDE: render #742HYPERDE: render #743HYPERDE: render #744HYPERDE: render #745HYPERDE: render #746HYPERDE: render #747HYPERDE: render #748HYPERDE: render #749HYPERDE: render #750HYPERDE: render #751HYPERDE: render #752HYPERDE: render #753HYPERDE: render #754HYPERDE: render #755HYPERDE: render #756HYPERDE: render #757HYPERDE: render #758HYPERDE: render #759HYPERDE: render #760HYPERDE: bar #760 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #761HYPERDE: render #762HYPERDE: render #763HYPERDE: render #764HYPERDE: render #765HYPERDE: render #766HYPERDE: render #767HYPERDE: render #768HYPERDE: render #769HYPERDE: render #770HYPERDE: render #771HYPERDE: render #772HYPERDE: render #773HYPERDE: render #774HYPERDE: render #775HYPERDE: render #776HYPERDE: render #777HYPERDE: render #778HYPERDE: render #779HYPERDE: render #780HYPERDE: bar #780 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #781HYPERDE: render #782HYPERDE: render #783HYPERDE: render #784HYPERDE: render #785HYPERDE: render #786HYPERDE: render #787HYPERDE: render #788HYPERDE: render #789HYPERDE: render #790HYPERDE: render #791HYPERDE: render #792HYPERDE: render #793HYPERDE: render #794HYPERDE: render #795HYPERDE: render #796HYPERDE: render #797HYPERDE: render #798HYPERDE: render #799HYPERDE: render #800HYPERDE: bar #800 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #801HYPERDE: render #802HYPERDE: render #803HYPERDE: render #804HYPERDE: render #805HYPERDE: render #806HYPERDE: render #807HYPERDE: render #808HYPERDE: render #809HYPERDE: render #810HYPERDE: render #811HYPERDE: render #812HYPERDE: render #813HYPERDE: render #814HYPERDE: render #815HYPERDE: render #816HYPERDE: render #817HYPERDE: render #818HYPERDE: render #819HYPERDE: render #820HYPERDE: bar #820 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #821HYPERDE: render #822HYPERDE: render #823HYPERDE: render #824HYPERDE: render #825HYPERDE: render #826HYPERDE: render #827HYPERDE: render #828HYPERDE: render #829HYPERDE: render #830HYPERDE: render #831HYPERDE: render #832HYPERDE: render #833HYPERDE: render #834HYPERDE: render #835HYPERDE: render #836HYPERDE: render #837HYPERDE: render #838HYPERDE: render #839HYPERDE: render #840HYPERDE: bar #840 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #841HYPERDE: render #842HYPERDE: render #843HYPERDE: render #844HYPERDE: render #845HYPERDE: render #846HYPERDE: render #847HYPERDE: render #848HYPERDE: render #849HYPERDE: render #850HYPERDE: render #851HYPERDE: render #852HYPERDE: render #853HYPERDE: render #854HYPERDE: render #855HYPERDE: render #856HYPERDE: render #857HYPERDE: render #858HYPERDE: render #859HYPERDE: render #860HYPERDE: bar #860 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #861HYPERDE: render #862HYPERDE: render #863HYPERDE: render #864HYPERDE: render #865HYPERDE: render #866HYPERDE: render #867HYPERDE: render #868HYPERDE: render #869HYPERDE: render #870HYPERDE: render #871HYPERDE: render #872HYPERDE: render #873HYPERDE: render #874HYPERDE: render #875HYPERDE: render #876HYPERDE: render #877HYPERDE: render #878HYPERDE: render #879HYPERDE: render #880HYPERDE: bar #880 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #881HYPERDE: render #882HYPERDE: render #883HYPERDE: render #884HYPERDE: render #885HYPERDE: render #886HYPERDE: render #887HYPERDE: render #888HYPERDE: render #889HYPERDE: render #890HYPERDE: render #891HYPERDE: render #892HYPERDE: render #893HYPERDE: render #894HYPERDE: render #895HYPERDE: render #896HYPERDE: render #897HYPERDE: render #898HYPERDE: render #899HYPERDE: render #900HYPERDE: bar #900 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #901HYPERDE: render #902HYPERDE: render #903HYPERDE: render #904HYPERDE: render #905HYPERDE: render #906HYPERDE: render #907HYPERDE: render #908HYPERDE: render #909HYPERDE: render #910HYPERDE: render #911HYPERDE: render #912HYPERDE: render #913HYPERDE: render #914HYPERDE: render #915HYPERDE: render #916HYPERDE: render #917HYPERDE: render #918HYPERDE: render #919HYPERDE: render #920HYPERDE: bar #920 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #921HYPERDE: render #922HYPERDE: render #923HYPERDE: render #924HYPERDE: render #925HYPERDE: render #926HYPERDE: render #927HYPERDE: render #928HYPERDE: render #929HYPERDE: render #930HYPERDE: render #931HYPERDE: render #932HYPERDE: render #933HYPERDE: render #934HYPERDE: render #935HYPERDE: render #936HYPERDE: render #937HYPERDE: render #938HYPERDE: render #939HYPERDE: render #940HYPERDE: bar #940 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #941HYPERDE: render #942HYPERDE: render #943HYPERDE: render #944HYPERDE: render #945HYPERDE: render #946HYPERDE: render #947HYPERDE: render #948HYPERDE: render #949HYPERDE: render #950HYPERDE: render #951HYPERDE: render #952HYPERDE: render #953HYPERDE: render #954HYPERDE: render #955HYPERDE: render #956HYPERDE: render #957HYPERDE: render #958HYPERDE: render #959HYPERDE: render #960HYPERDE: bar #960 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #961HYPERDE: render #962HYPERDE: render #963HYPERDE: render #964HYPERDE: render #965HYPERDE: render #966HYPERDE: render #967HYPERDE: render #968HYPERDE: render #969HYPERDE: render #970HYPERDE: render #971HYPERDE: render #972HYPERDE: render #973HYPERDE: render #974HYPERDE: render #975HYPERDE: render #976HYPERDE: render #977HYPERDE: render #978HYPERDE: render #979HYPERDE: render #980HYPERDE: bar #980 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #981HYPERDE: render #982HYPERDE: render #983HYPERDE: render #984HYPERDE: render #985HYPERDE: render #986HYPERDE: render #987HYPERDE: render #988HYPERDE: render #989HYPERDE: render #990HYPERDE: render #991HYPERDE: render #992HYPERDE: render #993HYPERDE: render #994HYPERDE: render #995HYPERDE: render #996HYPERDE: render #997HYPERDE: render #998HYPERDE: render #999HYPERDE: render #1000HYPERDE: bar #1000 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1001HYPERDE: render #1002HYPERDE: render #1003HYPERDE: render #1004HYPERDE: render #1005HYPERDE: render #1006HYPERDE: render #1007HYPERDE: render #1008HYPERDE: render #1009HYPERDE: render #1010HYPERDE: render #1011HYPERDE: render #1012HYPERDE: render #1013HYPERDE: render #1014HYPERDE: render #1015HYPERDE: render #1016HYPERDE: render #1017HYPERDE: render #1018HYPERDE: render #1019HYPERDE: render #1020HYPERDE: bar #1020 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1021HYPERDE: render #1022HYPERDE: render #1023HYPERDE: render #1024HYPERDE: render #1025HYPERDE: render #1026HYPERDE: render #1027HYPERDE: render #1028HYPERDE: render #1029HYPERDE: render #1030HYPERDE: render #1031HYPERDE: render #1032HYPERDE: render #1033HYPERDE: render #1034HYPERDE: render #1035HYPERDE: render #1036HYPERDE: render #1037HYPERDE: render #1038HYPERDE: render #1039HYPERDE: render #1040HYPERDE: bar #1040 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1041HYPERDE: render #1042HYPERDE: render #1043HYPERDE: render #1044HYPERDE: render #1045HYPERDE: render #1046HYPERDE: render #1047HYPERDE: render #1048HYPERDE: render #1049HYPERDE: render #1050HYPERDE: render #1051HYPERDE: render #1052HYPERDE: render #1053HYPERDE: render #1054HYPERDE: render #1055HYPERDE: render #1056HYPERDE: render #1057HYPERDE: render #1058HYPERDE: render #1059HYPERDE: render #1060HYPERDE: bar #1060 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1061HYPERDE: render #1062HYPERDE: render #1063HYPERDE: render #1064HYPERDE: render #1065HYPERDE: render #1066HYPERDE: render #1067HYPERDE: render #1068HYPERDE: render #1069HYPERDE: render #1070HYPERDE: render #1071HYPERDE: render #1072HYPERDE: render #1073HYPERDE: render #1074HYPERDE: render #1075HYPERDE: render #1076HYPERDE: render #1077HYPERDE: render #1078HYPERDE: render #1079HYPERDE: render #1080HYPERDE: bar #1080 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1081HYPERDE: render #1082HYPERDE: render #1083HYPERDE: render #1084HYPERDE: render #1085HYPERDE: render #1086HYPERDE: render #1087HYPERDE: render #1088HYPERDE: render #1089HYPERDE: render #1090HYPERDE: render #1091HYPERDE: render #1092HYPERDE: render #1093HYPERDE: render #1094HYPERDE: render #1095HYPERDE: render #1096HYPERDE: render #1097HYPERDE: render #1098HYPERDE: render #1099HYPERDE: render #1100HYPERDE: bar #1100 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1101HYPERDE: render #1102HYPERDE: render #1103HYPERDE: render #1104HYPERDE: render #1105HYPERDE: render #1106HYPERDE: render #1107HYPERDE: render #1108HYPERDE: render #1109HYPERDE: render #1110HYPERDE: render #1111HYPERDE: render #1112HYPERDE: render #1113HYPERDE: render #1114HYPERDE: render #1115HYPERDE: render #1116HYPERDE: render #1117HYPERDE: render #1118HYPERDE: render #1119HYPERDE: render #1120HYPERDE: bar #1120 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1121HYPERDE: render #1122HYPERDE: render #1123HYPERDE: render #1124HYPERDE: render #1125HYPERDE: render #1126HYPERDE: render #1127HYPERDE: render #1128HYPERDE: render #1129HYPERDE: render #1130HYPERDE: render #1131HYPERDE: render #1132HYPERDE: render #1133HYPERDE: render #1134HYPERDE: render #1135HYPERDE: render #1136HYPERDE: render #1137HYPERDE: render #1138HYPERDE: render #1139HYPERDE: render #1140HYPERDE: bar #1140 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1141HYPERDE: render #1142HYPERDE: render #1143HYPERDE: render #1144HYPERDE: render #1145HYPERDE: render #1146HYPERDE: render #1147HYPERDE: render #1148HYPERDE: render #1149HYPERDE: render #1150HYPERDE: render #1151HYPERDE: render #1152HYPERDE: render #1153HYPERDE: render #1154HYPERDE: render #1155HYPERDE: render #1156HYPERDE: render #1157HYPERDE: render #1158HYPERDE: render #1159HYPERDE: render #1160HYPERDE: bar #1160 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1161HYPERDE: render #1162HYPERDE: render #1163HYPERDE: render #1164HYPERDE: render #1165HYPERDE: render #1166HYPERDE: render #1167HYPERDE: render #1168HYPERDE: render #1169HYPERDE: render #1170HYPERDE: render #1171HYPERDE: render #1172HYPERDE: render #1173HYPERDE: render #1174HYPERDE: render #1175HYPERDE: render #1176HYPERDE: render #1177HYPERDE: render #1178HYPERDE: render #1179HYPERDE: render #1180HYPERDE: bar #1180 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1181HYPERDE: render #1182HYPERDE: render #1183HYPERDE: render #1184HYPERDE: render #1185HYPERDE: render #1186HYPERDE: render #1187HYPERDE: render #1188HYPERDE: render #1189HYPERDE: render #1190HYPERDE: render #1191HYPERDE: render #1192HYPERDE: render #1193HYPERDE: render #1194HYPERDE: render #1195HYPERDE: render #1196HYPERDE: render #1197HYPERDE: render #1198HYPERDE: render #1199HYPERDE: render #1200HYPERDE: bar #1200 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1201HYPERDE: render #1202HYPERDE: render #1203HYPERDE: render #1204HYPERDE: render #1205HYPERDE: render #1206HYPERDE: render #1207HYPERDE: render #1208HYPERDE: render #1209HYPERDE: render #1210HYPERDE: render #1211HYPERDE: render #1212HYPERDE: render #1213HYPERDE: render #1214HYPERDE: render #1215HYPERDE: render #1216HYPERDE: render #1217HYPERDE: render #1218HYPERDE: render #1219HYPERDE: render #1220HYPERDE: bar #1220 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1221HYPERDE: render #1222HYPERDE: render #1223HYPERDE: render #1224HYPERDE: render #1225HYPERDE: render #1226HYPERDE: render #1227HYPERDE: render #1228HYPERDE: render #1229HYPERDE: render #1230HYPERDE: render #1231HYPERDE: render #1232HYPERDE: render #1233HYPERDE: render #1234HYPERDE: render #1235HYPERDE: render #1236HYPERDE: render #1237HYPERDE: render #1238HYPERDE: render #1239HYPERDE: render #1240HYPERDE: bar #1240 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1241HYPERDE: render #1242HYPERDE: render #1243HYPERDE: render #1244HYPERDE: render #1245HYPERDE: render #1246HYPERDE: render #1247HYPERDE: render #1248HYPERDE: render #1249HYPERDE: render #1250HYPERDE: render #1251HYPERDE: render #1252HYPERDE: render #1253HYPERDE: render #1254HYPERDE: render #1255HYPERDE: render #1256HYPERDE: render #1257HYPERDE: render #1258HYPERDE: render #1259HYPERDE: render #1260HYPERDE: bar #1260 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1261HYPERDE: render #1262HYPERDE: render #1263HYPERDE: render #1264HYPERDE: render #1265HYPERDE: render #1266HYPERDE: render #1267HYPERDE: render #1268HYPERDE: render #1269HYPERDE: render #1270HYPERDE: render #1271HYPERDE: render #1272HYPERDE: render #1273HYPERDE: render #1274HYPERDE: render #1275HYPERDE: render #1276HYPERDE: render #1277HYPERDE: render #1278HYPERDE: render #1279HYPERDE: render #1280HYPERDE: bar #1280 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1281HYPERDE: render #1282HYPERDE: render #1283HYPERDE: render #1284HYPERDE: render #1285HYPERDE: render #1286HYPERDE: render #1287HYPERDE: render #1288HYPERDE: render #1289HYPERDE: render #1290HYPERDE: render #1291HYPERDE: render #1292HYPERDE: render #1293HYPERDE: render #1294HYPERDE: render #1295HYPERDE: render #1296HYPERDE: render #1297HYPERDE: render #1298HYPERDE: render #1299HYPERDE: render #1300HYPERDE: bar #1300 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1301HYPERDE: render #1302HYPERDE: render #1303HYPERDE: render #1304HYPERDE: render #1305HYPERDE: render #1306HYPERDE: render #1307HYPERDE: render #1308HYPERDE: render #1309HYPERDE: render #1310HYPERDE: render #1311HYPERDE: render #1312HYPERDE: render #1313HYPERDE: render #1314HYPERDE: render #1315HYPERDE: render #1316HYPERDE: render #1317HYPERDE: render #1318HYPERDE: render #1319HYPERDE: render #1320HYPERDE: bar #1320 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1321HYPERDE: render #1322HYPERDE: render #1323HYPERDE: render #1324HYPERDE: render #1325HYPERDE: render #1326HYPERDE: render #1327HYPERDE: render #1328HYPERDE: render #1329HYPERDE: render #1330HYPERDE: render #1331HYPERDE: render #1332HYPERDE: render #1333HYPERDE: render #1334HYPERDE: render #1335HYPERDE: render #1336HYPERDE: render #1337HYPERDE: render #1338HYPERDE: render #1339HYPERDE: render #1340HYPERDE: bar #1340 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1341HYPERDE: render #1342HYPERDE: render #1343HYPERDE: render #1344HYPERDE: render #1345HYPERDE: render #1346HYPERDE: render #1347HYPERDE: render #1348HYPERDE: render #1349HYPERDE: render #1350HYPERDE: render #1351HYPERDE: render #1352HYPERDE: render #1353HYPERDE: render #1354HYPERDE: render #1355HYPERDE: render #1356HYPERDE: render #1357HYPERDE: render #1358HYPERDE: render #1359HYPERDE: render #1360HYPERDE: bar #1360 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1361HYPERDE: render #1362HYPERDE: render #1363HYPERDE: render #1364HYPERDE: render #1365HYPERDE: render #1366HYPERDE: render #1367HYPERDE: render #1368HYPERDE: render #1369HYPERDE: render #1370HYPERDE: render #1371HYPERDE: render #1372HYPERDE: render #1373HYPERDE: render #1374HYPERDE: render #1375HYPERDE: render #1376HYPERDE: render #1377HYPERDE: render #1378HYPERDE: render #1379HYPERDE: render #1380HYPERDE: bar #1380 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1381HYPERDE: render #1382HYPERDE: render #1383HYPERDE: render #1384HYPERDE: render #1385HYPERDE: render #1386HYPERDE: render #1387HYPERDE: render #1388HYPERDE: render #1389HYPERDE: render #1390HYPERDE: render #1391HYPERDE: render #1392HYPERDE: render #1393HYPERDE: render #1394HYPERDE: render #1395HYPERDE: render #1396HYPERDE: render #1397HYPERDE: render #1398HYPERDE: render #1399HYPERDE: render #1400HYPERDE: bar #1400 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1401HYPERDE: render #1402HYPERDE: render #1403HYPERDE: render #1404HYPERDE: render #1405HYPERDE: render #1406HYPERDE: render #1407HYPERDE: render #1408HYPERDE: render #1409HYPERDE: render #1410HYPERDE: render #1411HYPERDE: render #1412HYPERDE: render #1413HYPERDE: render #1414HYPERDE: render #1415HYPERDE: render #1416HYPERDE: render #1417HYPERDE: render #1418HYPERDE: render #1419HYPERDE: render #1420HYPERDE: bar #1420 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1421HYPERDE: render #1422HYPERDE: render #1423HYPERDE: render #1424HYPERDE: render #1425HYPERDE: render #1426HYPERDE: render #1427HYPERDE: render #1428HYPERDE: render #1429HYPERDE: render #1430HYPERDE: render #1431HYPERDE: render #1432HYPERDE: render #1433HYPERDE: render #1434HYPERDE: render #1435HYPERDE: render #1436HYPERDE: render #1437HYPERDE: render #1438HYPERDE: render #1439HYPERDE: render #1440HYPERDE: bar #1440 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1441HYPERDE: render #1442HYPERDE: render #1443HYPERDE: render #1444HYPERDE: render #1445HYPERDE: render #1446HYPERDE: render #1447HYPERDE: render #1448HYPERDE: render #1449HYPERDE: render #1450HYPERDE: render #1451HYPERDE: render #1452HYPERDE: render #1453HYPERDE: render #1454HYPERDE: render #1455HYPERDE: render #1456HYPERDE: render #1457HYPERDE: render #1458HYPERDE: render #1459HYPERDE: render #1460HYPERDE: bar #1460 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1461HYPERDE: render #1462HYPERDE: render #1463HYPERDE: render #1464HYPERDE: render #1465HYPERDE: render #1466HYPERDE: render #1467HYPERDE: render #1468HYPERDE: render #1469HYPERDE: render #1470HYPERDE: render #1471HYPERDE: render #1472HYPERDE: render #1473HYPERDE: render #1474HYPERDE: render #1475HYPERDE: render #1476HYPERDE: render #1477HYPERDE: render #1478HYPERDE: render #1479HYPERDE: render #1480HYPERDE: bar #1480 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1481HYPERDE: render #1482HYPERDE: render #1483HYPERDE: render #1484HYPERDE: render #1485HYPERDE: render #1486HYPERDE: render #1487HYPERDE: render #1488HYPERDE: render #1489HYPERDE: render #1490HYPERDE: render #1491HYPERDE: render #1492HYPERDE: render #1493HYPERDE: render #1494HYPERDE: render #1495HYPERDE: render #1496HYPERDE: render #1497HYPERDE: render #1498HYPERDE: render #1499HYPERDE: render #1500HYPERDE: bar #1500 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1501HYPERDE: render #1502HYPERDE: render #1503HYPERDE: render #1504HYPERDE: render #1505HYPERDE: render #1506HYPERDE: render #1507HYPERDE: render #1508HYPERDE: render #1509HYPERDE: render #1510HYPERDE: render #1511HYPERDE: render #1512HYPERDE: render #1513HYPERDE: render #1514HYPERDE: render #1515HYPERDE: render #1516HYPERDE: render #1517HYPERDE: render #1518HYPERDE: render #1519HYPERDE: render #1520HYPERDE: bar #1520 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1521HYPERDE: render #1522HYPERDE: render #1523HYPERDE: render #1524HYPERDE: render #1525HYPERDE: render #1526HYPERDE: render #1527HYPERDE: render #1528HYPERDE: render #1529HYPERDE: render #1530HYPERDE: render #1531HYPERDE: render #1532HYPERDE: render #1533HYPERDE: render #1534HYPERDE: render #1535HYPERDE: render #1536HYPERDE: render #1537HYPERDE: render #1538HYPERDE: render #1539HYPERDE: render #1540HYPERDE: bar #1540 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1541HYPERDE: render #1542HYPERDE: render #1543HYPERDE: render #1544HYPERDE: render #1545HYPERDE: render #1546HYPERDE: render #1547HYPERDE: render #1548HYPERDE: render #1549HYPERDE: render #1550HYPERDE: render #1551HYPERDE: render #1552HYPERDE: render #1553HYPERDE: render #1554HYPERDE: render #1555HYPERDE: render #1556HYPERDE: render #1557HYPERDE: render #1558HYPERDE: render #1559HYPERDE: render #1560HYPERDE: bar #1560 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1561HYPERDE: render #1562HYPERDE: render #1563HYPERDE: render #1564HYPERDE: render #1565HYPERDE: render #1566HYPERDE: render #1567HYPERDE: render #1568HYPERDE: render #1569HYPERDE: render #1570HYPERDE: render #1571HYPERDE: render #1572HYPERDE: render #1573HYPERDE: render #1574HYPERDE: render #1575HYPERDE: render #1576HYPERDE: render #1577HYPERDE: render #1578HYPERDE: render #1579HYPERDE: render #1580HYPERDE: bar #1580 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1581HYPERDE: render #1582HYPERDE: render #1583HYPERDE: render #1584HYPERDE: render #1585HYPERDE: render #1586HYPERDE: render #1587HYPERDE: render #1588HYPERDE: render #1589HYPERDE: render #1590HYPERDE: render #1591HYPERDE: render #1592HYPERDE: render #1593HYPERDE: render #1594HYPERDE: render #1595HYPERDE: render #1596HYPERDE: render #1597HYPERDE: render #1598HYPERDE: render #1599HYPERDE: render #1600HYPERDE: bar #1600 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1601HYPERDE: render #1602HYPERDE: render #1603HYPERDE: render #1604HYPERDE: render #1605HYPERDE: render #1606HYPERDE: render #1607HYPERDE: render #1608HYPERDE: render #1609HYPERDE: render #1610HYPERDE: render #1611HYPERDE: render #1612HYPERDE: render #1613HYPERDE: render #1614HYPERDE: render #1615HYPERDE: render #1616HYPERDE: render #1617HYPERDE: render #1618HYPERDE: render #1619HYPERDE: render #1620HYPERDE: bar #1620 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1621HYPERDE: render #1622HYPERDE: render #1623HYPERDE: render #1624HYPERDE: render #1625HYPERDE: render #1626HYPERDE: render #1627HYPERDE: render #1628HYPERDE: render #1629HYPERDE: render #1630HYPERDE: render #1631HYPERDE: render #1632HYPERDE: render #1633HYPERDE: render #1634HYPERDE: render #1635HYPERDE: render #1636HYPERDE: render #1637HYPERDE: render #1638HYPERDE: render #1639HYPERDE: render #1640HYPERDE: bar #1640 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1641HYPERDE: render #1642HYPERDE: render #1643HYPERDE: render #1644HYPERDE: render #1645HYPERDE: render #1646HYPERDE: render #1647HYPERDE: render #1648HYPERDE: render #1649HYPERDE: render #1650HYPERDE: render #1651HYPERDE: render #1652HYPERDE: render #1653HYPERDE: render #1654HYPERDE: render #1655HYPERDE: render #1656HYPERDE: render #1657HYPERDE: render #1658HYPERDE: render #1659HYPERDE: render #1660HYPERDE: bar #1660 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1661HYPERDE: render #1662HYPERDE: render #1663HYPERDE: render #1664HYPERDE: render #1665HYPERDE: render #1666HYPERDE: render #1667HYPERDE: render #1668HYPERDE: render #1669HYPERDE: render #1670HYPERDE: render #1671HYPERDE: render #1672HYPERDE: render #1673HYPERDE: render #1674HYPERDE: render #1675HYPERDE: render #1676HYPERDE: render #1677HYPERDE: render #1678HYPERDE: render #1679HYPERDE: render #1680HYPERDE: bar #1680 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1681HYPERDE: render #1682HYPERDE: render #1683HYPERDE: render #1684HYPERDE: render #1685HYPERDE: render #1686HYPERDE: render #1687HYPERDE: render #1688HYPERDE: render #1689HYPERDE: render #1690HYPERDE: render #1691HYPERDE: render #1692HYPERDE: render #1693HYPERDE: render #1694HYPERDE: render #1695HYPERDE: render #1696HYPERDE: render #1697HYPERDE: render #1698HYPERDE: render #1699HYPERDE: render #1700HYPERDE: bar #1700 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1701HYPERDE: render #1702HYPERDE: render #1703HYPERDE: render #1704HYPERDE: render #1705HYPERDE: render #1706HYPERDE: render #1707HYPERDE: render #1708HYPERDE: render #1709HYPERDE: render #1710HYPERDE: render #1711HYPERDE: render #1712HYPERDE: render #1713HYPERDE: render #1714HYPERDE: render #1715HYPERDE: render #1716HYPERDE: render #1717HYPERDE: render #1718HYPERDE: render #1719HYPERDE: render #1720HYPERDE: bar #1720 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1721HYPERDE: render #1722HYPERDE: render #1723HYPERDE: render #1724HYPERDE: render #1725HYPERDE: render #1726HYPERDE: render #1727HYPERDE: render #1728HYPERDE: render #1729HYPERDE: render #1730HYPERDE: render #1731HYPERDE: render #1732HYPERDE: render #1733HYPERDE: render #1734HYPERDE: render #1735HYPERDE: render #1736HYPERDE: render #1737HYPERDE: render #1738HYPERDE: render #1739HYPERDE: render #1740HYPERDE: bar #1740 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1741HYPERDE: render #1742HYPERDE: render #1743HYPERDE: render #1744HYPERDE: render #1745HYPERDE: render #1746HYPERDE: render #1747HYPERDE: render #1748HYPERDE: render #1749HYPERDE: render #1750HYPERDE: render #1751HYPERDE: render #1752HYPERDE: render #1753HYPERDE: render #1754HYPERDE: render #1755HYPERDE: render #1756HYPERDE: render #1757HYPERDE: render #1758HYPERDE: render #1759HYPERDE: render #1760HYPERDE: bar #1760 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1761HYPERDE: render #1762HYPERDE: render #1763HYPERDE: render #1764HYPERDE: render #1765HYPERDE: render #1766HYPERDE: render #1767HYPERDE: render #1768HYPERDE: render #1769HYPERDE: render #1770HYPERDE: render #1771HYPERDE: render #1772HYPERDE: render #1773HYPERDE: render #1774HYPERDE: render #1775HYPERDE: render #1776HYPERDE: render #1777HYPERDE: render #1778HYPERDE: render #1779HYPERDE: render #1780HYPERDE: bar #1780 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1781HYPERDE: render #1782HYPERDE: render #1783HYPERDE: render #1784HYPERDE: render #1785HYPERDE: render #1786HYPERDE: render #1787HYPERDE: render #1788HYPERDE: render #1789HYPERDE: render #1790HYPERDE: render #1791HYPERDE: render #1792HYPERDE: render #1793HYPERDE: render #1794HYPERDE: render #1795HYPERDE: render #1796HYPERDE: render #1797HYPERDE: render #1798HYPERDE: render #1799HYPERDE: render #1800HYPERDE: bar #1800 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1801HYPERDE: render #1802HYPERDE: render #1803HYPERDE: render #1804HYPERDE: render #1805HYPERDE: render #1806HYPERDE: render #1807HYPERDE: render #1808HYPERDE: render #1809HYPERDE: render #1810HYPERDE: render #1811HYPERDE: render #1812HYPERDE: render #1813HYPERDE: render #1814HYPERDE: render #1815HYPERDE: render #1816HYPERDE: render #1817HYPERDE: render #1818HYPERDE: render #1819HYPERDE: render #1820HYPERDE: bar #1820 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1821HYPERDE: render #1822HYPERDE: render #1823HYPERDE: render #1824HYPERDE: render #1825HYPERDE: render #1826HYPERDE: render #1827HYPERDE: render #1828HYPERDE: render #1829HYPERDE: render #1830HYPERDE: render #1831HYPERDE: render #1832HYPERDE: render #1833HYPERDE: render #1834HYPERDE: render #1835HYPERDE: render #1836HYPERDE: render #1837HYPERDE: render #1838HYPERDE: render #1839HYPERDE: render #1840HYPERDE: bar #1840 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1841HYPERDE: render #1842HYPERDE: render #1843HYPERDE: render #1844HYPERDE: render #1845HYPERDE: render #1846HYPERDE: render #1847HYPERDE: render #1848HYPERDE: render #1849HYPERDE: render #1850HYPERDE: render #1851HYPERDE: render #1852HYPERDE: render #1853HYPERDE: render #1854HYPERDE: render #1855HYPERDE: render #1856HYPERDE: render #1857HYPERDE: render #1858HYPERDE: render #1859HYPERDE: render #1860HYPERDE: bar #1860 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1861HYPERDE: render #1862HYPERDE: render #1863HYPERDE: render #1864HYPERDE: render #1865HYPERDE: render #1866HYPERDE: render #1867HYPERDE: render #1868HYPERDE: render #1869HYPERDE: render #1870HYPERDE: render #1871HYPERDE: render #1872HYPERDE: render #1873HYPERDE: render #1874HYPERDE: render #1875HYPERDE: render #1876HYPERDE: render #1877HYPERDE: render #1878HYPERDE: render #1879HYPERDE: render #1880HYPERDE: bar #1880 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1881HYPERDE: render #1882HYPERDE: render #1883HYPERDE: render #1884HYPERDE: render #1885HYPERDE: render #1886HYPERDE: render #1887HYPERDE: render #1888HYPERDE: render #1889HYPERDE: render #1890HYPERDE: render #1891HYPERDE: render #1892HYPERDE: render #1893HYPERDE: render #1894HYPERDE: render #1895HYPERDE: render #1896HYPERDE: render #1897HYPERDE: render #1898HYPERDE: render #1899HYPERDE: render #1900HYPERDE: bar #1900 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1901HYPERDE: render #1902HYPERDE: render #1903HYPERDE: render #1904HYPERDE: render #1905HYPERDE: render #1906HYPERDE: render #1907HYPERDE: render #1908HYPERDE: render #1909HYPERDE: render #1910HYPERDE: render #1911HYPERDE: render #1912HYPERDE: render #1913HYPERDE: render #1914HYPERDE: render #1915HYPERDE: render #1916HYPERDE: render #1917HYPERDE: render #1918HYPERDE: render #1919HYPERDE: render #1920HYPERDE: bar #1920 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1921HYPERDE: render #1922HYPERDE: render #1923HYPERDE: render #1924HYPERDE: render #1925HYPERDE: render #1926HYPERDE: render #1927HYPERDE: render #1928HYPERDE: render #1929HYPERDE: render #1930HYPERDE: render #1931HYPERDE: render #1932HYPERDE: render #1933HYPERDE: render #1934HYPERDE: render #1935HYPERDE: render #1936HYPERDE: render #1937HYPERDE: render #1938HYPERDE: render #1939HYPERDE: render #1940HYPERDE: bar #1940 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1941HYPERDE: render #1942HYPERDE: render #1943HYPERDE: render #1944HYPERDE: render #1945HYPERDE: render #1946HYPERDE: render #1947HYPERDE: render #1948HYPERDE: render #1949HYPERDE: render #1950HYPERDE: render #1951HYPERDE: render #1952HYPERDE: render #1953HYPERDE: render #1954HYPERDE: render #1955HYPERDE: render #1956HYPERDE: render #1957HYPERDE: render #1958HYPERDE: render #1959HYPERDE: render #1960HYPERDE: bar #1960 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1961HYPERDE: render #1962HYPERDE: render #1963HYPERDE: render #1964HYPERDE: render #1965HYPERDE: render #1966HYPERDE: render #1967HYPERDE: render #1968HYPERDE: render #1969HYPERDE: render #1970HYPERDE: render #1971HYPERDE: render #1972HYPERDE: render #1973HYPERDE: render #1974HYPERDE: render #1975HYPERDE: render #1976HYPERDE: render #1977HYPERDE: render #1978HYPERDE: render #1979HYPERDE: render #1980HYPERDE: bar #1980 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #1981HYPERDE: render #1982HYPERDE: render #1983HYPERDE: render #1984HYPERDE: render #1985HYPERDE: render #1986HYPERDE: render #1987HYPERDE: render #1988HYPERDE: render #1989HYPERDE: render #1990HYPERDE: render #1991HYPERDE: render #1992HYPERDE: render #1993HYPERDE: render #1994HYPERDE: render #1995HYPERDE: render #1996HYPERDE: render #1997HYPERDE: render #1998HYPERDE: render #1999HYPERDE: render #2000HYPERDE: bar #2000 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2001HYPERDE: render #2002HYPERDE: render #2003HYPERDE: render #2004HYPERDE: render #2005HYPERDE: render #2006HYPERDE: render #2007HYPERDE: render #2008HYPERDE: render #2009HYPERDE: render #2010HYPERDE: render #2011HYPERDE: render #2012HYPERDE: render #2013HYPERDE: render #2014HYPERDE: render #2015HYPERDE: render #2016HYPERDE: render #2017HYPERDE: render #2018HYPERDE: render #2019HYPERDE: render #2020HYPERDE: bar #2020 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2021HYPERDE: render #2022HYPERDE: render #2023HYPERDE: render #2024HYPERDE: render #2025HYPERDE: render #2026HYPERDE: render #2027HYPERDE: render #2028HYPERDE: render #2029HYPERDE: render #2030HYPERDE: render #2031HYPERDE: render #2032HYPERDE: render #2033HYPERDE: render #2034HYPERDE: render #2035HYPERDE: render #2036HYPERDE: render #2037HYPERDE: render #2038HYPERDE: render #2039HYPERDE: render #2040HYPERDE: bar #2040 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2041HYPERDE: render #2042HYPERDE: render #2043HYPERDE: render #2044HYPERDE: render #2045HYPERDE: render #2046HYPERDE: render #2047HYPERDE: render #2048HYPERDE: render #2049HYPERDE: render #2050HYPERDE: render #2051HYPERDE: render #2052HYPERDE: render #2053HYPERDE: render #2054HYPERDE: render #2055HYPERDE: render #2056HYPERDE: render #2057HYPERDE: render #2058HYPERDE: render #2059HYPERDE: render #2060HYPERDE: bar #2060 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2061HYPERDE: render #2062HYPERDE: render #2063HYPERDE: render #2064HYPERDE: render #2065HYPERDE: render #2066HYPERDE: render #2067HYPERDE: render #2068HYPERDE: render #2069HYPERDE: render #2070HYPERDE: render #2071HYPERDE: render #2072HYPERDE: render #2073HYPERDE: render #2074HYPERDE: render #2075HYPERDE: render #2076HYPERDE: render #2077HYPERDE: render #2078HYPERDE: render #2079HYPERDE: render #2080HYPERDE: bar #2080 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2081HYPERDE: render #2082HYPERDE: render #2083HYPERDE: render #2084HYPERDE: render #2085HYPERDE: render #2086HYPERDE: render #2087HYPERDE: render #2088HYPERDE: render #2089HYPERDE: render #2090HYPERDE: render #2091HYPERDE: render #2092HYPERDE: render #2093HYPERDE: render #2094HYPERDE: render #2095HYPERDE: render #2096HYPERDE: render #2097HYPERDE: render #2098HYPERDE: render #2099HYPERDE: render #2100HYPERDE: bar #2100 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2101HYPERDE: render #2102HYPERDE: render #2103HYPERDE: render #2104HYPERDE: render #2105HYPERDE: render #2106HYPERDE: render #2107HYPERDE: render #2108HYPERDE: render #2109HYPERDE: render #2110HYPERDE: render #2111HYPERDE: render #2112HYPERDE: render #2113HYPERDE: render #2114HYPERDE: render #2115HYPERDE: render #2116HYPERDE: render #2117HYPERDE: render #2118HYPERDE: render #2119HYPERDE: render #2120HYPERDE: bar #2120 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2121HYPERDE: render #2122HYPERDE: render #2123HYPERDE: render #2124HYPERDE: render #2125HYPERDE: render #2126HYPERDE: render #2127HYPERDE: render #2128HYPERDE: render #2129HYPERDE: render #2130HYPERDE: render #2131HYPERDE: render #2132HYPERDE: render #2133HYPERDE: render #2134HYPERDE: render #2135HYPERDE: render #2136HYPERDE: render #2137HYPERDE: render #2138HYPERDE: render #2139HYPERDE: render #2140HYPERDE: bar #2140 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2141HYPERDE: render #2142HYPERDE: render #2143HYPERDE: render #2144HYPERDE: render #2145HYPERDE: render #2146HYPERDE: render #2147HYPERDE: render #2148HYPERDE: render #2149HYPERDE: render #2150HYPERDE: render #2151HYPERDE: render #2152HYPERDE: render #2153HYPERDE: render #2154HYPERDE: render #2155HYPERDE: render #2156HYPERDE: render #2157HYPERDE: render #2158HYPERDE: render #2159HYPERDE: render #2160HYPERDE: bar #2160 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2161HYPERDE: render #2162HYPERDE: render #2163HYPERDE: render #2164HYPERDE: render #2165HYPERDE: render #2166HYPERDE: render #2167HYPERDE: render #2168HYPERDE: render #2169HYPERDE: render #2170HYPERDE: render #2171HYPERDE: render #2172HYPERDE: render #2173HYPERDE: render #2174HYPERDE: render #2175HYPERDE: render #2176HYPERDE: render #2177HYPERDE: render #2178HYPERDE: render #2179HYPERDE: render #2180HYPERDE: bar #2180 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2181HYPERDE: render #2182HYPERDE: render #2183HYPERDE: render #2184HYPERDE: render #2185HYPERDE: render #2186HYPERDE: render #2187HYPERDE: render #2188HYPERDE: render #2189HYPERDE: render #2190HYPERDE: render #2191HYPERDE: render #2192HYPERDE: render #2193HYPERDE: render #2194HYPERDE: render #2195HYPERDE: render #2196HYPERDE: render #2197HYPERDE: render #2198HYPERDE: render #2199HYPERDE: render #2200HYPERDE: bar #2200 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2201HYPERDE: render #2202HYPERDE: render #2203HYPERDE: render #2204HYPERDE: render #2205HYPERDE: render #2206HYPERDE: render #2207HYPERDE: render #2208HYPERDE: render #2209HYPERDE: render #2210HYPERDE: render #2211HYPERDE: render #2212HYPERDE: render #2213HYPERDE: render #2214HYPERDE: render #2215HYPERDE: render #2216HYPERDE: render #2217HYPERDE: render #2218HYPERDE: render #2219HYPERDE: render #2220HYPERDE: bar #2220 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2221HYPERDE: render #2222HYPERDE: render #2223HYPERDE: render #2224HYPERDE: render #2225HYPERDE: render #2226HYPERDE: render #2227HYPERDE: render #2228HYPERDE: render #2229HYPERDE: render #2230HYPERDE: render #2231HYPERDE: render #2232HYPERDE: render #2233HYPERDE: render #2234HYPERDE: render #2235HYPERDE: render #2236HYPERDE: render #2237HYPERDE: render #2238HYPERDE: render #2239HYPERDE: render #2240HYPERDE: bar #2240 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2241HYPERDE: render #2242HYPERDE: render #2243HYPERDE: render #2244HYPERDE: render #2245HYPERDE: render #2246HYPERDE: render #2247HYPERDE: render #2248HYPERDE: render #2249HYPERDE: render #2250HYPERDE: render #2251HYPERDE: render #2252HYPERDE: render #2253HYPERDE: render #2254HYPERDE: render #2255HYPERDE: render #2256HYPERDE: render #2257HYPERDE: render #2258HYPERDE: render #2259HYPERDE: render #2260HYPERDE: bar #2260 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2261HYPERDE: render #2262HYPERDE: render #2263HYPERDE: render #2264HYPERDE: render #2265HYPERDE: render #2266HYPERDE: render #2267HYPERDE: render #2268HYPERDE: render #2269HYPERDE: render #2270HYPERDE: render #2271HYPERDE: render #2272HYPERDE: render #2273HYPERDE: render #2274HYPERDE: render #2275HYPERDE: render #2276HYPERDE: render #2277HYPERDE: render #2278HYPERDE: render #2279HYPERDE: render #2280HYPERDE: bar #2280 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2281HYPERDE: render #2282HYPERDE: render #2283HYPERDE: render #2284HYPERDE: render #2285HYPERDE: render #2286HYPERDE: render #2287HYPERDE: render #2288HYPERDE: render #2289HYPERDE: render #2290HYPERDE: render #2291HYPERDE: render #2292HYPERDE: render #2293HYPERDE: render #2294HYPERDE: render #2295HYPERDE: render #2296HYPERDE: render #2297HYPERDE: render #2298HYPERDE: render #2299HYPERDE: render #2300HYPERDE: bar #2300 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2301HYPERDE: render #2302HYPERDE: render #2303HYPERDE: render #2304HYPERDE: render #2305HYPERDE: render #2306HYPERDE: render #2307HYPERDE: render #2308HYPERDE: render #2309HYPERDE: render #2310HYPERDE: render #2311HYPERDE: render #2312HYPERDE: render #2313HYPERDE: render #2314HYPERDE: render #2315HYPERDE: render #2316HYPERDE: render #2317HYPERDE: render #2318HYPERDE: render #2319HYPERDE: render #2320HYPERDE: bar #2320 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2321HYPERDE: render #2322HYPERDE: render #2323HYPERDE: render #2324HYPERDE: render #2325HYPERDE: render #2326HYPERDE: render #2327HYPERDE: render #2328HYPERDE: render #2329HYPERDE: render #2330HYPERDE: render #2331HYPERDE: render #2332HYPERDE: render #2333HYPERDE: render #2334HYPERDE: render #2335HYPERDE: render #2336HYPERDE: render #2337HYPERDE: render #2338HYPERDE: render #2339HYPERDE: render #2340HYPERDE: bar #2340 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2341HYPERDE: render #2342HYPERDE: render #2343HYPERDE: render #2344HYPERDE: render #2345HYPERDE: render #2346HYPERDE: render #2347HYPERDE: render #2348HYPERDE: render #2349HYPERDE: render #2350HYPERDE: render #2351HYPERDE: render #2352HYPERDE: render #2353HYPERDE: render #2354HYPERDE: render #2355HYPERDE: render #2356HYPERDE: render #2357HYPERDE: render #2358HYPERDE: render #2359HYPERDE: render #2360HYPERDE: bar #2360 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2361HYPERDE: render #2362HYPERDE: render #2363HYPERDE: render #2364HYPERDE: render #2365HYPERDE: render #2366HYPERDE: render #2367HYPERDE: render #2368HYPERDE: render #2369HYPERDE: render #2370HYPERDE: render #2371HYPERDE: render #2372HYPERDE: render #2373HYPERDE: render #2374HYPERDE: render #2375HYPERDE: render #2376HYPERDE: render #2377HYPERDE: render #2378HYPERDE: render #2379HYPERDE: render #2380HYPERDE: bar #2380 hh=3 mm=19 cpu=100 mem=172HYPERDE: render #2381HYPERDE: render #2382HYPERDE: render #2383HYPERDE: render #2384HYPERDE: render #2385HYPERDE: render #2386HYPERDE: render #2387HYPERDE: render #2388HYPERDE: render #2389HYPERDE: render #2390HYPERDE: render #2391HYPERDE: render #2392HYPERDE: render #2393HYPERDE: render #2394HYPERDE: render #2395HYPERDE: render #2396HYPERDE: render #2397HYPERDE: render #2398HYPERDE: render #2399HYPERDE: render #2400HYPERDE: bar #2400 hh=3 mm=20 cpu=0 mem=172HYPERDE: render #2401HYPERDE: render #2402HYPERDE: render #2403HYPERDE: render #2404
