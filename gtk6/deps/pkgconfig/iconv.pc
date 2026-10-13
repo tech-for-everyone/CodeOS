@@ -1,0 +1,7 @@
+prefix=/home/codeosuser/CodeOS/gtk6/deps
+libdir=${prefix}/lib
+Name: iconv
+Description: CodeOS iconv shim
+Version: 1.0
+Libs: -L${libdir} -liconv
+Cflags:
