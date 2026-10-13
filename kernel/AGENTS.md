@@ -30,12 +30,15 @@ make -C kernel run-iso
 ```
 
 Host needs `clang`/`clang++` (compiler for the kernel, the userspace programs
-and the Qt panels), `ld.lld` to link the userspace and the Zircon binaries,
-`x86_64-elf-ld`/`x86_64-elf-objcopy` for the final kernel link (`ld.lld` cannot
-relax the prebuilt Qt archives' local-dynamic TLS, so the kernel links with GNU
-ld), host `g++` for the libstdc++ headers clang++ parses, `xorriso`, `python3`,
-`cargo`, and QEMU for run targets. `x86_64-elf-gcc`/`g++` are only needed to
-rebuild Qt6 from source (`make qt6-all`) or the optional SDL3 demos.
+and the Qt panels), host `g++` for the libstdc++ headers clang++ parses,
+`xorriso`, `python3`, `cargo`, and QEMU for run targets. The linkers are
+preferred but optional: the userspace and Zircon binaries use `ld.lld` and the
+final kernel link uses `x86_64-elf-ld` (`ld.lld` cannot relax the prebuilt Qt
+archives' local-dynamic TLS, so the kernel links with GNU ld), and each falls
+back to the host GNU `ld` when the LLVM/cross tool is not installed -- the
+Makefiles detect this with `command -v`, so `make LD=...` still overrides.
+`x86_64-elf-gcc`/`g++` are only needed to rebuild Qt6 from source
+(`make qt6-all`) or the optional SDL3 demos.
 
 ## `string.c`: the `rep` string asm must declare its operands read-write
 - The kernel image is built with `clang`/`clang++`. The first all-clang build

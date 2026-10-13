@@ -39,11 +39,13 @@ yay -Syu --needed --noconfirm rust-analyzer
 yay -Syu --needed --noconfirm clang
 yay -Syu --needed --noconfirm llvm
 yay -Syu --needed --noconfirm lld
-# Still needed: x86_64-elf-ld/objcopy for the final kernel link (lld cannot
-# relax the prebuilt Qt archives' local-dynamic TLS), and host g++ for the
-# libstdc++ headers clang++ parses.  The userspace and Qt panels now build with
-# clang too; the cross GCC/G++ is only needed to rebuild Qt6 from source
-# (`make qt6-all`) or the optional SDL3 demos.
+# The final kernel link prefers x86_64-elf-ld (lld cannot relax the prebuilt
+# Qt archives' local-dynamic TLS) but falls back to the host GNU ld when the
+# cross binutils are absent; likewise the userspace/Zircon link prefers ld.lld
+# and falls back to host ld, so `lld` is recommended but not required.  Host
+# g++ is still needed for the libstdc++ headers clang++ parses.  The userspace
+# and Qt panels build with clang; the cross GCC/G++ is only needed to rebuild
+# Qt6 from source (`make qt6-all`) or the optional SDL3 demos.
 yay -Syu --needed --noconfirm x86_64-elf-g++ x86_64-elf-gcc   # Qt-from-source only
 
 rustup default stable

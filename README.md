@@ -25,15 +25,21 @@ works — not a bajillion distros, one approachable system.
 ### Dependencies (host)
 
 ```sh
+# Clone with submodules — Zircon is a git submodule:
+git clone --recurse-submodules <this-repo>
+# If already cloned without it:
+git submodule update --init Zircon
+
 # Arch / Manjaro-style
-sudo pacman -Syu base-devel qemu-system-x86_64 xorriso python
+sudo pacman -Syu base-devel clang lld qemu-system-x86_64 xorriso python
 
 # Ubuntu / Debian
-sudo apt install build-essential qemu-system-x86 xorriso python3
+sudo apt install build-essential clang lld qemu-system-x86 xorriso python3
 
-# Cross compiler (x86_64 freestanding)
-# Install x86_64-elf-gcc / binutils somewhere on PATH
-# e.g. from AUR: x86_64-elf-gcc  x86_64-elf-binutils
+# Optional cross binutils (x86_64-elf-gcc / binutils) speed up nothing; the
+# build falls back to host GNU ld when x86_64-elf-ld is not installed.  Install
+# them from the AUR (x86_64-elf-gcc x86_64-elf-binutils) only if you want the
+# exact cross linkers, or to rebuild Qt6 from source.
 ```
 
 You also need **Rust** (`cargo`) for the OpenWeb HTTP backend (`kernel/rust_ow`).

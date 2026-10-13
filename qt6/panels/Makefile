@@ -8,7 +8,10 @@ MOC = /usr/lib/qt6/moc
 CXX = clang++
 CC = clang
 AS = clang
-LD = ld.lld
+# Prefer ld.lld, fall back to the host GNU ld when the lld package is absent;
+# this is only used for `-r -b binary` embedding, which both handle identically.
+# `:=` because GNU make predefines LD = ld; a command-line override still wins.
+LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo ld.lld || echo ld)
 
 KERNEL_DIR = $(abspath ../../kernel)
 DRIVERS_DIR = $(KERNEL_DIR)/drivers

@@ -1,16 +1,20 @@
 ARCH ?= x86_64
 
-# clang compiles and ld.lld links; no GNU cross toolchain is required.
+# clang compiles; the link prefers ld.lld and falls back to the host GNU ld,
+# so no GNU *cross* toolchain is required either way.
 # `--target=...-none` selects freestanding code generation so clang does not
 # assume a host Linux runtime (PIE, dynamic linker, start files) -- the
 # userspace has its own `_start` in crt0.S and its own link.ld.
+# `:=` (not `?=`) because GNU make predefines LD = ld; a bare `ld.lld`
+# invocation dies with "No such file or directory" on a host without lld.
+# A command-line `make LD=...` still overrides.
 ifeq ($(ARCH),arm64)
 CC = clang --target=aarch64-none-elf
-LD = ld.lld -m aarch64elf
+LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo "ld.lld -m aarch64elf" || echo "ld -m aarch64elf")
 AS = clang --target=aarch64-none-elf
 else
 CC = clang --target=x86_64-unknown-none
-LD = ld.lld
+LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo ld.lld || echo ld)
 AS = clang --target=x86_64-unknown-none
 endif
 
@@ -102,6 +106,17 @@ $(foreach p,$(CORE_PROGS),$(eval $(call core-prog-rule,$(p))))
 # shadows the CodeOS one; -Werror is dropped because the Zircon sources
 # are not warning-clean under this freestanding toolchain.
 ZC_ROOT = ../../Zircon
+
+# Zircon is a git submodule (top-level .gitmodules).  A plain `git clone`
+# without --recurse-submodules leaves it empty, and the zircapp prerequisites
+# below then fail with a bare "No rule to make target '../../Zircon/...'".
+# Name the actual fix instead of the symptom.
+$(ZC_ROOT)/zircapp/zircapp.c:
+	@echo "error: the Zircon submodule is not checked out." >&2
+	@echo "       $(ZC_ROOT)/zircapp/zircapp.c is missing." >&2
+	@echo "       run: git submodule update --init Zircon" >&2
+	@exit 1
+
 ZC_CFLAGS = -I$(ZC_ROOT)/zircapp/port -I$(ZC_ROOT) \
             -I$(ZC_ROOT)/gui -I$(ZC_ROOT)/apps \
             $(USER_CFLAGS) -Wno-error

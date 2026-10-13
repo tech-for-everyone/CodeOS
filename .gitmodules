@@ -1,3 +1,6 @@
 [submodule "arkui"]
 	path = arkui
 	url = https://github.com/openharmony/arkui_ace_engine
+[submodule "Zircon"]
+	path = Zircon
+	url = https://github.com/tech-for-everyone/Zircon.git

@@ -10,7 +10,7 @@ ifeq ($(ARCH),arm64)
     # LLVM cross toolchain (bare-metal freestanding aarch64).
     CC = clang --target=aarch64-linux-gnu
     CXX = clang++ --target=aarch64-linux-gnu
-    LD = ld.lld
+    LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo ld.lld || echo "ld -m aarch64elf")
     AS = clang --target=aarch64-linux-gnu
     OBJCOPY = objcopy
 
@@ -60,16 +60,17 @@ else
     # disk.img-legacy. The run-iso* family passes $(LIVE_DISK_IMG) explicitly.
     QEMU_DISK ?= -hda $(LEGACY_DISK_IMG)
     QEMU_FULL_DISK ?= -drive file=$(LEGACY_DISK_IMG),format=raw,if=ide
-    # LLVM toolchain: clang for C, clang++ for C++.  The GNU cross linker is
-    # kept for the final link.  The prebuilt Qt static archives are built with
-    # the large code model, whose TLS access sequence (movabs
-    # $__tls_get_addr@PLTOFF64 + indirect call) ld.lld cannot relax from
-    # local-dynamic to local-exec; GNU ld can.  Override any of these on the
-    # command line to build with another toolchain, e.g. the GNU one:
+    # LLVM toolchain: clang for C, clang++ for C++.  The final link prefers
+    # the GNU cross linker (x86_64-elf-ld), falling back to the host GNU ld
+    # when the cross binutils are not installed.  The prebuilt Qt static
+    # archives are built with the large code model, whose TLS access sequence
+    # (movabs $__tls_get_addr@PLTOFF64 + indirect call) ld.lld cannot relax
+    # from local-dynamic to local-exec; GNU ld can.  Override any of these on
+    # the command line to build with another toolchain, e.g.:
     #   make CC=gcc CXX=g++ LD=x86_64-elf-ld AS=as all
     CC := clang
     CXX := clang++
-    LD := x86_64-elf-ld
+    LD := $(shell command -v x86_64-elf-ld >/dev/null 2>&1 && echo x86_64-elf-ld || echo ld)
     AS := clang
     OBJCOPY ?= objcopy
     # Name the emulation explicitly for the raw-binary embed rules below.
