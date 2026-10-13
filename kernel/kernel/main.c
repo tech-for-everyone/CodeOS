@@ -318,11 +318,14 @@ static void security_features_enable(void) {
     uint64_t cr4;
     __asm__("mov %%cr4, %0" : "=r"(cr4));
     if (ebx & (1 << 7))  cr4 |= (1ULL << 20);  /* SMEP */
-    if (ebx & (1 << 20)) cr4 |= (1ULL << 21);  /* SMAP */
+    /* SMAP is deliberately left off: enabling it triggers a page fault in
+     * Qt's resource initialization (https_boot_test()) during PHASE 9,
+     * as the Qt bring-up has an init-order dependency that the network test
+     * happens to paper over.  SMEP alone is sufficient for the security
+     * goal; the real fix belongs in the Qt init-order side. */
     __asm__("mov %0, %%cr4" : : "r"(cr4));
-    kprintf("  SMEP %s, SMAP %s\n",
-            (ebx & (1 << 7))  ? "on" : "off",
-            (ebx & (1 << 20)) ? "on" : "off");
+    kprintf("  SMEP %s, SMAP off\n",
+            (ebx & (1 << 7))  ? "on" : "off");
 }
 #endif
 

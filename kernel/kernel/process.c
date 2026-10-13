@@ -93,11 +93,27 @@ int proc_fork(void) {
 
     strncpy_safe(child->name, parent->name, PROC_NAME_MAX);
 
-    /* Clone page tables with COW */
-    uint64_t *new_pml4 = (uint64_t *)pmm_alloc_page();
-    if (!new_pml4) { return -1; }
-    uint64_t *old_pml4 = child->pml4;
-    memset((void *)phys_to_virt((uint64_t)new_pml4), 0, 0x1000);
+    /* Clone page tables with COW.
+     *
+     * Every table allocated here is a *physical* address from pmm_alloc_page(),
+     * and process_t::pml4 is likewise physical -- it is the CR3 value:
+     * vmm_current_pml4() returns read_page_table_base() and vmm_switch_pml4()
+     * writes its argument straight into CR3. A physical address is not
+     * dereferenceable, and at this point CR3 is not even our own: the low half
+     * of the running address space is the user program, whose text is mapped at
+     * 0x400000 (elf.c). So a raw dereference of pmm_alloc_page()'s result reads
+     * user text as if it were a page table, and the write back into it lands on
+     * a read-only user page:
+     *     !!! PF at RIP=proc_fork+0x3bb CR2=0x400128 err=3
+     * err=3 is present+write+supervisor, i.e. the "page table" at 0x400000 was
+     * the process image. Reach every table through the HHDM (phys_to_virt) and
+     * store physical addresses into the entries; never run virt_to_phys() over
+     * a value that is already physical (it walks the current page tables). */
+    uint64_t new_pml4_phys = pmm_alloc_page();
+    if (!new_pml4_phys) { return -1; }
+    uint64_t *new_pml4 = (uint64_t *)phys_to_virt(new_pml4_phys);
+    uint64_t *old_pml4 = (uint64_t *)phys_to_virt((uint64_t)child->pml4);
+    memset(new_pml4, 0, 0x1000);
 
     /* Share the kernel half instead of copying it.
      *
@@ -121,44 +137,39 @@ int proc_fork(void) {
     const int kernel_half = (int)((phys_to_virt_base >> 39) & 0x1FF); /* 39 == PML4_SHIFT, private to vmm.c */
 
     int fork_err = 0;
-    for (int i = 0; i < 512; i++) {
+    for (int i = 0; i < kernel_half; i++) {
         if (!(old_pml4[i] & PAGE_PRESENT)) continue;
 
-        if (i >= kernel_half) {
-            new_pml4[i] = old_pml4[i];   /* shared, not copied and not COW */
-            continue;
-        }
+        uint64_t *old_pdp = (uint64_t *)phys_to_virt(old_pml4[i] & ~0xFFF);
 
-        uint64_t pdp_phys = old_pml4[i] & ~0xFFF;
-        uint64_t *old_pdp = (uint64_t *)phys_to_virt(pdp_phys);
-
-        uint64_t *new_pdp = (uint64_t *)pmm_alloc_page();
-        if (!new_pdp) { fork_err = 1; break; }
-        memset((void *)phys_to_virt((uint64_t)new_pdp), 0, 0x1000);
+        uint64_t new_pdp_phys = pmm_alloc_page();
+        if (!new_pdp_phys) { fork_err = 1; break; }
+        uint64_t *new_pdp = (uint64_t *)phys_to_virt(new_pdp_phys);
+        memset(new_pdp, 0, 0x1000);
 
         for (int j = 0; j < 512; j++) {
             if (!(old_pdp[j] & PAGE_PRESENT)) continue;
-            uint64_t pd_phys = old_pdp[j] & ~0xFFF;
-            uint64_t *old_pd = (uint64_t *)phys_to_virt(pd_phys);
+            uint64_t *old_pd = (uint64_t *)phys_to_virt(old_pdp[j] & ~0xFFF);
 
-            uint64_t *new_pd = (uint64_t *)pmm_alloc_page();
-            if (!new_pd) { fork_err = 1; break; }
-            memset((void *)phys_to_virt((uint64_t)new_pd), 0, 0x1000);
+            uint64_t new_pd_phys = pmm_alloc_page();
+            if (!new_pd_phys) { fork_err = 1; break; }
+            uint64_t *new_pd = (uint64_t *)phys_to_virt(new_pd_phys);
+            memset(new_pd, 0, 0x1000);
 
             for (int k = 0; k < 512; k++) {
                 if (!(old_pd[k] & PAGE_PRESENT)) continue;
 
-                if (old_pd[k] & (1ULL << 7)) {
+                if (old_pd[k] & PAGE_HUGE) {
                     new_pd[k] = old_pd[k];
                     continue;
                 }
 
-                uint64_t pt_phys = old_pd[k] & ~0xFFF;
-                uint64_t *old_pt = (uint64_t *)phys_to_virt(pt_phys);
+                uint64_t *old_pt = (uint64_t *)phys_to_virt(old_pd[k] & ~0xFFF);
 
-                uint64_t *new_pt = (uint64_t *)pmm_alloc_page();
-                if (!new_pt) { fork_err = 1; break; }
-                memcpy((void *)phys_to_virt((uint64_t)new_pt), old_pt, 0x1000);
+                uint64_t new_pt_phys = pmm_alloc_page();
+                if (!new_pt_phys) { fork_err = 1; break; }
+                uint64_t *new_pt = (uint64_t *)phys_to_virt(new_pt_phys);
+                memcpy(new_pt, old_pt, 0x1000);
 
                 for (int l = 0; l < 512; l++) {
                     if (!(new_pt[l] & PAGE_PRESENT)) continue;
@@ -170,20 +181,27 @@ int proc_fork(void) {
                     }
                 }
 
-                new_pd[k] = virt_to_phys((uint64_t)new_pt) | (old_pd[k] & 0xFFF);
+                new_pd[k] = new_pt_phys | (old_pd[k] & 0xFFF);
             }
-            if (fork_err) { pmm_free_page(virt_to_phys((uint64_t)new_pd)); break; }
+            if (fork_err) { pmm_free_page(new_pd_phys); break; }
 
-            new_pdp[j] = virt_to_phys((uint64_t)new_pd) | (old_pdp[j] & (PAGE_PRESENT | PAGE_WRITE | PAGE_USER));
+            new_pdp[j] = new_pd_phys | (old_pdp[j] & (PAGE_PRESENT | PAGE_WRITE | PAGE_USER));
         }
-        if (fork_err) { pmm_free_page(virt_to_phys((uint64_t)new_pdp)); break; }
+        if (fork_err) { pmm_free_page(new_pdp_phys); break; }
 
-        new_pml4[i] = virt_to_phys((uint64_t)new_pdp) | (old_pml4[i] & (PAGE_PRESENT | PAGE_WRITE | PAGE_USER));
+        new_pml4[i] = new_pdp_phys | (old_pml4[i] & (PAGE_PRESENT | PAGE_WRITE | PAGE_USER));
     }
 
+    /* Kernel half is shared verbatim, never cloned or COW'd: those entries are
+     * the live page tables the CPU is executing on (the direct map, the kernel
+     * image). proc_wait() stops at kernel_half for the same reason. */
+    for (int i = kernel_half; i < 512; i++)
+        new_pml4[i] = old_pml4[i];
+
     if (fork_err) {
-        /* Walk and free everything we allocated so far */
-        for (int i = 0; i < 512; i++) {
+        /* Walk and free everything we allocated so far (user half only: the
+         * kernel half is shared, not ours to free). */
+        for (int i = 0; i < kernel_half; i++) {
             if (!(new_pml4[i] & PAGE_PRESENT)) continue;
             uint64_t *pdp = (uint64_t *)phys_to_virt(new_pml4[i] & ~0xFFF);
             for (int j = 0; j < 512; j++) {
@@ -191,18 +209,18 @@ int proc_fork(void) {
                 uint64_t *pd = (uint64_t *)phys_to_virt(pdp[j] & ~0xFFF);
                 for (int k = 0; k < 512; k++) {
                     if (!(pd[k] & PAGE_PRESENT)) continue;
-                    if (pd[k] & (1ULL << 7)) continue;
+                    if (pd[k] & PAGE_HUGE) continue;
                     pmm_free_page(pd[k] & ~0xFFF);
                 }
                 pmm_free_page(pdp[j] & ~0xFFF);
             }
             pmm_free_page(new_pml4[i] & ~0xFFF);
         }
-        pmm_free_page(virt_to_phys((uint64_t)new_pml4));
+        pmm_free_page(new_pml4_phys);
         return -1;
     }
 
-    child->pml4 = new_pml4;
+    child->pml4 = (uint64_t *)new_pml4_phys;
 
     /* Copy file descriptors (deep copy pipe refs) */
     for (int i = 0; i < PROC_FD_MAX; i++) {
@@ -314,10 +332,10 @@ int proc_wait(int pid, int *status) {
                      * stopped copying it, so freeing it here would pull the
                      * running kernel's own page tables out from under it. */
                     const int kernel_half = (int)((phys_to_virt_base >> 39) & 0x1FF);
-                    for (int pt = 0; pt < 512; pt++) {
-                        if (pt >= kernel_half) break;
-                        if (!(child->pml4[pt] & PAGE_PRESENT)) continue;
-                        uint64_t *pdp = (uint64_t *)phys_to_virt(child->pml4[pt] & ~0xFFF);
+                    uint64_t *pml4 = (uint64_t *)phys_to_virt((uint64_t)child->pml4);
+                    for (int pt = 0; pt < kernel_half; pt++) {
+                        if (!(pml4[pt] & PAGE_PRESENT)) continue;
+                        uint64_t *pdp = (uint64_t *)phys_to_virt(pml4[pt] & ~0xFFF);
                         for (int pd = 0; pd < 512; pd++) {
                             if (!(pdp[pd] & PAGE_PRESENT)) continue;
                             uint64_t *pd_t = (uint64_t *)phys_to_virt(pdp[pd] & ~0xFFF);
@@ -339,7 +357,7 @@ int proc_wait(int pid, int *status) {
                         }
                         pmm_free_page(virt_to_phys((uint64_t)pdp));
                     }
-                    pmm_free_page(virt_to_phys((uint64_t)child->pml4));
+                    pmm_free_page((uint64_t)child->pml4);
                 }
                 memset(child, 0, sizeof(process_t));
                 return cpid;
