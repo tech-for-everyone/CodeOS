@@ -161,7 +161,6 @@ static int wav_read_pcm(int16_t *buf, int max_samples) {
 
 static int playing;
 static int paused;
-static int playback_eof;
 static int volume = 75;
 
 static int16_t pcm_buf[1024];
@@ -238,7 +237,6 @@ static void audio_tick(void) {
     if (samples <= 0) {
         if (sys_audio_status() == 0) {
             playing = 0;
-            playback_eof = 1;
             puts("  [] Playback finished");
         }
         return;
@@ -262,7 +260,6 @@ static void handle_command(const char *cmd) {
         playing = 0;
         paused = 0;
         pcm_pending = 0;
-        playback_eof = 0;
         wav_close();
         if (wav_open(path) < 0) {
             printf("  Failed to load '%s'\n", path);
@@ -281,7 +278,6 @@ static void handle_command(const char *cmd) {
         sys_lseek(wav.fd, wav.data_offset, 0);
         wav.data_pos = 0;
         pcm_pending = 0;
-        playback_eof = 0;
         playing = 1;
         paused = 0;
         puts("  >> Playing");
@@ -320,7 +316,6 @@ int main(int argc, char **argv) {
     playing = 0;
     paused = 0;
     pcm_pending = 0;
-    playback_eof = 0;
     wav.has_file = 0;
 
     if (argc > 1) {

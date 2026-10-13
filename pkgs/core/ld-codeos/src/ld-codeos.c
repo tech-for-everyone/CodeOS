@@ -168,7 +168,7 @@ static loaded_lib_t libs[MAX_LIBS];
 static int lib_count = 0;
 
 /* ── Inline assembly syscall wrappers (CodeOS ABI) ── */
-static inline long dl_syscall0(long n) {
+static inline long __attribute__((unused)) dl_syscall0(long n) {
     long ret;
     asm volatile("int $0x80" : "=a"(ret) : "a"(n) : "memory");
     return ret;

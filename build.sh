@@ -35,8 +35,7 @@ if ! command -v clang &>/dev/null || ! command -v clang++ &>/dev/null; then
     exit 1
 fi
 if ! command -v x86_64-elf-gcc &>/dev/null && ! command -v gcc &>/dev/null; then
-    error "No cross-compiler found (x86_64-elf-gcc or gcc); still required for the Qt panels"
-    exit 1
+    warn "No x86_64-elf-gcc/gcc found — the kernel and userspace build with clang; the cross GCC is only needed to rebuild Qt6 from source (make qt6-all)"
 fi
 if ! command -v g++ &>/dev/null; then
     error "g++ not found — clang++ needs the host libstdc++ headers to parse"

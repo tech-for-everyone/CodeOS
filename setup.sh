@@ -39,9 +39,12 @@ yay -Syu --needed --noconfirm rust-analyzer
 yay -Syu --needed --noconfirm clang
 yay -Syu --needed --noconfirm llvm
 yay -Syu --needed --noconfirm lld
-# Still needed: x86_64-elf-ld/objcopy for the final link, x86_64-elf-gcc for the
-# Qt panel objects, and host g++ for the libstdc++ headers clang++ parses.
-yay -Syu --needed --noconfirm x86_64-elf-g++ x86_64-elf-gcc   # cross toolchain
+# Still needed: x86_64-elf-ld/objcopy for the final kernel link (lld cannot
+# relax the prebuilt Qt archives' local-dynamic TLS), and host g++ for the
+# libstdc++ headers clang++ parses.  The userspace and Qt panels now build with
+# clang too; the cross GCC/G++ is only needed to rebuild Qt6 from source
+# (`make qt6-all`) or the optional SDL3 demos.
+yay -Syu --needed --noconfirm x86_64-elf-g++ x86_64-elf-gcc   # Qt-from-source only
 
 rustup default stable
 rustup update

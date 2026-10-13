@@ -1,13 +1,17 @@
 ARCH ?= x86_64
 
+# clang compiles and ld.lld links; no GNU cross toolchain is required.
+# `--target=...-none` selects freestanding code generation so clang does not
+# assume a host Linux runtime (PIE, dynamic linker, start files) -- the
+# userspace has its own `_start` in crt0.S and its own link.ld.
 ifeq ($(ARCH),arm64)
-CC = aarch64-linux-musl-gcc
-LD = aarch64-linux-musl-ld
-AS = aarch64-linux-musl-gcc
+CC = clang --target=aarch64-none-elf
+LD = ld.lld -m aarch64elf
+AS = clang --target=aarch64-none-elf
 else
-CC = x86_64-elf-gcc
-LD = x86_64-elf-ld
-AS = x86_64-elf-as
+CC = clang --target=x86_64-unknown-none
+LD = ld.lld
+AS = clang --target=x86_64-unknown-none
 endif
 
 PKG_SRC = ../../pkgs/core
@@ -33,7 +37,7 @@ PKG_ROOTS = $(PKG_SRC) ../../pkgs/extra
 pkg_main = $(firstword $(foreach r,$(PKG_ROOTS),$(wildcard $(r)/$(1)/src/$(1).c)) $(PKG_SRC)/$(1)/src/$(1).c)
 
 USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
-              -nostdlib -nostartfiles -fno-stack-protector -fno-PIC \
+              -nostdlib -fno-stack-protector -fno-PIC \
               -Wall -Wextra -Werror -O2 -g \
               -I./include -I../../include -I$(PKG_SRC)/panels/src
 
@@ -51,7 +55,7 @@ PROGRAMS = init shell csl zircapp zircon-notify zircon-clock zircon-info \
 all: $(PROGRAMS)
 
 crt0.o: crt0.S
-	$(AS) -g -o $@ $<
+	$(AS) -c -g -o $@ $<
 
 lib/string.o: lib/string.c include/string.h
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
