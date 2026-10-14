@@ -24,7 +24,7 @@ NETBEAM_KEYSTORE     ?=
 NETBEAM_KEY_ALIAS    ?= netbeam
 NETBEAM_KEY_PASSWORD ?=
 
-.PHONY: all check jengine-check codec-check codec-fuzz-check kernel iso clean run run-iso help
+.PHONY: all check jengine-check codec-check codec-fuzz-check kernel iso codeos-1.0.iso clean run run-iso help
 .PHONY: ncvm ncvm-build ncvm-run
 .PHONY: netbeam-check netbeam-pkg
 .PHONY: qt6 qt6-build qt6-install qt6-clean
@@ -132,6 +132,11 @@ kernel:
 	$(MAKE) -C kernel all
 	@printf "$(GREEN)Kernel built successfully$(RESET)\n"
 
+# `iso` only copies the kernel's ISO to the tree root, so the file has to be
+# phony: with a real (prerequisite-less) rule, `make` reports it "up to date"
+# forever and a kernel rebuild never reaches the root ISO.  The staleness
+# decision stays in kernel/Makefile, where `codeos-1.0.iso` correctly depends
+# on the arch-dependent $(TARGET) -- a name this Makefile must not spell out.
 iso: codeos-1.0.iso
 
 codeos-1.0.iso:
