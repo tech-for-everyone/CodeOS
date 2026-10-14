@@ -2,6 +2,12 @@
 build/
 deps/lib/
 deps/src/*.o
+tests/*.o
+tests/*.d
+
+# Staged glib + graphene (glibconfig.h et al. come from build/glib); see
+# PLAN.md "Install the sysroot".  Regenerable, so not tracked.
+sysroot/
 
 # meson-downloaded subproject artifacts (wrap files are committed instead)
 subprojects/glib/subprojects/packagecache/

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 # GTK6 — GTK4 widgets on the Qt6 engine
 
 Goal: keep GTK4's widget layer / public API (the *usefulness*) and replace the
@@ -122,3 +123,40 @@ generates into `build/glib/gobject/`.
    `graphene-gobject-1.0.pc`.
 
 Then Phases 2–6 (`gdk/qt`, `gsk/qt`, text bridge, widgets, prune) can start.
+
+### Phases 2–4 — the Qt backends exist and build
+
+`make -C gtk6 check` builds `build/libgtk6qt.a` from three real (not integer)
+modules and compiles `tests/linkcheck.cpp` against their headers:
+
+    gdk/qt/gdkqt.cpp   Phase 2  GdkQtDisplay / GdkQtSurface on QRasterWindow
+    gsk/qt/gskqt.cpp   Phase 3  GskQtRenderer: QPainter software renderer
+    qt/qttext.cpp      Phase 4  GtkQtFont / GtkQtText on QTextLayout
+
+* **Phase 4 (text).** `qt/qttext.h` is the Pango stand-in: create a font, set
+  UTF-8, set a wrap width, ask for size/ascent/line count, extract shaped glyphs
+  (`QTextLine::glyphRuns`), and draw. Shaping, bidi and line breaking are
+  Qt's — the module names no Pango/HarfBuzz/FreeType header, which is the
+  surgery the plan calls for.
+* **Phase 3 (render).** `gsk/qt` executes the three GSK jobs (clip, transform,
+  paint) as `QPainter` calls. `fill_rect`/`stroke_rect`/`draw_text` cover the
+  node set the widget bring-up starts with; gradients and image nodes come
+  next.
+* **Phase 2 (display/surface).** A toplevel is a `QRasterWindow`; the paint
+  callback is where the caller runs the GSK renderer, so raster-on-framebuffer
+  is the whole pipeline. No X11/Wayland/Broadway/Win32/macOS.
+* The modules deliberately do **not** include `<glib.h>`: the library is built
+  with `-nostdinc` against the CodeOS `stubs`, and glib's own headers need libc
+  headers the freestanding target does not have. Plain
+  `<stdint.h>`/`int`/`double` is the ABI.
+
+Not yet wired up:
+
+* The GTK4 sources (`gdk/gdk*.c`, `gsk/gsk*.c`, `gtk/*.c`) are not in the tree
+  yet. Phases 2–4 will call these modules from GTK's GObject backends
+  (`G_DEFINE_TYPE`d `GdkQt*`/`GskQt*`) once the sources are imported and
+  pruned; until then the modules are standalone and freestanding-verified by
+  `tests/linkcheck.cpp`.
+* glib 2.90 still resolves pcre2/libffi/zlib against the host (see above).
+* `sysroot/` is staged but not tracked; see ".gitignore".
+
