@@ -101,57 +101,69 @@ $(foreach p,$(CORE_PROGS),$(eval $(call core-prog-rule,$(p))))
 
 # zircapp is not a normal single-source package.  The CodeOS host
 # (pkgs/core/zircapp) links the *unmodified* Zircon application framework
-# and its apps from ../../Zircon, so it needs both include trees.  The
-# ZircApp port directory is listed first so its <time.h> shim (ctime)
-# shadows the CodeOS one; -Werror is dropped because the Zircon sources
-# are not warning-clean under this freestanding toolchain.
+# and its apps from ../../Zircon, so it needs both include trees.  Zircon's
+# userland lives in a package tree (Zircon/pkgs/): the base packages under
+# pkgs/core/base and one directory per app under pkgs/apps, so the include
+# paths mirror Zircon's own pkgs/pkgs.mk.  The port directory is listed
+# first so its <time.h> and desktop.h shims shadow the CodeOS headers, and
+# every app's src/ is on the path because home.c includes its siblings.
+# -Werror is dropped because the Zircon sources are not warning-clean under
+# this freestanding toolchain.
 ZC_ROOT = ../../Zircon
+ZC_BASE = $(ZC_ROOT)/pkgs/core/base
+ZC_PORT = $(ZC_BASE)/zircapp/port
+ZC_APPS = $(ZC_ROOT)/pkgs/apps
+
+# One object per app package: pkgs/apps/<name>/src/<name>.c -> zc_<name>.o.
+# The list is discovered, not hand-kept: home.c registers *every* sibling by
+# name (phone_app, notes_app, ...), so a new Zircon app must be compiled in
+# here or the link fails on the missing struct.  ZC_APP_INCLUDES has to be
+# built with $(wildcard) per app -- writing it as $(wildcard $(ZC_APPS)/*)/src
+# would attach "/src" to only the last match.
+ZC_APP_NAMES    = $(notdir $(wildcard $(ZC_APPS)/*))
+ZC_APP_OBJS     = $(addprefix zc_,$(addsuffix .o,$(ZC_APP_NAMES)))
+ZC_APP_INCLUDES = $(addprefix -I,$(addsuffix /src,$(wildcard $(ZC_APPS)/*)))
 
 # Zircon is a git submodule (top-level .gitmodules).  A plain `git clone`
 # without --recurse-submodules leaves it empty, and the zircapp prerequisites
 # below then fail with a bare "No rule to make target '../../Zircon/...'".
 # Name the actual fix instead of the symptom.
-$(ZC_ROOT)/zircapp/zircapp.c:
+$(ZC_BASE)/zircapp/src/zircapp.c:
 	@echo "error: the Zircon submodule is not checked out." >&2
-	@echo "       $(ZC_ROOT)/zircapp/zircapp.c is missing." >&2
+	@echo "       $(ZC_BASE)/zircapp/src/zircapp.c is missing." >&2
 	@echo "       run: git submodule update --init Zircon" >&2
 	@exit 1
 
-ZC_CFLAGS = -I$(ZC_ROOT)/zircapp/port -I$(ZC_ROOT) \
-            -I$(ZC_ROOT)/gui -I$(ZC_ROOT)/apps \
+ZC_CFLAGS = -I$(ZC_PORT) -I$(PKG_SRC)/zircapp/src/shim \
+            -I$(ZC_BASE)/zircapp/include -I$(ZC_BASE)/abi/include \
+            -I$(ZC_BASE)/libc/include -I$(ZC_BASE)/gui/include \
+            $(ZC_APP_INCLUDES) \
             $(USER_CFLAGS) -Wno-error
 ZC_OBJS = zircapp_host.o zircapp_platform.o zircapp_ow_stub.o \
-          zc_zircapp.o zc_windows.o \
-          zc_home.o zc_phone.o zc_sms.o zc_settings.o zc_camera.o \
-          zc_clock.o zc_calculator.o zc_music.o zc_gallery.o zc_browser.o
+          zc_zircapp.o zc_windows.o $(ZC_APP_OBJS)
 
-zircapp: $(PKG_SRC)/zircapp/src/zircapp.c \
-         $(PKG_SRC)/zircapp/src/zircapp_platform.c \
-         $(PKG_SRC)/zircapp/src/zircapp_ow_stub.c \
-         $(ZC_ROOT)/zircapp/zircapp.c $(ZC_ROOT)/gui/windows.c \
-         $(ZC_ROOT)/apps/home.c $(ZC_ROOT)/apps/phone.c \
-         $(ZC_ROOT)/apps/sms.c $(ZC_ROOT)/apps/settings.c \
-         $(ZC_ROOT)/apps/camera.c $(ZC_ROOT)/apps/clock.c \
-         $(ZC_ROOT)/apps/calculator.c $(ZC_ROOT)/apps/music.c \
-         $(ZC_ROOT)/apps/gallery.c $(ZC_ROOT)/apps/browser.c \
-         $(wildcard $(ZC_ROOT)/zircapp/port/*.h) \
-         crt0.o $(LIB_OBJ)
-	$(CC) $(ZC_CFLAGS) -c -o zircapp_host.o $(PKG_SRC)/zircapp/src/zircapp.c
-	$(CC) $(ZC_CFLAGS) -c -o zircapp_platform.o $(PKG_SRC)/zircapp/src/zircapp_platform.c
-	$(CC) $(ZC_CFLAGS) -c -o zircapp_ow_stub.o $(PKG_SRC)/zircapp/src/zircapp_ow_stub.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_zircapp.o $(ZC_ROOT)/zircapp/zircapp.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_windows.o $(ZC_ROOT)/gui/windows.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_home.o $(ZC_ROOT)/apps/home.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_phone.o $(ZC_ROOT)/apps/phone.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_sms.o $(ZC_ROOT)/apps/sms.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_settings.o $(ZC_ROOT)/apps/settings.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_camera.o $(ZC_ROOT)/apps/camera.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_clock.o $(ZC_ROOT)/apps/clock.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_calculator.o $(ZC_ROOT)/apps/calculator.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_music.o $(ZC_ROOT)/apps/music.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_gallery.o $(ZC_ROOT)/apps/gallery.c
-	$(CC) $(ZC_CFLAGS) -c -o zc_browser.o $(ZC_ROOT)/apps/browser.c
+zircapp: $(ZC_OBJS) crt0.o $(LIB_OBJ)
 	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ $(ZC_OBJS) crt0.o $(LIB_OBJ)
+
+zircapp_host.o: $(PKG_SRC)/zircapp/src/zircapp.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+zircapp_platform.o: $(PKG_SRC)/zircapp/src/zircapp_platform.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+zircapp_ow_stub.o: $(PKG_SRC)/zircapp/src/zircapp_ow_stub.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+zc_zircapp.o: $(ZC_BASE)/zircapp/src/zircapp.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+zc_windows.o: $(ZC_BASE)/gui/src/windows.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+
+# pkgs/apps/<name>/src/<name>.c -> zc_<name>.o, one rule per app package.  A
+# pattern rule cannot express this: GNU make does not support '%' twice in a
+# single prerequisite, so the app name is substituted with $(eval) instead.
+define zc-app-rule
+zc_$(1).o: $(ZC_APPS)/$(1)/src/$(1).c $$(wildcard $$(ZC_PORT)/*.h)
+	$$(CC) $$(ZC_CFLAGS) -c -o zc_$(1).o $(ZC_APPS)/$(1)/src/$(1).c
+endef
+$(foreach a,$(ZC_APP_NAMES),$(eval $(call zc-app-rule,$(a))))
 
 define android-prog-rule
 $(1): $$(call pkg_main,$(1)) crt0.o $$(LIB_OBJ) $$(LIB_ANDROID)

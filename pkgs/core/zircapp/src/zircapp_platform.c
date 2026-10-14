@@ -32,6 +32,17 @@ int usleep(unsigned int usec) {
     return 0;
 }
 
+/* The Zircon apps call the POSIX getpid()/getppid(); CodeOS's freestanding
+ * unistd.h only exposes sys_getpid()/sys_getppid().  Declared in the
+ * port's shim/unistd.h so the unmodified app sources compile. */
+int getpid(void) {
+    return (int)zc_syscall1(SYSCALL_GETPID, 0);
+}
+
+int getppid(void) {
+    return (int)zc_syscall1(SYSCALL_GETPPID, 0);
+}
+
 /* Query the shared Zircon IPC ring: physical address, or -1 when the
  * kernel did not create one (the normal case for a CodeOS process). */
 long zs_ipc_query(void) {
