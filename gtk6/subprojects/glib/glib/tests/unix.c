@@ -2,7 +2,7 @@
  * Copyright (C) 2011 Red Hat, Inc.
  * Copyright 2023 Collabora Ltd.
  *
- * SPDX-License-Identifier: LicenseRef-old-glib-tests
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * This work is provided "as is"; redistribution and modification
  * in whole or in part, in any medium, physical or electronic is
@@ -166,9 +166,10 @@ test_closefrom (void)
         {
           if (fcntl (fds[i], F_GETFD) != -1 || errno != EBADF)
             {
+              int exit_code = 100 + fds[i];
               async_signal_safe_message ("fd should have been closed");
               g_free (fds);
-              _exit (100 + fds[i]);
+              _exit (exit_code);
             }
         }
 
