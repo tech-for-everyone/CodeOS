@@ -177,4 +177,9 @@ G_END_DECLS
  * and the include is at the very end so GdkRectangle and glib are available. */
 #include <gdk/gdkpaint.h>
 
+/* GTK6: the text types are GDK's own GdkText* (gdk/gdktext.h), vendored from
+ * the old text library and renamed.  Same reasoning and placement as
+ * GdkRegion and GdkPainter above. */
+#include <gdk/gdktext.h>
+
 

@@ -11,8 +11,8 @@ void            gsk_text_node_serialize_glyphs          (GskRenderNode          
 GdkPaintHintStyle
                 gsk_text_node_get_font_hint_style       (const GskRenderNode         *self) G_GNUC_PURE;
 
-GskRenderNode * gsk_text_node_new2                      (PangoFont              *font,
-                                                         PangoGlyphString       *glyphs,
+GskRenderNode * gsk_text_node_new2                      (GdkTextFont              *font,
+                                                         GdkTextGlyphString       *glyphs,
                                                          const GdkColor         *color,
                                                          const graphene_point_t *offset);
 const GdkColor *gsk_text_node_get_gdk_color             (const GskRenderNode    *node);

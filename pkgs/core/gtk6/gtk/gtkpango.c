@@ -28,51 +28,51 @@
 #include "gtkbuilderprivate.h"
 
 static gboolean
-attr_list_merge_filter (PangoAttribute *attribute,
+attr_list_merge_filter (GdkTextAttribute *attribute,
                         gpointer        list)
 {
-  pango_attr_list_change (list, pango_attribute_copy (attribute));
+  gdk_text_attr_list_change (list, gdk_text_attribute_copy (attribute));
   return FALSE;
 }
 
 /*
  * _gtk_pango_attr_list_merge:
- * @into: (nullable): a `PangoAttrList` where attributes are merged
- * @from: (nullable): a `PangoAttrList` with the attributes to merge
+ * @into: (nullable): a `GdkTextAttrList` where attributes are merged
+ * @from: (nullable): a `GdkTextAttrList` with the attributes to merge
  *
  * Merges attributes from @from into @into.
  *
  * Returns: the merged list.
  */
-PangoAttrList *
-_gtk_pango_attr_list_merge (PangoAttrList *into,
-                            PangoAttrList *from)
+GdkTextAttrList *
+_gtk_pango_attr_list_merge (GdkTextAttrList *into,
+                            GdkTextAttrList *from)
 {
   if (from)
     {
       if (into)
-        pango_attr_list_filter (from, attr_list_merge_filter, into);
+        gdk_text_attr_list_filter (from, attr_list_merge_filter, into);
       else
-        return pango_attr_list_ref (from);
+        return gdk_text_attr_list_ref (from);
     }
 
   return into;
 }
 
-static PangoAttribute *
+static GdkTextAttribute *
 attribute_from_text (GtkBuilder  *builder,
                      const char  *name,
                      const char  *value,
                      GError     **error)
 {
-  PangoAttribute *attribute = NULL;
-  PangoAttrType type;
-  PangoLanguage *language;
-  PangoFontDescription *font_desc;
+  GdkTextAttribute *attribute = NULL;
+  GdkTextAttrType type;
+  GdkTextLanguage *language;
+  GdkTextFontDescription *font_desc;
   GdkRGBA *color;
   GValue val = G_VALUE_INIT;
 
-  if (!gtk_builder_value_from_string_type (builder, PANGO_TYPE_ATTR_TYPE, name, &val, error))
+  if (!gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_ATTR_TYPE, name, &val, error))
     return NULL;
 
   type = g_value_get_enum (&val);
@@ -80,224 +80,224 @@ attribute_from_text (GtkBuilder  *builder,
 
   switch (type)
     {
-      /* PangoAttrLanguage */
-    case PANGO_ATTR_LANGUAGE:
-      if ((language = pango_language_from_string (value)))
+      /* GdkTextAttrLanguage */
+    case GDK_TEXT_ATTR_LANGUAGE:
+      if ((language = gdk_text_language_from_string (value)))
         {
-          attribute = pango_attr_language_new (language);
+          attribute = gdk_text_attr_language_new (language);
           g_value_init (&val, G_TYPE_INT);
         }
       break;
-      /* PangoAttrInt */
-    case PANGO_ATTR_STYLE:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_STYLE, value, &val, error))
-        attribute = pango_attr_style_new (g_value_get_enum (&val));
+      /* GdkTextAttrInt */
+    case GDK_TEXT_ATTR_STYLE:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_STYLE, value, &val, error))
+        attribute = gdk_text_attr_style_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_WEIGHT:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_WEIGHT, value, &val, error))
-        attribute = pango_attr_weight_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_WEIGHT:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_WEIGHT, value, &val, error))
+        attribute = gdk_text_attr_weight_new (g_value_get_enum (&val));
       else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
         {
           g_clear_error (error);
-          attribute = pango_attr_weight_new (g_value_get_int (&val));
+          attribute = gdk_text_attr_weight_new (g_value_get_int (&val));
         }
       break;
-    case PANGO_ATTR_VARIANT:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_VARIANT, value, &val, error))
-        attribute = pango_attr_variant_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_VARIANT:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_VARIANT, value, &val, error))
+        attribute = gdk_text_attr_variant_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_STRETCH:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_STRETCH, value, &val, error))
-        attribute = pango_attr_stretch_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_STRETCH:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_STRETCH, value, &val, error))
+        attribute = gdk_text_attr_stretch_new (g_value_get_enum (&val));
       break;
-#if PANGO_VERSION_CHECK (1, 58, 0)
-    case PANGO_ATTR_WIDTH:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_WIDTH, value, &val, error))
-        attribute = pango_attr_width_new (g_value_get_enum (&val));
+#if GDK_TEXT_VERSION_CHECK (1, 58, 0)
+    case GDK_TEXT_ATTR_WIDTH:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_WIDTH, value, &val, error))
+        attribute = gdk_text_attr_width_new (g_value_get_enum (&val));
       else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
         {
           g_clear_error (error);
-          attribute = pango_attr_width_new (g_value_get_int (&val));
+          attribute = gdk_text_attr_width_new (g_value_get_int (&val));
         }
       break;
 #endif
-    case PANGO_ATTR_UNDERLINE:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_UNDERLINE, value, &val, NULL))
-        attribute = pango_attr_underline_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_UNDERLINE:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_UNDERLINE, value, &val, NULL))
+        attribute = gdk_text_attr_underline_new (g_value_get_enum (&val));
       else
         {
           /* XXX: allow boolean for backwards compat, so ignore error */
           /* Deprecate this somehow */
           g_value_unset (&val);
           if (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, value, &val, error))
-            attribute = pango_attr_underline_new (g_value_get_boolean (&val));
+            attribute = gdk_text_attr_underline_new (g_value_get_boolean (&val));
         }
       break;
-    case PANGO_ATTR_STRIKETHROUGH:
+    case GDK_TEXT_ATTR_STRIKETHROUGH:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, value, &val, error))
-        attribute = pango_attr_strikethrough_new (g_value_get_boolean (&val));
+        attribute = gdk_text_attr_strikethrough_new (g_value_get_boolean (&val));
       break;
-    case PANGO_ATTR_GRAVITY:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_GRAVITY, value, &val, error))
-        attribute = pango_attr_gravity_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_GRAVITY:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_GRAVITY, value, &val, error))
+        attribute = gdk_text_attr_gravity_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_GRAVITY_HINT:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_GRAVITY_HINT, value, &val, error))
-        attribute = pango_attr_gravity_hint_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_GRAVITY_HINT:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_GRAVITY_HINT, value, &val, error))
+        attribute = gdk_text_attr_gravity_hint_new (g_value_get_enum (&val));
       break;
-      /* PangoAttrString */
-    case PANGO_ATTR_FAMILY:
-      attribute = pango_attr_family_new (value);
+      /* GdkTextAttrString */
+    case GDK_TEXT_ATTR_FAMILY:
+      attribute = gdk_text_attr_family_new (value);
       g_value_init (&val, G_TYPE_INT);
       break;
 
-      /* PangoAttrSize */
-    case PANGO_ATTR_SIZE:
+      /* GdkTextAttrSize */
+    case GDK_TEXT_ATTR_SIZE:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_size_new (g_value_get_int (&val));
+        attribute = gdk_text_attr_size_new (g_value_get_int (&val));
       break;
-    case PANGO_ATTR_ABSOLUTE_SIZE:
+    case GDK_TEXT_ATTR_ABSOLUTE_SIZE:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_size_new_absolute (g_value_get_int (&val));
+        attribute = gdk_text_attr_size_new_absolute (g_value_get_int (&val));
       break;
 
-      /* PangoAttrFontDesc */
-    case PANGO_ATTR_FONT_DESC:
-      if ((font_desc = pango_font_description_from_string (value)))
+      /* GdkTextAttrFontDesc */
+    case GDK_TEXT_ATTR_FONT_DESC:
+      if ((font_desc = gdk_text_font_description_from_string (value)))
         {
-          attribute = pango_attr_font_desc_new (font_desc);
-          pango_font_description_free (font_desc);
+          attribute = gdk_text_attr_font_desc_new (font_desc);
+          gdk_text_font_description_free (font_desc);
           g_value_init (&val, G_TYPE_INT);
         }
       break;
-      /* PangoAttrColor */
-    case PANGO_ATTR_FOREGROUND:
+      /* GdkTextAttrColor */
+    case GDK_TEXT_ATTR_FOREGROUND:
       if (gtk_builder_value_from_string_type (builder, GDK_TYPE_RGBA, value, &val, error))
         {
           color = g_value_get_boxed (&val);
-          attribute = pango_attr_foreground_new (color->red * 65535,
+          attribute = gdk_text_attr_foreground_new (color->red * 65535,
                                                  color->green * 65535,
                                                  color->blue * 65535);
         }
       break;
-    case PANGO_ATTR_BACKGROUND:
+    case GDK_TEXT_ATTR_BACKGROUND:
       if (gtk_builder_value_from_string_type (builder, GDK_TYPE_RGBA, value, &val, error))
         {
           color = g_value_get_boxed (&val);
-          attribute = pango_attr_background_new (color->red * 65535,
+          attribute = gdk_text_attr_background_new (color->red * 65535,
                                                  color->green * 65535,
                                                  color->blue * 65535);
         }
       break;
-    case PANGO_ATTR_UNDERLINE_COLOR:
+    case GDK_TEXT_ATTR_UNDERLINE_COLOR:
       if (gtk_builder_value_from_string_type (builder, GDK_TYPE_RGBA, value, &val, error))
         {
           color = g_value_get_boxed (&val);
-          attribute = pango_attr_underline_color_new (color->red * 65535,
+          attribute = gdk_text_attr_underline_color_new (color->red * 65535,
                                                       color->green * 65535,
                                                       color->blue * 65535);
         }
       break;
-    case PANGO_ATTR_STRIKETHROUGH_COLOR:
+    case GDK_TEXT_ATTR_STRIKETHROUGH_COLOR:
       if (gtk_builder_value_from_string_type (builder, GDK_TYPE_RGBA, value, &val, error))
         {
           color = g_value_get_boxed (&val);
-          attribute = pango_attr_strikethrough_color_new (color->red * 65535,
+          attribute = gdk_text_attr_strikethrough_color_new (color->red * 65535,
                                                           color->green * 65535,
                                                           color->blue * 65535);
         }
       break;
-      /* PangoAttrShape */
-    case PANGO_ATTR_SHAPE:
+      /* GdkTextAttrShape */
+    case GDK_TEXT_ATTR_SHAPE:
       /* Unsupported for now */
       break;
-      /* PangoAttrFloat */
-    case PANGO_ATTR_SCALE:
+      /* GdkTextAttrFloat */
+    case GDK_TEXT_ATTR_SCALE:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_DOUBLE, value, &val, error))
-        attribute = pango_attr_scale_new (g_value_get_double (&val));
+        attribute = gdk_text_attr_scale_new (g_value_get_double (&val));
       break;
-    case PANGO_ATTR_LETTER_SPACING:
+    case GDK_TEXT_ATTR_LETTER_SPACING:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_letter_spacing_new (g_value_get_int (&val));
+        attribute = gdk_text_attr_letter_spacing_new (g_value_get_int (&val));
       break;
-    case PANGO_ATTR_RISE:
+    case GDK_TEXT_ATTR_RISE:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_rise_new (g_value_get_int (&val));
+        attribute = gdk_text_attr_rise_new (g_value_get_int (&val));
       break;
-    case PANGO_ATTR_FALLBACK:
+    case GDK_TEXT_ATTR_FALLBACK:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, value, &val, error))
-        attribute = pango_attr_fallback_new (g_value_get_boolean (&val));
+        attribute = gdk_text_attr_fallback_new (g_value_get_boolean (&val));
       break;
-    case PANGO_ATTR_FONT_FEATURES:
-      attribute = pango_attr_font_features_new (value);
+    case GDK_TEXT_ATTR_FONT_FEATURES:
+      attribute = gdk_text_attr_font_features_new (value);
       break;
-    case PANGO_ATTR_FOREGROUND_ALPHA:
+    case GDK_TEXT_ATTR_FOREGROUND_ALPHA:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_foreground_alpha_new ((guint16)g_value_get_int (&val));
+        attribute = gdk_text_attr_foreground_alpha_new ((guint16)g_value_get_int (&val));
       break;
-    case PANGO_ATTR_BACKGROUND_ALPHA:
+    case GDK_TEXT_ATTR_BACKGROUND_ALPHA:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_background_alpha_new ((guint16)g_value_get_int (&val));
+        attribute = gdk_text_attr_background_alpha_new ((guint16)g_value_get_int (&val));
       break;
-    case PANGO_ATTR_ALLOW_BREAKS:
+    case GDK_TEXT_ATTR_ALLOW_BREAKS:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, value, &val, error))
-        attribute = pango_attr_allow_breaks_new (g_value_get_boolean (&val));
+        attribute = gdk_text_attr_allow_breaks_new (g_value_get_boolean (&val));
       break;
-    case PANGO_ATTR_SHOW:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_SHOW_FLAGS, value, &val, error))
-        attribute = pango_attr_show_new (g_value_get_flags (&val));
+    case GDK_TEXT_ATTR_SHOW:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_SHOW_FLAGS, value, &val, error))
+        attribute = gdk_text_attr_show_new (g_value_get_flags (&val));
       break;
-    case PANGO_ATTR_INSERT_HYPHENS:
+    case GDK_TEXT_ATTR_INSERT_HYPHENS:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_BOOLEAN, value, &val, error))
-        attribute = pango_attr_insert_hyphens_new (g_value_get_boolean (&val));
+        attribute = gdk_text_attr_insert_hyphens_new (g_value_get_boolean (&val));
       break;
-    case PANGO_ATTR_OVERLINE:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_OVERLINE, value, &val, NULL))
-        attribute = pango_attr_overline_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_OVERLINE:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_OVERLINE, value, &val, NULL))
+        attribute = gdk_text_attr_overline_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_OVERLINE_COLOR:
+    case GDK_TEXT_ATTR_OVERLINE_COLOR:
       if (gtk_builder_value_from_string_type (builder, GDK_TYPE_RGBA, value, &val, error))
         {
           color = g_value_get_boxed (&val);
-          attribute = pango_attr_overline_color_new (color->red * 65535,
+          attribute = gdk_text_attr_overline_color_new (color->red * 65535,
                                                      color->green * 65535,
                                                      color->blue * 65535);
         }
       break;
-    case PANGO_ATTR_LINE_HEIGHT:
+    case GDK_TEXT_ATTR_LINE_HEIGHT:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_DOUBLE, value, &val, error))
-        attribute = pango_attr_line_height_new (g_value_get_double (&val));
+        attribute = gdk_text_attr_line_height_new (g_value_get_double (&val));
       break;
-    case PANGO_ATTR_ABSOLUTE_LINE_HEIGHT:
+    case GDK_TEXT_ATTR_ABSOLUTE_LINE_HEIGHT:
       if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, error))
-        attribute = pango_attr_line_height_new_absolute (g_value_get_int (&val) * PANGO_SCALE);
+        attribute = gdk_text_attr_line_height_new_absolute (g_value_get_int (&val) * GDK_TEXT_SCALE);
       break;
-    case PANGO_ATTR_TEXT_TRANSFORM:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_TEXT_TRANSFORM, value, &val, error))
-        attribute = pango_attr_text_transform_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_TEXT_TRANSFORM:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_TEXT_TRANSFORM, value, &val, error))
+        attribute = gdk_text_attr_text_transform_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_WORD:
-      attribute = pango_attr_word_new ();
+    case GDK_TEXT_ATTR_WORD:
+      attribute = gdk_text_attr_word_new ();
       break;
-    case PANGO_ATTR_SENTENCE:
-      attribute = pango_attr_sentence_new ();
+    case GDK_TEXT_ATTR_SENTENCE:
+      attribute = gdk_text_attr_sentence_new ();
       break;
-    case PANGO_ATTR_BASELINE_SHIFT:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_BASELINE_SHIFT, value, &val, NULL))
-        attribute = pango_attr_baseline_shift_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_BASELINE_SHIFT:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_BASELINE_SHIFT, value, &val, NULL))
+        attribute = gdk_text_attr_baseline_shift_new (g_value_get_enum (&val));
       else if (gtk_builder_value_from_string_type (builder, G_TYPE_INT, value, &val, NULL))
-        attribute = pango_attr_baseline_shift_new (g_value_get_enum (&val));
+        attribute = gdk_text_attr_baseline_shift_new (g_value_get_enum (&val));
       else
         g_set_error (error,
                      GTK_BUILDER_ERROR,
                      GTK_BUILDER_ERROR_INVALID_VALUE,
                      "Could not parse '%s' as baseline shift value", value);
       break;
-    case PANGO_ATTR_FONT_SCALE:
-      if (gtk_builder_value_from_string_type (builder, PANGO_TYPE_FONT_SCALE, value, &val, error))
-        attribute = pango_attr_font_scale_new (g_value_get_enum (&val));
+    case GDK_TEXT_ATTR_FONT_SCALE:
+      if (gtk_builder_value_from_string_type (builder, GDK_TEXT_TYPE_FONT_SCALE, value, &val, error))
+        attribute = gdk_text_attr_font_scale_new (g_value_get_enum (&val));
       break;
-    case PANGO_ATTR_INVALID:
+    case GDK_TEXT_ATTR_INVALID:
     default:
       break;
     }
@@ -308,18 +308,18 @@ attribute_from_text (GtkBuilder  *builder,
 }
 
 void
-gtk_pango_attribute_start_element (GtkBuildableParseContext  *context,
+gtk_text_attribute_start_element (GtkBuildableParseContext  *context,
                                    const char                *element_name,
                                    const char               **names,
                                    const char               **values,
                                    gpointer                   user_data,
                                    GError                   **error)
 {
-  GtkPangoAttributeParserData *data = user_data;
+  GtkTextAttributeParserData *data = user_data;
 
   if (strcmp (element_name, "attribute") == 0)
     {
-      PangoAttribute *attr = NULL;
+      GdkTextAttribute *attr = NULL;
       const char *name = NULL;
       const char *value = NULL;
       const char *start = NULL;
@@ -375,9 +375,9 @@ gtk_pango_attribute_start_element (GtkBuildableParseContext  *context,
       attr->end_index = end_val;
 
       if (!data->attrs)
-        data->attrs = pango_attr_list_new ();
+        data->attrs = gdk_text_attr_list_new ();
 
-      pango_attr_list_insert (data->attrs, attr);
+      gdk_text_attr_list_insert (data->attrs, attr);
     }
   else if (strcmp (element_name, "attributes") == 0)
     {
@@ -398,15 +398,15 @@ gtk_pango_attribute_start_element (GtkBuildableParseContext  *context,
 }
 
 const char *
-pango_style_to_string (PangoStyle style)
+gdk_text_style_to_string (GdkTextStyle style)
 {
   switch (style)
     {
-    case PANGO_STYLE_NORMAL:
+    case GDK_TEXT_STYLE_NORMAL:
       return "normal";
-    case PANGO_STYLE_OBLIQUE:
+    case GDK_TEXT_STYLE_OBLIQUE:
       return "oblique";
-    case PANGO_STYLE_ITALIC:
+    case GDK_TEXT_STYLE_ITALIC:
       return "italic";
     default:
       g_assert_not_reached ();
@@ -414,23 +414,23 @@ pango_style_to_string (PangoStyle style)
 }
 
 const char *
-pango_variant_to_string (PangoVariant variant)
+gdk_text_variant_to_string (GdkTextVariant variant)
 {
   switch (variant)
     {
-    case PANGO_VARIANT_NORMAL:
+    case GDK_TEXT_VARIANT_NORMAL:
       return "normal";
-    case PANGO_VARIANT_SMALL_CAPS:
+    case GDK_TEXT_VARIANT_SMALL_CAPS:
       return "small_caps";
-    case PANGO_VARIANT_ALL_SMALL_CAPS:
+    case GDK_TEXT_VARIANT_ALL_SMALL_CAPS:
       return "all_small_caps";
-    case PANGO_VARIANT_PETITE_CAPS:
+    case GDK_TEXT_VARIANT_PETITE_CAPS:
       return "petite_caps";
-    case PANGO_VARIANT_ALL_PETITE_CAPS:
+    case GDK_TEXT_VARIANT_ALL_PETITE_CAPS:
       return "all_petite_caps";
-    case PANGO_VARIANT_UNICASE:
+    case GDK_TEXT_VARIANT_UNICASE:
       return "unicase";
-    case PANGO_VARIANT_TITLE_CAPS:
+    case GDK_TEXT_VARIANT_TITLE_CAPS:
       return "title_caps";
     default:
       g_assert_not_reached ();
@@ -438,27 +438,27 @@ pango_variant_to_string (PangoVariant variant)
 }
 
 const char *
-pango_stretch_to_string (PangoStretch stretch)
+gdk_text_stretch_to_string (GdkTextStretch stretch)
 {
   switch (stretch)
     {
-    case PANGO_STRETCH_ULTRA_CONDENSED:
+    case GDK_TEXT_STRETCH_ULTRA_CONDENSED:
       return "ultra_condensed";
-    case PANGO_STRETCH_EXTRA_CONDENSED:
+    case GDK_TEXT_STRETCH_EXTRA_CONDENSED:
       return "extra_condensed";
-    case PANGO_STRETCH_CONDENSED:
+    case GDK_TEXT_STRETCH_CONDENSED:
       return "condensed";
-    case PANGO_STRETCH_SEMI_CONDENSED:
+    case GDK_TEXT_STRETCH_SEMI_CONDENSED:
       return "semi_condensed";
-    case PANGO_STRETCH_NORMAL:
+    case GDK_TEXT_STRETCH_NORMAL:
       return "normal";
-    case PANGO_STRETCH_SEMI_EXPANDED:
+    case GDK_TEXT_STRETCH_SEMI_EXPANDED:
       return "semi_expanded";
-    case PANGO_STRETCH_EXPANDED:
+    case GDK_TEXT_STRETCH_EXPANDED:
       return "expanded";
-    case PANGO_STRETCH_EXTRA_EXPANDED:
+    case GDK_TEXT_STRETCH_EXTRA_EXPANDED:
       return "extra_expanded";
-    case PANGO_STRETCH_ULTRA_EXPANDED:
+    case GDK_TEXT_STRETCH_ULTRA_EXPANDED:
       return "ultra_expanded";
     default:
       g_assert_not_reached ();
@@ -466,22 +466,22 @@ pango_stretch_to_string (PangoStretch stretch)
 }
 
 const char *
-pango_underline_to_string (PangoUnderline underline)
+gdk_text_underline_to_string (GdkTextUnderline underline)
 {
   switch (underline)
     {
-    case PANGO_UNDERLINE_NONE:
+    case GDK_TEXT_UNDERLINE_NONE:
       return "none";
-    case PANGO_UNDERLINE_SINGLE:
-    case PANGO_UNDERLINE_SINGLE_LINE:
+    case GDK_TEXT_UNDERLINE_SINGLE:
+    case GDK_TEXT_UNDERLINE_SINGLE_LINE:
       return "single";
-    case PANGO_UNDERLINE_DOUBLE:
-    case PANGO_UNDERLINE_DOUBLE_LINE:
+    case GDK_TEXT_UNDERLINE_DOUBLE:
+    case GDK_TEXT_UNDERLINE_DOUBLE_LINE:
       return "double";
-    case PANGO_UNDERLINE_LOW:
+    case GDK_TEXT_UNDERLINE_LOW:
       return "low";
-    case PANGO_UNDERLINE_ERROR:
-    case PANGO_UNDERLINE_ERROR_LINE:
+    case GDK_TEXT_UNDERLINE_ERROR:
+    case GDK_TEXT_UNDERLINE_ERROR_LINE:
       return "error";
     default:
       g_assert_not_reached ();
@@ -489,13 +489,13 @@ pango_underline_to_string (PangoUnderline underline)
 }
 
 const char *
-pango_overline_to_string (PangoOverline overline)
+gdk_text_overline_to_string (GdkTextOverline overline)
 {
   switch (overline)
     {
-    case PANGO_OVERLINE_NONE:
+    case GDK_TEXT_OVERLINE_NONE:
       return "none";
-    case PANGO_OVERLINE_SINGLE:
+    case GDK_TEXT_OVERLINE_SINGLE:
       return "single";
     default:
       g_assert_not_reached ();
@@ -503,18 +503,18 @@ pango_overline_to_string (PangoOverline overline)
 }
 
 const char *
-pango_wrap_mode_to_string (PangoWrapMode mode)
+gdk_text_wrap_mode_to_string (GdkTextWrapMode mode)
 {
   /* Keep these in sync with gtk_wrap_mode_to_string() */
   switch (mode)
     {
-    case PANGO_WRAP_WORD:
+    case GDK_TEXT_WRAP_WORD:
       return "word";
-    case PANGO_WRAP_CHAR:
+    case GDK_TEXT_WRAP_CHAR:
       return "char";
-    case PANGO_WRAP_WORD_CHAR:
+    case GDK_TEXT_WRAP_WORD_CHAR:
       return "word-char";
-    case PANGO_WRAP_NONE:
+    case GDK_TEXT_WRAP_NONE:
       return "none";
     default:
       g_assert_not_reached ();
@@ -522,15 +522,15 @@ pango_wrap_mode_to_string (PangoWrapMode mode)
 }
 
 const char *
-pango_align_to_string (PangoAlignment align)
+gdk_text_align_to_string (GdkTextAlignment align)
 {
   switch (align)
     {
-    case PANGO_ALIGN_LEFT:
+    case GDK_TEXT_ALIGN_LEFT:
       return "left";
-    case PANGO_ALIGN_CENTER:
+    case GDK_TEXT_ALIGN_CENTER:
       return "center";
-    case PANGO_ALIGN_RIGHT:
+    case GDK_TEXT_ALIGN_RIGHT:
       return "right";
     default:
       g_assert_not_reached ();
@@ -538,7 +538,7 @@ pango_align_to_string (PangoAlignment align)
 }
 
 static void
-accumulate_font_attributes (PangoFontDescription *font,
+accumulate_font_attributes (GdkTextFontDescription *font,
                             GPtrArray *names,
                             GPtrArray *values)
 {
@@ -546,28 +546,28 @@ accumulate_font_attributes (PangoFontDescription *font,
   char size[60];
 
   g_ptr_array_add (names, g_strdup ("style"));
-  g_ptr_array_add (values, g_strdup (pango_style_to_string (pango_font_description_get_style (font))));
+  g_ptr_array_add (values, g_strdup (gdk_text_style_to_string (gdk_text_font_description_get_style (font))));
 
   g_ptr_array_add (names, g_strdup ("variant"));
-  g_ptr_array_add (values, g_strdup (pango_variant_to_string (pango_font_description_get_variant (font))));
+  g_ptr_array_add (values, g_strdup (gdk_text_variant_to_string (gdk_text_font_description_get_variant (font))));
 
   g_ptr_array_add (names, g_strdup ("stretch"));
-  g_ptr_array_add (values, g_strdup (pango_stretch_to_string (pango_font_description_get_stretch (font))));
+  g_ptr_array_add (values, g_strdup (gdk_text_stretch_to_string (gdk_text_font_description_get_stretch (font))));
 
   g_ptr_array_add (names, g_strdup ("family-name"));
-  g_ptr_array_add (values, g_strdup (pango_font_description_get_family (font)));
+  g_ptr_array_add (values, g_strdup (gdk_text_font_description_get_family (font)));
 
-  g_snprintf (weight, sizeof weight, "%d", pango_font_description_get_weight (font));
+  g_snprintf (weight, sizeof weight, "%d", gdk_text_font_description_get_weight (font));
   g_ptr_array_add (names, g_strdup ("weight"));
   g_ptr_array_add (values, g_strdup (weight));
 
-  g_snprintf (size, sizeof size, "%i", pango_font_description_get_size (font) / PANGO_SCALE);
+  g_snprintf (size, sizeof size, "%i", gdk_text_font_description_get_size (font) / GDK_TEXT_SCALE);
   g_ptr_array_add (names, g_strdup ("size"));
   g_ptr_array_add (values, g_strdup (size));
 }
 
 void
-gtk_pango_get_font_attributes (PangoFontDescription   *font,
+gtk_text_get_font_attributes (GdkTextFontDescription   *font,
                                char                 ***attribute_names,
                                char                 ***attribute_values)
 {
@@ -584,53 +584,53 @@ gtk_pango_get_font_attributes (PangoFontDescription   *font,
 }
 
 /*
- * gtk_pango_get_default_attributes:
- * @layout: the `PangoLayout` from which to get attributes
+ * gtk_text_get_default_attributes:
+ * @layout: the `GdkTextLayout` from which to get attributes
  * @attribute_names: (out) (array zero-terminated=1) (transfer full): the attribute names
  * @attribute_values: (out) (array zero-terminated=1) (transfer full): the attribute values
  *
  * Returns the default text attributes from @layout,
- * after translating them from Pango attributes to atspi
+ * after translating them from GdkText attributes to atspi
  * attributes.
  *
  * This is a convenience function that can be used to implement
- * support for the `Text` interface in widgets using Pango
+ * support for the `Text` interface in widgets using GdkText
  * layouts.
  */
 void
-gtk_pango_get_default_attributes (PangoLayout   *layout,
+gtk_text_get_default_attributes (GdkTextLayout   *layout,
                                   char        ***attribute_names,
                                   char        ***attribute_values)
 {
-  PangoContext *context;
+  GdkTextContext *context;
   GPtrArray *names = g_ptr_array_new_null_terminated (16, g_free, TRUE);
   GPtrArray *values = g_ptr_array_new_null_terminated (16, g_free, TRUE);
 
-  context = pango_layout_get_context (layout);
+  context = gdk_text_layout_get_context (layout);
   if (context)
     {
-      PangoLanguage *language;
-      PangoFontDescription *font;
+      GdkTextLanguage *language;
+      GdkTextFontDescription *font;
 
-      language = pango_context_get_language (context);
+      language = gdk_text_context_get_language (context);
       if (language)
         {
           g_ptr_array_add (names, g_strdup ("language"));
-          g_ptr_array_add (values, g_strdup (pango_language_to_string (language)));
+          g_ptr_array_add (values, g_strdup (gdk_text_language_to_string (language)));
         }
 
-      font = pango_context_get_font_description (context);
+      font = gdk_text_context_get_font_description (context);
       if (font)
         accumulate_font_attributes (font, names, values);
     }
 
   g_ptr_array_add (names, g_strdup ("justification"));
   g_ptr_array_add (values,
-                   g_strdup (pango_align_to_string (pango_layout_get_alignment (layout))));
+                   g_strdup (gdk_text_align_to_string (gdk_text_layout_get_alignment (layout))));
 
   g_ptr_array_add (names, g_strdup ("wrap-mode"));
   g_ptr_array_add (values,
-                   g_strdup (pango_wrap_mode_to_string (pango_layout_get_wrap (layout))));
+                   g_strdup (gdk_text_wrap_mode_to_string (gdk_text_layout_get_wrap (layout))));
 
   g_ptr_array_add (names, g_strdup ("strikethrough"));
   g_ptr_array_add (values, g_strdup ("false"));
@@ -679,8 +679,8 @@ gtk_pango_get_default_attributes (PangoLayout   *layout,
 }
 
 /*
- * gtk_pango_get_run_attributes:
- * @layout: the `PangoLayout` to get the attributes from
+ * gtk_text_get_run_attributes:
+ * @layout: the `GdkTextLayout` to get the attributes from
  * @offset: the offset at which the attributes are wanted
  * @attribute_names: (array zero-terminated=1) (out) (transfer full): the
  *   attribute names
@@ -696,38 +696,38 @@ gtk_pango_get_default_attributes (PangoLayout   *layout,
  * returns the starting and ending offsets for it.
  *
  * The attributes for the run are added to @attributes, after
- * translating them from Pango attributes to atspi attributes.
+ * translating them from GdkText attributes to atspi attributes.
  *
  * This is a convenience function that can be used to implement
- * support for the #AtkText interface in widgets using Pango
+ * support for the #AtkText interface in widgets using GdkText
  * layouts.
  */
 void
-gtk_pango_get_run_attributes (PangoLayout     *layout,
+gtk_text_get_run_attributes (GdkTextLayout     *layout,
                               unsigned int     offset,
                               char          ***attribute_names,
                               char          ***attribute_values,
                               unsigned int    *start_offset,
                               unsigned int    *end_offset)
 {
-  PangoAttrIterator *iter;
-  PangoAttrList *attr;
-  PangoAttrString *pango_string;
-  PangoAttrInt *pango_int;
-  PangoAttrColor *pango_color;
-  PangoAttrLanguage *pango_lang;
-  PangoAttrFloat *pango_float;
+  GdkTextAttrIterator *iter;
+  GdkTextAttrList *attr;
+  GdkTextAttrString *gdk_text_string;
+  GdkTextAttrInt *gdk_text_int;
+  GdkTextAttrColor *gdk_text_color;
+  GdkTextAttrLanguage *gdk_text_lang;
+  GdkTextAttrFloat *gdk_text_float;
   int index, start_index, end_index;
   gboolean is_next;
   glong len;
   const char *text;
   GPtrArray *names, *values;
 
-  text = pango_layout_get_text (layout);
+  text = gdk_text_layout_get_text (layout);
   len = g_utf8_strlen (text, -1);
 
-  /* Grab the attributes of the PangoLayout, if any */
-  attr = pango_layout_get_attributes (layout);
+  /* Grab the attributes of the GdkTextLayout, if any */
+  attr = gdk_text_layout_get_attributes (layout);
 
   if (attr == NULL)
     {
@@ -738,7 +738,7 @@ gtk_pango_get_run_attributes (PangoLayout     *layout,
       return;
     }
 
-  iter = pango_attr_list_get_iterator (attr);
+  iter = gdk_text_attr_list_get_iterator (attr);
   /* Get invariant range offsets */
   /* If offset out of range, set offset in range */
   if (offset > len)
@@ -750,7 +750,7 @@ gtk_pango_get_run_attributes (PangoLayout     *layout,
   values = g_ptr_array_new_null_terminated (16, g_free, TRUE);
 
   index = g_utf8_offset_to_pointer (text, offset) - text;
-  pango_attr_iterator_range (iter, &start_index, &end_index);
+  gdk_text_attr_iterator_range (iter, &start_index, &end_index);
   is_next = TRUE;
   while (is_next)
     {
@@ -763,116 +763,116 @@ gtk_pango_get_run_attributes (PangoLayout     *layout,
           *end_offset = g_utf8_pointer_to_offset (text, text + end_index);
           break;
         }
-      is_next = pango_attr_iterator_next (iter);
-      pango_attr_iterator_range (iter, &start_index, &end_index);
+      is_next = gdk_text_attr_iterator_next (iter);
+      gdk_text_attr_iterator_range (iter, &start_index, &end_index);
     }
 
   /* Get attributes */
-  pango_string = (PangoAttrString *) pango_attr_iterator_get (iter, PANGO_ATTR_FAMILY);
-  if (pango_string != NULL)
+  gdk_text_string = (GdkTextAttrString *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_FAMILY);
+  if (gdk_text_string != NULL)
     {
       g_ptr_array_add (names, g_strdup ("family-name"));
-      g_ptr_array_add (values, g_strdup_printf ("%s", pango_string->value));
+      g_ptr_array_add (values, g_strdup_printf ("%s", gdk_text_string->value));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_STYLE);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_STYLE);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("style"));
-      g_ptr_array_add (values, g_strdup (pango_style_to_string (pango_int->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_style_to_string (gdk_text_int->value)));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_WEIGHT);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_WEIGHT);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("weight"));
-      g_ptr_array_add (values, g_strdup_printf ("%i", pango_int->value));
+      g_ptr_array_add (values, g_strdup_printf ("%i", gdk_text_int->value));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_VARIANT);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_VARIANT);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("variant"));
-      g_ptr_array_add (values, g_strdup (pango_variant_to_string (pango_int->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_variant_to_string (gdk_text_int->value)));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_STRETCH);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_STRETCH);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("stretch"));
-      g_ptr_array_add (values, g_strdup (pango_stretch_to_string (pango_int->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_stretch_to_string (gdk_text_int->value)));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_SIZE);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_SIZE);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("size"));
-      g_ptr_array_add (values, g_strdup_printf ("%i", pango_int->value / PANGO_SCALE));
+      g_ptr_array_add (values, g_strdup_printf ("%i", gdk_text_int->value / GDK_TEXT_SCALE));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_UNDERLINE);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_UNDERLINE);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("underline"));
-      g_ptr_array_add (values, g_strdup (pango_underline_to_string (pango_int->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_underline_to_string (gdk_text_int->value)));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_OVERLINE);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_OVERLINE);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("overline"));
-      g_ptr_array_add (values, g_strdup (pango_overline_to_string (pango_int->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_overline_to_string (gdk_text_int->value)));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_STRIKETHROUGH);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_STRIKETHROUGH);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("strikethrough"));
-      g_ptr_array_add (values, pango_int->value ? g_strdup ("true") : g_strdup ("false"));
+      g_ptr_array_add (values, gdk_text_int->value ? g_strdup ("true") : g_strdup ("false"));
     }
 
-  pango_int = (PangoAttrInt *) pango_attr_iterator_get (iter, PANGO_ATTR_RISE);
-  if (pango_int != NULL)
+  gdk_text_int = (GdkTextAttrInt *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_RISE);
+  if (gdk_text_int != NULL)
     {
       g_ptr_array_add (names, g_strdup ("rise"));
-      g_ptr_array_add (values, g_strdup_printf ("%i", pango_int->value));
+      g_ptr_array_add (values, g_strdup_printf ("%i", gdk_text_int->value));
     }
 
-  pango_lang = (PangoAttrLanguage *) pango_attr_iterator_get (iter, PANGO_ATTR_LANGUAGE);
-  if (pango_lang != NULL)
+  gdk_text_lang = (GdkTextAttrLanguage *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_LANGUAGE);
+  if (gdk_text_lang != NULL)
     {
       g_ptr_array_add (names, g_strdup ("language"));
-      g_ptr_array_add (values, g_strdup (pango_language_to_string (pango_lang->value)));
+      g_ptr_array_add (values, g_strdup (gdk_text_language_to_string (gdk_text_lang->value)));
     }
 
-  pango_float = (PangoAttrFloat *) pango_attr_iterator_get (iter, PANGO_ATTR_SCALE);
-  if (pango_float != NULL)
+  gdk_text_float = (GdkTextAttrFloat *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_SCALE);
+  if (gdk_text_float != NULL)
     {
       g_ptr_array_add (names, g_strdup ("scale"));
-      g_ptr_array_add (values, g_strdup_printf ("%g", pango_float->value));
+      g_ptr_array_add (values, g_strdup_printf ("%g", gdk_text_float->value));
     }
 
-  pango_color = (PangoAttrColor *) pango_attr_iterator_get (iter, PANGO_ATTR_FOREGROUND);
-  if (pango_color != NULL)
+  gdk_text_color = (GdkTextAttrColor *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_FOREGROUND);
+  if (gdk_text_color != NULL)
     {
       g_ptr_array_add (names, g_strdup ("fg-color"));
       g_ptr_array_add (values, g_strdup_printf ("%u,%u,%u",
-                                                pango_color->color.red,
-                                                pango_color->color.green,
-                                                pango_color->color.blue));
+                                                gdk_text_color->color.red,
+                                                gdk_text_color->color.green,
+                                                gdk_text_color->color.blue));
     }
 
-  pango_color = (PangoAttrColor *) pango_attr_iterator_get (iter, PANGO_ATTR_BACKGROUND);
-  if (pango_color != NULL)
+  gdk_text_color = (GdkTextAttrColor *) gdk_text_attr_iterator_get (iter, GDK_TEXT_ATTR_BACKGROUND);
+  if (gdk_text_color != NULL)
     {
       g_ptr_array_add (names, g_strdup ("bg-color"));
       g_ptr_array_add (values, g_strdup_printf ("%u,%u,%u",
-                                                pango_color->color.red,
-                                                pango_color->color.green,
-                                                pango_color->color.blue));
+                                                gdk_text_color->color.red,
+                                                gdk_text_color->color.green,
+                                                gdk_text_color->color.blue));
     }
 
-  pango_attr_iterator_destroy (iter);
+  gdk_text_attr_iterator_destroy (iter);
 
   *attribute_names = g_strdupv ((char **) names->pdata);
   *attribute_values = g_strdupv ((char **) values->pdata);
@@ -882,8 +882,8 @@ gtk_pango_get_run_attributes (PangoLayout     *layout,
 }
 
 /*
- * gtk_pango_move_chars:
- * @layout: a `PangoLayout`
+ * gtk_text_move_chars:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  * @count: the number of characters to move from @offset
  *
@@ -891,19 +891,19 @@ gtk_pango_get_run_attributes (PangoLayout     *layout,
  * given @offset. @count may be positive or negative.
  *
  * For the purpose of this function, characters are defined
- * by what Pango considers cursor positions.
+ * by what GdkText considers cursor positions.
  *
  * Returns: the new position
  */
 static int
-gtk_pango_move_chars (PangoLayout *layout,
+gtk_text_move_chars (GdkTextLayout *layout,
                       int          offset,
                       int          count)
 {
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   while (count > 0 && offset < n_attrs - 1)
     {
@@ -926,8 +926,8 @@ gtk_pango_move_chars (PangoLayout *layout,
 }
 
 /*
- * gtk_pango_move_words:
- * @layout: a `PangoLayout`
+ * gtk_text_move_words:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  * @count: the number of words to move from @offset
  *
@@ -936,20 +936,20 @@ gtk_pango_move_chars (PangoLayout *layout,
  *
  * If @count is positive, the returned position will
  * be a word end, otherwise it will be a word start.
- * See the Pango documentation for details on how
+ * See the GdkText documentation for details on how
  * word starts and ends are defined.
  *
  * Returns: the new position
  */
 static int
-gtk_pango_move_words (PangoLayout  *layout,
+gtk_text_move_words (GdkTextLayout  *layout,
                       int           offset,
                       int           count)
 {
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   while (count > 0 && offset < n_attrs - 1)
     {
@@ -972,8 +972,8 @@ gtk_pango_move_words (PangoLayout  *layout,
 }
 
 /*
- * gtk_pango_move_sentences:
- * @layout: a `PangoLayout`
+ * gtk_text_move_sentences:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  * @count: the number of sentences to move from @offset
  *
@@ -982,20 +982,20 @@ gtk_pango_move_words (PangoLayout  *layout,
  *
  * If @count is positive, the returned position will
  * be a sentence end, otherwise it will be a sentence start.
- * See the Pango documentation for details on how
+ * See the GdkText documentation for details on how
  * sentence starts and ends are defined.
  *
  * Returns: the new position
  */
 static int
-gtk_pango_move_sentences (PangoLayout  *layout,
+gtk_text_move_sentences (GdkTextLayout  *layout,
                           int           offset,
                           int           count)
 {
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   while (count > 0 && offset < n_attrs - 1)
     {
@@ -1019,8 +1019,8 @@ gtk_pango_move_sentences (PangoLayout  *layout,
 
 #if 0
 /*
- * gtk_pango_move_lines:
- * @layout: a `PangoLayout`
+ * gtk_text_move_lines:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  * @count: the number of lines to move from @offset
  *
@@ -1034,21 +1034,21 @@ gtk_pango_move_sentences (PangoLayout  *layout,
  * Returns: the new position
  */
 static int
-gtk_pango_move_lines (PangoLayout *layout,
+gtk_text_move_lines (GdkTextLayout *layout,
                       int          offset,
                       int          count)
 {
   GSList *lines, *l;
-  PangoLayoutLine *line;
+  GdkTextLayoutLine *line;
   int num;
   const char *text;
   int pos, line_pos;
   int index;
   int len;
 
-  text = pango_layout_get_text (layout);
+  text = gdk_text_layout_get_text (layout);
   index = g_utf8_offset_to_pointer (text, offset) - text;
-  lines = pango_layout_get_lines (layout);
+  lines = gdk_text_layout_get_lines (layout);
   line = NULL;
 
   num = 0;
@@ -1090,8 +1090,8 @@ gtk_pango_move_lines (PangoLayout *layout,
 #endif
 
 /*
- * gtk_pango_is_inside_word:
- * @layout: a `PangoLayout`
+ * gtk_text_is_inside_word:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  *
  * Returns whether the given position is inside
@@ -1100,13 +1100,13 @@ gtk_pango_move_lines (PangoLayout *layout,
  * Returns: %TRUE if @offset is inside a word
  */
 static gboolean
-gtk_pango_is_inside_word (PangoLayout  *layout,
+gtk_text_is_inside_word (GdkTextLayout  *layout,
                           int           offset)
 {
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   while (offset >= 0 &&
          !(attrs[offset].is_word_start || attrs[offset].is_word_end))
@@ -1119,8 +1119,8 @@ gtk_pango_is_inside_word (PangoLayout  *layout,
 }
 
 /*
- * gtk_pango_is_inside_sentence:
- * @layout: a `PangoLayout`
+ * gtk_text_is_inside_sentence:
+ * @layout: a `GdkTextLayout`
  * @offset: a character offset in @layout
  *
  * Returns whether the given position is inside
@@ -1129,13 +1129,13 @@ gtk_pango_is_inside_word (PangoLayout  *layout,
  * Returns: %TRUE if @offset is inside a sentence
  */
 static gboolean
-gtk_pango_is_inside_sentence (PangoLayout  *layout,
+gtk_text_is_inside_sentence (GdkTextLayout  *layout,
                               int           offset)
 {
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   while (offset >= 0 &&
          !(attrs[offset].is_sentence_start || attrs[offset].is_sentence_end))
@@ -1148,32 +1148,32 @@ gtk_pango_is_inside_sentence (PangoLayout  *layout,
 }
 
 static void
-gtk_pango_get_line_start (PangoLayout *layout,
+gtk_text_get_line_start (GdkTextLayout *layout,
                           int          offset,
                           int         *start_offset,
                           int         *end_offset)
 {
-  PangoLayoutIter *iter;
-  PangoLayoutLine *line, *prev_line = NULL;
+  GdkTextLayoutIter *iter;
+  GdkTextLayoutLine *line, *prev_line = NULL;
   int index, start_index, length, end_index;
   const char *text;
   gboolean found = FALSE;
 
-  text = pango_layout_get_text (layout);
+  text = gdk_text_layout_get_text (layout);
   index = g_utf8_offset_to_pointer (text, offset) - text;
-  iter = pango_layout_get_iter (layout);
+  iter = gdk_text_layout_get_iter (layout);
   do
     {
-      line = pango_layout_iter_get_line (iter);
-      start_index = pango_layout_line_get_start_index (line);
-      length = pango_layout_line_get_length (line);
+      line = gdk_text_layout_iter_get_line (iter);
+      start_index = gdk_text_layout_line_get_start_index (line);
+      length = gdk_text_layout_line_get_length (line);
       end_index = start_index + length;
 
-      if (index >= start_index && (index < end_index || pango_layout_iter_at_last_line (iter)))
+      if (index >= start_index && (index < end_index || gdk_text_layout_iter_at_last_line (iter)))
         {
           /* Found line for offset */
-          if (pango_layout_iter_next_line (iter))
-            end_index = pango_layout_line_get_start_index (pango_layout_iter_get_line (iter));
+          if (gdk_text_layout_iter_next_line (iter))
+            end_index = gdk_text_layout_line_get_start_index (gdk_text_layout_iter_get_line (iter));
 
           found = TRUE;
           break;
@@ -1181,22 +1181,22 @@ gtk_pango_get_line_start (PangoLayout *layout,
 
       prev_line = line;
     }
-  while (pango_layout_iter_next_line (iter));
+  while (gdk_text_layout_iter_next_line (iter));
 
   if (!found)
     {
-      start_index = pango_layout_line_get_start_index (prev_line) + pango_layout_line_get_length (prev_line);
+      start_index = gdk_text_layout_line_get_start_index (prev_line) + gdk_text_layout_line_get_length (prev_line);
       end_index = start_index;
     }
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   *start_offset = g_utf8_pointer_to_offset (text, text + start_index);
   *end_offset = g_utf8_pointer_to_offset (text, text + end_index);
 }
 
 char *
-gtk_pango_get_string_at (PangoLayout                  *layout,
+gtk_text_get_string_at (GdkTextLayout                  *layout,
                          unsigned int                  offset,
                          GtkAccessibleTextGranularity  granularity,
                          unsigned int                 *start_offset,
@@ -1204,10 +1204,10 @@ gtk_pango_get_string_at (PangoLayout                  *layout,
 {
   const char *text;
   int start, end;
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int n_attrs;
 
-  text = pango_layout_get_text (layout);
+  text = gdk_text_layout_get_text (layout);
 
   if (text[0] == 0)
     {
@@ -1216,7 +1216,7 @@ gtk_pango_get_string_at (PangoLayout                  *layout,
       return g_strdup ("");
     }
 
-  attrs = pango_layout_get_log_attrs_readonly (layout, &n_attrs);
+  attrs = gdk_text_layout_get_log_attrs_readonly (layout, &n_attrs);
 
   start = offset;
   end = start;
@@ -1224,29 +1224,29 @@ gtk_pango_get_string_at (PangoLayout                  *layout,
   switch (granularity)
     {
     case GTK_ACCESSIBLE_TEXT_GRANULARITY_CHARACTER:
-      end = gtk_pango_move_chars (layout, end, 1);
+      end = gtk_text_move_chars (layout, end, 1);
       break;
 
     case GTK_ACCESSIBLE_TEXT_GRANULARITY_WORD:
       if (!attrs[start].is_word_start)
-        start = gtk_pango_move_words (layout, start, -1);
-      if (gtk_pango_is_inside_word (layout, end))
-        end = gtk_pango_move_words (layout, end, 1);
+        start = gtk_text_move_words (layout, start, -1);
+      if (gtk_text_is_inside_word (layout, end))
+        end = gtk_text_move_words (layout, end, 1);
       while (!attrs[end].is_word_start && end < n_attrs - 1)
-        end = gtk_pango_move_chars (layout, end, 1);
+        end = gtk_text_move_chars (layout, end, 1);
       break;
 
     case GTK_ACCESSIBLE_TEXT_GRANULARITY_SENTENCE:
       if (!attrs[start].is_sentence_start)
-        start = gtk_pango_move_sentences (layout, start, -1);
-      if (gtk_pango_is_inside_sentence (layout, end))
-        end = gtk_pango_move_sentences (layout, end, 1);
+        start = gtk_text_move_sentences (layout, start, -1);
+      if (gtk_text_is_inside_sentence (layout, end))
+        end = gtk_text_move_sentences (layout, end, 1);
       while (!attrs[end].is_sentence_start && end < n_attrs - 1)
-        end = gtk_pango_move_chars (layout, end, 1);
+        end = gtk_text_move_chars (layout, end, 1);
       break;
 
     case GTK_ACCESSIBLE_TEXT_GRANULARITY_LINE:
-      gtk_pango_get_line_start (layout, offset, &start, &end);
+      gtk_text_get_line_start (layout, offset, &start, &end);
       break;
 
     case GTK_ACCESSIBLE_TEXT_GRANULARITY_PARAGRAPH:
@@ -1269,7 +1269,7 @@ gtk_pango_get_string_at (PangoLayout                  *layout,
 }
 
 gboolean
-gtk_pango_glyph_item_has_color_glyphs (PangoGlyphItem *run)
+gtk_text_glyph_item_has_color_glyphs (GdkTextGlyphItem *run)
 {
   for (int i = 0; i < run->glyphs->num_glyphs; i++)
     {
@@ -1281,28 +1281,28 @@ gtk_pango_glyph_item_has_color_glyphs (PangoGlyphItem *run)
 }
 
 gboolean
-gtk_pango_layout_has_color_glyphs (PangoLayout *layout)
+gtk_text_layout_has_color_glyphs (GdkTextLayout *layout)
 {
   gboolean ret = FALSE;
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
 
-  iter = pango_layout_get_iter (layout);
+  iter = gdk_text_layout_get_iter (layout);
 
-  while (pango_layout_iter_next_run (iter) && !ret)
+  while (gdk_text_layout_iter_next_run (iter) && !ret)
     {
-      PangoLayoutRun *run = pango_layout_iter_get_run_readonly (iter);
+      GdkTextLayoutRun *run = gdk_text_layout_iter_get_run_readonly (iter);
 
       if (!run)
         continue;
 
-      if (gtk_pango_glyph_item_has_color_glyphs (run))
+      if (gtk_text_glyph_item_has_color_glyphs (run))
         {
           ret = TRUE;
           break;
         }
     }
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   return ret;
 }

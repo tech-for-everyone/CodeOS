@@ -623,7 +623,7 @@ static void             gtk_widget_pop_verify_invariants        (GtkWidget      
 #define                 gtk_widget_push_verify_invariants(widget)
 #define                 gtk_widget_pop_verify_invariants(widget)
 #endif
-static PangoContext*    gtk_widget_peek_pango_context           (GtkWidget          *widget);
+static GdkTextContext*    gtk_widget_peek_pango_context           (GtkWidget          *widget);
 static void             gtk_widget_update_default_pango_context (GtkWidget          *widget);
 static void             gtk_widget_propagate_state              (GtkWidget          *widget,
                                                                  const GtkStateData *data);
@@ -1454,7 +1454,7 @@ gtk_widget_class_init (GtkWidgetClass *klass)
    * GtkWidget:tooltip-markup:
    *
    * Sets the text of tooltip to be the given string, which is marked up
-   * with Pango markup.
+   * with GdkText markup.
    *
    * Also see [method@Gtk.Tooltip.set_markup].
    *
@@ -6699,7 +6699,7 @@ gtk_widget_pop_verify_invariants (GtkWidget *widget)
 }
 #endif /* G_ENABLE_CONSISTENCY_CHECKS */
 
-static PangoContext *
+static GdkTextContext *
 gtk_widget_peek_pango_context (GtkWidget *widget)
 {
   return g_object_get_qdata (G_OBJECT (widget), quark_pango_context);
@@ -6709,9 +6709,9 @@ gtk_widget_peek_pango_context (GtkWidget *widget)
  * gtk_widget_get_pango_context:
  * @widget: a widget
  *
- * Gets a `PangoContext` that is configured for the widget.
+ * Gets a `GdkTextContext` that is configured for the widget.
  *
- * The `PangoContext` will have the appropriate font map, font description,
+ * The `GdkTextContext` will have the appropriate font map, font description,
  * and base direction set.
  *
  * Unlike the context returned by [method@Gtk.Widget.create_pango_context],
@@ -6721,12 +6721,12 @@ gtk_widget_peek_pango_context (GtkWidget *widget)
  * This can be tracked by listening to changes of the
  * [property@Gtk.Widget:root] property on the widget.
  *
- * Returns: (transfer none): the `PangoContext` for the widget
+ * Returns: (transfer none): the `GdkTextContext` for the widget
  */
-PangoContext *
+GdkTextContext *
 gtk_widget_get_pango_context (GtkWidget *widget)
 {
-  PangoContext *context;
+  GdkTextContext *context;
 
   g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
 
@@ -6743,47 +6743,47 @@ gtk_widget_get_pango_context (GtkWidget *widget)
   return context;
 }
 
-static PangoFontMap *
+static GdkTextFontMap *
 gtk_widget_get_effective_font_map (GtkWidget *widget)
 {
   GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
-  PangoFontMap *font_map;
+  GdkTextFontMap *font_map;
 
-  font_map = PANGO_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
+  font_map = GDK_TEXT_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
   if (font_map)
     return font_map;
   else if (priv->parent)
     return gtk_widget_get_effective_font_map (priv->parent);
   else
-    return pango_cairo_font_map_get_default ();
+    return gdk_text_cairo_font_map_get_default ();
 }
 
 gboolean
 gtk_widget_update_pango_context (GtkWidget        *widget,
-                                 PangoContext     *context,
+                                 GdkTextContext     *context,
                                  GtkTextDirection  direction)
 {
   GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
   GtkCssStyle *style = gtk_css_node_get_style (priv->cssnode);
-  PangoFontDescription *font_desc;
+  GdkTextFontDescription *font_desc;
   GtkSettings *settings;
   guint old_serial;
   GtkFontRendering font_rendering;
 
-  old_serial = pango_context_get_serial (context);
+  old_serial = gdk_text_context_get_serial (context);
 
   font_desc = gtk_css_style_get_pango_font (style);
-  pango_context_set_font_description (context, font_desc);
-  pango_font_description_free (font_desc);
+  gdk_text_context_set_font_description (context, font_desc);
+  gdk_text_font_description_free (font_desc);
 
   if (direction != GTK_TEXT_DIR_NONE)
-    pango_context_set_base_dir (context, direction == GTK_TEXT_DIR_LTR
-                                         ? PANGO_DIRECTION_LTR
-                                         : PANGO_DIRECTION_RTL);
+    gdk_text_context_set_base_dir (context, direction == GTK_TEXT_DIR_LTR
+                                         ? GDK_TEXT_DIRECTION_LTR
+                                         : GDK_TEXT_DIRECTION_RTL);
 
-  pango_cairo_context_set_resolution (context, gtk_css_number_value_get (style->core->dpi, 100));
+  gdk_text_cairo_context_set_resolution (context, gtk_css_number_value_get (style->core->dpi, 100));
 
-  pango_context_set_font_map (context, gtk_widget_get_effective_font_map (widget));
+  gdk_text_context_set_font_map (context, gtk_widget_get_effective_font_map (widget));
 
   settings = gtk_widget_get_settings (widget);
 
@@ -6808,8 +6808,8 @@ gtk_widget_update_pango_context (GtkWidget        *widget,
                                            hint_font_metrics == 1 ? GDK_PAINT_HINT_METRICS_ON
                                                                   : GDK_PAINT_HINT_METRICS_OFF);
 
-      pango_context_set_round_glyph_positions (context, hint_font_metrics);
-      pango_cairo_context_set_font_options (context, options);
+      gdk_text_context_set_round_glyph_positions (context, hint_font_metrics);
+      gdk_text_cairo_context_set_font_options (context, options);
 
       gdk_paint_font_options_destroy (options);
     }
@@ -6823,19 +6823,19 @@ gtk_widget_update_pango_context (GtkWidget        *widget,
       gdk_paint_font_options_set_hint_metrics (options, GDK_PAINT_HINT_METRICS_OFF);
       gdk_paint_font_options_set_hint_style (options, GDK_PAINT_HINT_STYLE_SLIGHT);
 
-      pango_context_set_round_glyph_positions (context, FALSE);
-      pango_cairo_context_set_font_options (context, options);
+      gdk_text_context_set_round_glyph_positions (context, FALSE);
+      gdk_text_cairo_context_set_font_options (context, options);
 
       gdk_paint_font_options_destroy (options);
     }
 
-  return old_serial != pango_context_get_serial (context);
+  return old_serial != gdk_text_context_get_serial (context);
 }
 
 static void
 gtk_widget_update_default_pango_context (GtkWidget *widget)
 {
-  PangoContext *context = gtk_widget_peek_pango_context (widget);
+  GdkTextContext *context = gtk_widget_peek_pango_context (widget);
 
   if (!context)
     return;
@@ -6912,7 +6912,7 @@ gtk_widget_set_font_map_recurse (GtkWidget *widget, gpointer user_data)
 /**
  * gtk_widget_set_font_map:
  * @widget: a widget
- * @font_map: (nullable): a `PangoFontMap`
+ * @font_map: (nullable): a `GdkTextFontMap`
  *
  * Sets the font map to use for text rendering in the widget.
  *
@@ -6925,13 +6925,13 @@ gtk_widget_set_font_map_recurse (GtkWidget *widget, gpointer user_data)
  */
 void
 gtk_widget_set_font_map (GtkWidget    *widget,
-                         PangoFontMap *font_map)
+                         GdkTextFontMap *font_map)
 {
-  PangoFontMap *map;
+  GdkTextFontMap *map;
 
   g_return_if_fail (GTK_IS_WIDGET (widget));
 
-  map = PANGO_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
+  map = GDK_TEXT_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
   if (map == font_map)
     return;
 
@@ -6955,37 +6955,37 @@ gtk_widget_set_font_map (GtkWidget    *widget,
  *
  * Returns: (transfer none) (nullable): the font map of @widget
  */
-PangoFontMap *
+GdkTextFontMap *
 gtk_widget_get_font_map (GtkWidget *widget)
 {
   g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
 
-  return PANGO_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
+  return GDK_TEXT_FONT_MAP (g_object_get_qdata (G_OBJECT (widget), quark_font_map));
 }
 
 /**
  * gtk_widget_create_pango_context:
  * @widget: a widget
  *
- * Creates a new `PangoContext` that is configured for the widget.
+ * Creates a new `GdkTextContext` that is configured for the widget.
  *
- * The `PangoContext` will have the appropriate font map,
+ * The `GdkTextContext` will have the appropriate font map,
  * font options, font description, and base direction set.
  *
  * See also [method@Gtk.Widget.get_pango_context].
  *
- * Returns: (transfer full): the new `PangoContext`
+ * Returns: (transfer full): the new `GdkTextContext`
  */
-PangoContext *
+GdkTextContext *
 gtk_widget_create_pango_context (GtkWidget *widget)
 {
-  PangoContext *context;
+  GdkTextContext *context;
 
   g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
 
-  context = pango_font_map_create_context (pango_cairo_font_map_get_default ());
+  context = gdk_text_font_map_create_context (gdk_text_cairo_font_map_get_default ());
   gtk_widget_update_pango_context (widget, context, _gtk_widget_get_direction (widget));
-  pango_context_set_language (context, gtk_get_default_language ());
+  gdk_text_context_set_language (context, gtk_get_default_language ());
 
   return context;
 }
@@ -6995,32 +6995,32 @@ gtk_widget_create_pango_context (GtkWidget *widget)
  * @widget: a widget
  * @text: (nullable): text to set on the layout
  *
- * Creates a new `PangoLayout` that is configured for the widget.
+ * Creates a new `GdkTextLayout` that is configured for the widget.
  *
- * The `PangoLayout` will have the appropriate font map,
+ * The `GdkTextLayout` will have the appropriate font map,
  * font description, and base direction set.
  *
- * If you keep a `PangoLayout` created in this way around,
- * you need to re-create it when the widgets `PangoContext`
+ * If you keep a `GdkTextLayout` created in this way around,
+ * you need to re-create it when the widgets `GdkTextContext`
  * is replaced. This can be tracked by listening to changes
  * of the [property@Gtk.Widget:root] property on the widget.
  *
- * Returns: (transfer full): the new `PangoLayout`
+ * Returns: (transfer full): the new `GdkTextLayout`
  **/
-PangoLayout *
+GdkTextLayout *
 gtk_widget_create_pango_layout (GtkWidget  *widget,
                                 const char *text)
 {
-  PangoLayout *layout;
-  PangoContext *context;
+  GdkTextLayout *layout;
+  GdkTextContext *context;
 
   g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
 
   context = gtk_widget_get_pango_context (widget);
-  layout = pango_layout_new (context);
+  layout = gdk_text_layout_new (context);
 
   if (text)
-    pango_layout_set_text (layout, text, -1);
+    gdk_text_layout_set_text (layout, text, -1);
 
   return layout;
 }
@@ -10305,7 +10305,7 @@ gtk_widget_get_tooltip_text (GtkWidget *widget)
  *
  * Sets the contents of the tooltip for widget.
  *
- * @markup must contain Pango markup.
+ * @markup must contain GdkText markup.
  *
  * This function will take care of setting the
  * [property@Gtk.Widget:has-tooltip] as a side effect, and of the
@@ -10343,7 +10343,7 @@ gtk_widget_set_tooltip_markup (GtkWidget  *widget,
    */
   if (priv->tooltip_markup != NULL)
     {
-      pango_parse_markup (priv->tooltip_markup, -1, 0, NULL,
+      gdk_text_parse_markup (priv->tooltip_markup, -1, 0, NULL,
                           &priv->tooltip_text,
                           NULL,
                           NULL);

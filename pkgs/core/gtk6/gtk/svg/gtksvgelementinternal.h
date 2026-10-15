@@ -43,7 +43,7 @@ typedef enum
 
 typedef struct
 {
-  PangoLayout *layout;
+  GdkTextLayout *layout;
   double x, y, r;
 } TextChunk;
 
@@ -88,7 +88,7 @@ void svg_css_ruleset_clear (SvgCssRuleset *ruleset);
 
 typedef struct
 {
-  PangoLanguage *lang;
+  GdkTextLanguage *lang;
   const char *type;
   char *string;
 } LangString;

@@ -1417,7 +1417,7 @@ setup_process_row (GtkListItemFactory *factory,
 
   picture = gtk_picture_new ();
   label = gtk_label_new (NULL);
-  gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_MIDDLE);
+  gtk_label_set_ellipsize (GTK_LABEL (label), GDK_TEXT_ELLIPSIZE_MIDDLE);
 
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 10);
   gtk_box_append (GTK_BOX (box), picture);

@@ -35,13 +35,13 @@ get_delegate (GtkFontChooser *receiver)
                              GTK_FONT_CHOOSER_DELEGATE_QUARK);
 }
 
-static PangoFontFamily *
+static GdkTextFontFamily *
 delegate_get_font_family (GtkFontChooser *chooser)
 {
   return gtk_font_chooser_get_font_family (get_delegate (chooser));
 }
 
-static PangoFontFace *
+static GdkTextFontFace *
 delegate_get_font_face (GtkFontChooser *chooser)
 {
   return gtk_font_chooser_get_font_face (get_delegate (chooser));
@@ -67,12 +67,12 @@ delegate_set_filter_func (GtkFontChooser    *chooser,
 
 static void
 delegate_set_font_map (GtkFontChooser *chooser,
-                       PangoFontMap   *map)
+                       GdkTextFontMap   *map)
 {
   gtk_font_chooser_set_font_map (get_delegate (chooser), map);
 }
 
-static PangoFontMap *
+static GdkTextFontMap *
 delegate_get_font_map (GtkFontChooser *chooser)
 {
   return gtk_font_chooser_get_font_map (get_delegate (chooser));

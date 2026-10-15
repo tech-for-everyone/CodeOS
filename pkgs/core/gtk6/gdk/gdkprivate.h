@@ -24,8 +24,8 @@ gboolean gdk_display_should_use_portal (GdkDisplay *display,
 
 const char *   gdk_get_startup_notification_id (void);
 
-PangoDirection gdk_unichar_direction (gunichar    ch);
-PangoDirection gdk_find_base_dir     (const char *text,
+GdkTextDirection gdk_unichar_direction (gunichar    ch);
+GdkTextDirection gdk_find_base_dir     (const char *text,
                                       int         len);
 
 void gdk_source_set_static_name_by_id (guint       tag,

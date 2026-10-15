@@ -59,7 +59,7 @@ void                    gsk_path_builder_add_cairo_path         (GskPathBuilder 
                                                                  const GdkPaintPath     *path);
 GDK_AVAILABLE_IN_4_14
 void                    gsk_path_builder_add_layout             (GskPathBuilder         *self,
-                                                                 PangoLayout            *layout);
+                                                                 GdkTextLayout            *layout);
 
 GDK_AVAILABLE_IN_4_14
 void                    gsk_path_builder_add_rect               (GskPathBuilder         *self,

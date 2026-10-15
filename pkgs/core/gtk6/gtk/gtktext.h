@@ -119,16 +119,16 @@ GtkInputHints   gtk_text_get_input_hints                (GtkText         *self);
 
 GDK_AVAILABLE_IN_ALL
 void            gtk_text_set_attributes                 (GtkText         *self,
-                                                         PangoAttrList   *attrs);
+                                                         GdkTextAttrList   *attrs);
 GDK_AVAILABLE_IN_ALL
-PangoAttrList * gtk_text_get_attributes                 (GtkText         *self);
+GdkTextAttrList * gtk_text_get_attributes                 (GtkText         *self);
 
 GDK_AVAILABLE_IN_ALL
 void            gtk_text_set_tabs                       (GtkText         *self,
-                                                         PangoTabArray   *tabs);
+                                                         GdkTextTabArray   *tabs);
 
 GDK_AVAILABLE_IN_ALL
-PangoTabArray * gtk_text_get_tabs                       (GtkText         *self);
+GdkTextTabArray * gtk_text_get_tabs                       (GtkText         *self);
 
 GDK_AVAILABLE_IN_ALL
 gboolean        gtk_text_grab_focus_without_selecting   (GtkText         *self);

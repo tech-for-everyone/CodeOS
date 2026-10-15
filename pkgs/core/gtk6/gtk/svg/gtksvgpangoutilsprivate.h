@@ -27,7 +27,7 @@
 
 G_BEGIN_DECLS
 
-GskPath * svg_pango_layout_to_path (PangoLayout          *layout,
-                                    PangoRenderComponent  component);
+GskPath * svg_pango_layout_to_path (GdkTextLayout          *layout,
+                                    GdkTextRenderComponent  component);
 
 G_END_DECLS

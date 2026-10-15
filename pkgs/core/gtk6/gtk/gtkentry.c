@@ -134,21 +134,21 @@
  * The `GtkEntry` implementation of the `GtkBuildable` interface supports a
  * custom `<attributes>` element, which supports any number of `<attribute>`
  * elements. The `<attribute>` element has attributes named “name“, “value“,
- * “start“ and “end“ and allows you to specify `PangoAttribute` values for
+ * “start“ and “end“ and allows you to specify `GdkTextAttribute` values for
  * this label.
  *
- * An example of a UI definition fragment specifying Pango attributes:
+ * An example of a UI definition fragment specifying GdkText attributes:
  * ```xml
  * <object class="GtkEntry">
  *   <attributes>
- *     <attribute name="weight" value="PANGO_WEIGHT_BOLD"/>
+ *     <attribute name="weight" value="GDK_TEXT_WEIGHT_BOLD"/>
  *     <attribute name="background" value="red" start="5" end="10"/>
  *   </attributes>
  * </object>
  * ```
  *
  * The start and end attributes specify the range of characters to which the
- * Pango attribute applies. If start and end are not specified, the attribute
+ * GdkText attribute applies. If start and end are not specified, the attribute
  * is applied to the whole text. Note that specifying ranges does not make much
  * sense with translatable attributes. Use markup embedded in the translatable
  * content instead.
@@ -355,9 +355,9 @@ gtk_entry_accessible_interface_init (GtkAccessibleInterface *iface)
   iface->get_platform_state = gtk_entry_accessible_get_platform_state;
 }
 
-static const GtkBuildableParser pango_parser =
+static const GtkBuildableParser gdk_text_parser =
 {
-  gtk_pango_attribute_start_element,
+  gtk_text_attribute_start_element,
 };
 
 static gboolean
@@ -374,14 +374,14 @@ gtk_entry_buildable_custom_tag_start (GtkBuildable       *buildable,
 
   if (strcmp (tagname, "attributes") == 0)
     {
-      GtkPangoAttributeParserData *parser_data;
+      GtkTextAttributeParserData *parser_data;
 
       gtk_buildable_tag_deprecation_warning (buildable, builder, "attributes", "attributes");
 
-      parser_data = g_new0 (GtkPangoAttributeParserData, 1);
+      parser_data = g_new0 (GtkTextAttributeParserData, 1);
       parser_data->builder = g_object_ref (builder);
       parser_data->object = (GObject *) g_object_ref (buildable);
-      *parser = pango_parser;
+      *parser = gdk_text_parser;
       *data = parser_data;
       return TRUE;
     }
@@ -395,7 +395,7 @@ gtk_entry_buildable_custom_finished (GtkBuildable *buildable,
                                      const char   *tagname,
                                      gpointer      user_data)
 {
-  GtkPangoAttributeParserData *data = user_data;
+  GtkTextAttributeParserData *data = user_data;
 
   buildable_parent_iface->custom_finished (buildable, builder, child,
                                            tagname, user_data);
@@ -405,7 +405,7 @@ gtk_entry_buildable_custom_finished (GtkBuildable *buildable,
       if (data->attrs)
         {
           gtk_entry_set_attributes (GTK_ENTRY (buildable), data->attrs);
-          pango_attr_list_unref (data->attrs);
+          gdk_text_attr_list_unref (data->attrs);
         }
 
       g_object_unref (data->object);
@@ -890,16 +890,16 @@ gtk_entry_class_init (GtkEntryClass *class)
   /**
    * GtkEntry:attributes:
    *
-   * A list of Pango attributes to apply to the text of the entry.
+   * A list of GdkText attributes to apply to the text of the entry.
    *
    * This is mainly useful to change the size or weight of the text.
    *
-   * The `PangoAttribute`'s @start_index and @end_index must refer to the
+   * The `GdkTextAttribute`'s @start_index and @end_index must refer to the
    * [class@Gtk.EntryBuffer] text, i.e. without the preedit string.
    */
   entry_props[PROP_ATTRIBUTES] =
       g_param_spec_boxed ("attributes", NULL, NULL,
-                          PANGO_TYPE_ATTR_LIST,
+                          GDK_TEXT_TYPE_ATTR_LIST,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -909,7 +909,7 @@ gtk_entry_class_init (GtkEntryClass *class)
    */
   entry_props[PROP_TABS] =
       g_param_spec_boxed ("tabs", NULL, NULL,
-                          PANGO_TYPE_TAB_ARRAY,
+                          GDK_TEXT_TYPE_TAB_ARRAY,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -3145,7 +3145,7 @@ gtk_entry_get_icon_tooltip_text (GtkEntry             *entry,
     return NULL;
  
   if (icon_info->tooltip && 
-      !pango_parse_markup (icon_info->tooltip, -1, 0, NULL, &text, NULL, NULL))
+      !gdk_text_parse_markup (icon_info->tooltip, -1, 0, NULL, &text, NULL, NULL))
     g_assert (NULL == text); /* text should still be NULL in case of markup errors */
 
   return text;
@@ -3244,7 +3244,7 @@ gtk_entry_get_icon_tooltip_markup (GtkEntry             *entry,
  * Sets @tooltip as the contents of the tooltip for the icon at
  * the specified position.
  *
- * @tooltip is assumed to be marked up with Pango Markup.
+ * @tooltip is assumed to be marked up with GdkText Markup.
  *
  * Use %NULL for @tooltip to remove an existing tooltip.
  *
@@ -3673,9 +3673,9 @@ gtk_entry_get_input_hints (GtkEntry *entry)
 /**
  * gtk_entry_set_attributes:
  * @entry: a `GtkEntry`
- * @attrs: a `PangoAttrList`
+ * @attrs: a `GdkTextAttrList`
  *
- * Sets a `PangoAttrList`.
+ * Sets a `GdkTextAttrList`.
  *
  * The attributes in the list are applied to the entry text.
  *
@@ -3685,7 +3685,7 @@ gtk_entry_get_input_hints (GtkEntry *entry)
  */
 void
 gtk_entry_set_attributes (GtkEntry      *entry,
-                          PangoAttrList *attrs)
+                          GdkTextAttrList *attrs)
 {
   GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
 
@@ -3704,7 +3704,7 @@ gtk_entry_set_attributes (GtkEntry      *entry,
  *
  * Returns: (transfer none) (nullable): the attribute list
  */
-PangoAttrList *
+GdkTextAttrList *
 gtk_entry_get_attributes (GtkEntry *entry)
 {
   GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
@@ -3717,16 +3717,16 @@ gtk_entry_get_attributes (GtkEntry *entry)
 /**
  * gtk_entry_set_tabs:
  * @entry: a `GtkEntry`
- * @tabs: (nullable): a `PangoTabArray`
+ * @tabs: (nullable): a `GdkTextTabArray`
  *
- * Sets a `PangoTabArray`.
+ * Sets a `GdkTextTabArray`.
  *
  * The tabstops in the array are applied to the entry text.
  */
 
 void
 gtk_entry_set_tabs (GtkEntry      *entry,
-                    PangoTabArray *tabs)
+                    GdkTextTabArray *tabs)
 {
   GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);
 
@@ -3746,7 +3746,7 @@ gtk_entry_set_tabs (GtkEntry      *entry,
  * Returns: (nullable) (transfer none): the tabstops
  */
 
-PangoTabArray *
+GdkTextTabArray *
 gtk_entry_get_tabs (GtkEntry *entry)
 {
   GtkEntryPrivate *priv = gtk_entry_get_instance_private (entry);

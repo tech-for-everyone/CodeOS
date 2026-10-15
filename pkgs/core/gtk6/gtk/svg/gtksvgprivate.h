@@ -123,7 +123,7 @@ struct _GtkSvg
 
   GHashTable *images;
 
-  PangoFontMap *fontmap;
+  GdkTextFontMap *fontmap;
   GPtrArray *font_files;
 
   GskRenderNode *node;

@@ -1530,11 +1530,11 @@ gtk_text_iter_get_attributes (const GtkTextIter  *iter,
  *
  * Returns: (transfer full): language in effect at @iter
  */
-PangoLanguage *
+GdkTextLanguage *
 gtk_text_iter_get_language (const GtkTextIter *iter)
 {
   GtkTextAttributes *values;
-  PangoLanguage *retval;
+  GdkTextLanguage *retval;
 
   values = gtk_text_attributes_new ();
 
@@ -2917,13 +2917,13 @@ gtk_text_iter_backward_visible_lines (GtkTextIter *iter,
     }
 }
 
-typedef gboolean (* FindLogAttrFunc) (const PangoLogAttr *attrs,
+typedef gboolean (* FindLogAttrFunc) (const GdkTextLogAttr *attrs,
                                       int                 offset,
                                       int                 len,
                                       int                *found_offset,
                                       gboolean            already_moved_initially);
 
-typedef gboolean (* TestLogAttrFunc) (const PangoLogAttr *attrs,
+typedef gboolean (* TestLogAttrFunc) (const GdkTextLogAttr *attrs,
                                       int                 offset,
                                       int                 min_offset,
                                       int                 len);
@@ -2931,7 +2931,7 @@ typedef gboolean (* TestLogAttrFunc) (const PangoLogAttr *attrs,
 /* Word funcs */
 
 static gboolean
-find_word_end_func (const PangoLogAttr *attrs,
+find_word_end_func (const GdkTextLogAttr *attrs,
                     int                 offset,
                     int                 len,
                     int                *found_offset,
@@ -2956,7 +2956,7 @@ find_word_end_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-is_word_end_func (const PangoLogAttr *attrs,
+is_word_end_func (const GdkTextLogAttr *attrs,
                   int                 offset,
                   int                 min_offset,
                   int                 len)
@@ -2965,7 +2965,7 @@ is_word_end_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-find_word_start_func (const PangoLogAttr *attrs,
+find_word_start_func (const GdkTextLogAttr *attrs,
                       int                 offset,
                       int                 len,
                       int                *found_offset,
@@ -2990,7 +2990,7 @@ find_word_start_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-is_word_start_func (const PangoLogAttr *attrs,
+is_word_start_func (const GdkTextLogAttr *attrs,
                     int                 offset,
                     int                 min_offset,
                     int                 len)
@@ -2999,7 +2999,7 @@ is_word_start_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-inside_word_func (const PangoLogAttr *attrs,
+inside_word_func (const GdkTextLogAttr *attrs,
                   int                 offset,
                   int                 min_offset,
                   int                 len)
@@ -3018,7 +3018,7 @@ inside_word_func (const PangoLogAttr *attrs,
 /* Sentence funcs */
 
 static gboolean
-find_sentence_end_func (const PangoLogAttr *attrs,
+find_sentence_end_func (const GdkTextLogAttr *attrs,
                         int                 offset,
                         int                 len,
                         int                *found_offset,
@@ -3043,7 +3043,7 @@ find_sentence_end_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-is_sentence_end_func (const PangoLogAttr *attrs,
+is_sentence_end_func (const GdkTextLogAttr *attrs,
                       int                 offset,
                       int                 min_offset,
                       int                 len)
@@ -3052,7 +3052,7 @@ is_sentence_end_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-find_sentence_start_func (const PangoLogAttr *attrs,
+find_sentence_start_func (const GdkTextLogAttr *attrs,
                           int                 offset,
                           int                 len,
                           int                *found_offset,
@@ -3077,7 +3077,7 @@ find_sentence_start_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-is_sentence_start_func (const PangoLogAttr *attrs,
+is_sentence_start_func (const GdkTextLogAttr *attrs,
                         int                 offset,
                         int                 min_offset,
                         int                 len)
@@ -3086,7 +3086,7 @@ is_sentence_start_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-inside_sentence_func (const PangoLogAttr *attrs,
+inside_sentence_func (const GdkTextLogAttr *attrs,
                       int                 offset,
                       int                 min_offset,
                       int                 len)
@@ -3107,7 +3107,7 @@ test_log_attrs (const GtkTextIter *iter,
                 TestLogAttrFunc    func)
 {
   int char_len;
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int offset;
 
   g_return_val_if_fail (iter != NULL, FALSE);
@@ -3129,7 +3129,7 @@ find_line_log_attrs (const GtkTextIter *iter,
                      gboolean           already_moved_initially)
 {
   int char_len;
-  const PangoLogAttr *attrs;
+  const GdkTextLogAttr *attrs;
   int offset;
 
   g_return_val_if_fail (iter != NULL, FALSE);
@@ -3280,7 +3280,7 @@ move_multiple_steps (GtkTextIter *iter,
  * If @iter is currently on a word end, moves forward to the
  * next one after that.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3300,7 +3300,7 @@ gtk_text_iter_forward_word_end (GtkTextIter *iter)
  * If @iter is currently on a word start, moves backward to the
  * next one after that.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3360,7 +3360,7 @@ gtk_text_iter_backward_word_starts (GtkTextIter      *iter,
  * If @iter is currently on a word end, moves forward to the
  * next one after that.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3380,7 +3380,7 @@ gtk_text_iter_forward_visible_word_end (GtkTextIter *iter)
  * If @iter is currently on a word start, moves backward to the
  * next one after that.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3433,7 +3433,7 @@ gtk_text_iter_backward_visible_word_starts (GtkTextIter *iter,
  *
  * Determines whether @iter begins a natural-language word.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Returns: %TRUE if @iter is at the start of a word
@@ -3450,7 +3450,7 @@ gtk_text_iter_starts_word (const GtkTextIter *iter)
  *
  * Determines whether @iter ends a natural-language word.
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Returns: %TRUE if @iter is at the end of a word
@@ -3468,7 +3468,7 @@ gtk_text_iter_ends_word (const GtkTextIter *iter)
  * Determines whether the character pointed by @iter is part of a
  * natural-language word (as opposed to say inside some whitespace).
  *
- * Word breaks are determined by Pango and should be correct
+ * Word breaks are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Note that if [method@Gtk.TextIter.starts_word] returns %TRUE,
@@ -3489,7 +3489,7 @@ gtk_text_iter_inside_word (const GtkTextIter *iter)
  *
  * Determines whether @iter begins a sentence.
  *
- * Sentence boundaries are determined by Pango and
+ * Sentence boundaries are determined by GdkText and
  * should be correct for nearly any language.
  *
  * Returns: %TRUE if @iter is at the start of a sentence.
@@ -3506,7 +3506,7 @@ gtk_text_iter_starts_sentence (const GtkTextIter *iter)
  *
  * Determines whether @iter ends a sentence.
  *
- * Sentence boundaries are determined by Pango and should
+ * Sentence boundaries are determined by GdkText and should
  * be correct for nearly any language.
  *
  * Returns: %TRUE if @iter is at the end of a sentence.
@@ -3525,7 +3525,7 @@ gtk_text_iter_ends_sentence (const GtkTextIter *iter)
  * between two sentences, e.g. after a period and before the first
  * letter of the next sentence).
  *
- * Sentence boundaries are determined by Pango and should be correct
+ * Sentence boundaries are determined by GdkText and should be correct
  * for nearly any language.
  *
  * Returns: %TRUE if @iter is inside a sentence.
@@ -3545,7 +3545,7 @@ gtk_text_iter_inside_sentence (const GtkTextIter *iter)
  * If @iter is at the end of a sentence, moves to the next
  * end of sentence.
  *
- * Sentence boundaries are determined by Pango and should
+ * Sentence boundaries are determined by GdkText and should
  * be correct for nearly any language.
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3565,7 +3565,7 @@ gtk_text_iter_forward_sentence_end (GtkTextIter *iter)
  * If @iter is already at the start of a sentence, moves backward
  * to the next one.
  *
- * Sentence boundaries are determined by Pango and should
+ * Sentence boundaries are determined by GdkText and should
  * be correct for nearly any language.
  *
  * Returns: %TRUE if @iter moved and is not the end iterator
@@ -3620,7 +3620,7 @@ gtk_text_iter_backward_sentence_starts (GtkTextIter *iter,
 }
 
 static gboolean
-find_forward_cursor_pos_func (const PangoLogAttr *attrs,
+find_forward_cursor_pos_func (const GdkTextLogAttr *attrs,
                               int                 offset,
                               int                 len,
                               int                *found_offset,
@@ -3644,7 +3644,7 @@ find_forward_cursor_pos_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-find_backward_cursor_pos_func (const PangoLogAttr *attrs,
+find_backward_cursor_pos_func (const GdkTextLogAttr *attrs,
                                int                 offset,
                                int                 len,
                                int                *found_offset,
@@ -3668,7 +3668,7 @@ find_backward_cursor_pos_func (const PangoLogAttr *attrs,
 }
 
 static gboolean
-is_cursor_pos_func (const PangoLogAttr *attrs,
+is_cursor_pos_func (const GdkTextLogAttr *attrs,
                     int           offset,
                     int           min_offset,
                     int           len)
@@ -3693,7 +3693,7 @@ is_cursor_pos_func (const PangoLogAttr *attrs,
  * the letter then a "combining mark" that causes the accent to be
  * rendered; so the cursor can’t go between those two characters.
  *
- * See also the [struct@Pango.LogAttr] struct and the [func@Pango.break]
+ * See also the [struct@GdkText.LogAttr] struct and the [func@GdkText.break]
  * function.
  *
  * Returns: %TRUE if we moved and the new position is dereferenceable
@@ -3837,7 +3837,7 @@ gtk_text_iter_backward_visible_cursor_positions (GtkTextIter *iter,
  * Determine if @iter is at a cursor position.
  *
  * See [method@Gtk.TextIter.forward_cursor_position] or
- * [struct@Pango.LogAttr] or [func@Pango.break] for details
+ * [struct@GdkText.LogAttr] or [func@GdkText.break] for details
  * on what a cursor position is.
  *
  * Returns: %TRUE if the cursor can be placed at @iter

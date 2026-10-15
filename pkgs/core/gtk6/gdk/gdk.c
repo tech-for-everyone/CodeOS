@@ -663,7 +663,7 @@ gdk_display_should_use_portal (GdkDisplay *display,
   return check_portal_interface (portal_interface, min_version);
 }
 
-PangoDirection
+GdkTextDirection
 gdk_unichar_direction (gunichar ch)
 {
   FriBidiCharType fribidi_ch_type;
@@ -673,21 +673,21 @@ gdk_unichar_direction (gunichar ch)
   fribidi_ch_type = fribidi_get_bidi_type (ch);
 
   if (!FRIBIDI_IS_STRONG (fribidi_ch_type))
-    return PANGO_DIRECTION_NEUTRAL;
+    return GDK_TEXT_DIRECTION_NEUTRAL;
   else if (FRIBIDI_IS_RTL (fribidi_ch_type))
-    return PANGO_DIRECTION_RTL;
+    return GDK_TEXT_DIRECTION_RTL;
   else
-    return PANGO_DIRECTION_LTR;
+    return GDK_TEXT_DIRECTION_LTR;
 }
 
-PangoDirection
+GdkTextDirection
 gdk_find_base_dir (const char *text,
                    int          length)
 {
-  PangoDirection dir = PANGO_DIRECTION_NEUTRAL;
+  GdkTextDirection dir = GDK_TEXT_DIRECTION_NEUTRAL;
   const char *p;
 
-  g_return_val_if_fail (text != NULL || length == 0, PANGO_DIRECTION_NEUTRAL);
+  g_return_val_if_fail (text != NULL || length == 0, GDK_TEXT_DIRECTION_NEUTRAL);
 
   p = text;
   while ((length < 0 || p < text + length) && *p)
@@ -696,7 +696,7 @@ gdk_find_base_dir (const char *text,
 
       dir = gdk_unichar_direction (wc);
 
-      if (dir != PANGO_DIRECTION_NEUTRAL)
+      if (dir != GDK_TEXT_DIRECTION_NEUTRAL)
         break;
 
       p = g_utf8_next_char (p);

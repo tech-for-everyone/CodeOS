@@ -30,17 +30,17 @@ G_DECLARE_FINAL_TYPE (GtkFontFilter, gtk_font_filter,
 GtkFilter *        _gtk_font_filter_new                    (void);
 
 void               _gtk_font_filter_set_pango_context      (GtkFontFilter *self,
-                                                            PangoContext  *context);
+                                                            GdkTextContext  *context);
 
 gboolean           _gtk_font_filter_get_monospace          (GtkFontFilter *self);
 
 void               _gtk_font_filter_set_monospace          (GtkFontFilter *self,
                                                             gboolean       monospace);
 
-PangoLanguage *    _gtk_font_filter_get_language           (GtkFontFilter *self);
+GdkTextLanguage *    _gtk_font_filter_get_language           (GtkFontFilter *self);
 
 void               _gtk_font_filter_set_language           (GtkFontFilter *self,
-                                                            PangoLanguage *language);
+                                                            GdkTextLanguage *language);
 
 G_END_DECLS
 

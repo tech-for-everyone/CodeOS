@@ -327,10 +327,10 @@ gboolean                gtk_css_style_print                     (GtkCssStyle    
                                                                  guint                   indent,
                                                                  gboolean                skip_initial);
 
-PangoTextTransform      gtk_css_style_get_pango_text_transform  (GtkCssStyle            *style);
+GdkTextTextTransform      gtk_css_style_get_pango_text_transform  (GtkCssStyle            *style);
 char *                  gtk_css_style_compute_font_features     (GtkCssStyle            *style);
-PangoAttrList *         gtk_css_style_get_pango_attributes      (GtkCssStyle            *style);
-PangoFontDescription *  gtk_css_style_get_pango_font            (GtkCssStyle            *style);
+GdkTextAttrList *         gtk_css_style_get_pango_attributes      (GtkCssStyle            *style);
+GdkTextFontDescription *  gtk_css_style_get_pango_font            (GtkCssStyle            *style);
 
 void                    gtk_css_style_lookup_symbolic_colors    (GtkCssStyle            *style,
                                                                  GdkRGBA                 color_out[5]);

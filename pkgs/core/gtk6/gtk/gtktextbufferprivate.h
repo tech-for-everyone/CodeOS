@@ -26,7 +26,7 @@ void            _gtk_text_buffer_spew                  (GtkTextBuffer      *buff
 
 GtkTextBTree*   _gtk_text_buffer_get_btree             (GtkTextBuffer      *buffer);
 
-const PangoLogAttr* _gtk_text_buffer_get_line_log_attrs (GtkTextBuffer     *buffer,
+const GdkTextLogAttr* _gtk_text_buffer_get_line_log_attrs (GtkTextBuffer     *buffer,
                                                          const GtkTextIter *anywhere_in_line,
                                                          int               *char_len);
 

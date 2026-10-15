@@ -917,19 +917,19 @@ _gtk_css_style_property_init_properties (void)
                                           GTK_STYLE_PROPERTY_INHERIT,
                                           GTK_CSS_AFFECTS_TEXT_SIZE,
                                           font_style_parse,
-                                          _gtk_css_font_style_value_new (PANGO_STYLE_NORMAL));
+                                          _gtk_css_font_style_value_new (GDK_TEXT_STYLE_NORMAL));
   gtk_css_style_property_register        ("font-weight",
                                           GTK_CSS_PROPERTY_FONT_WEIGHT,
                                           GTK_STYLE_PROPERTY_INHERIT | GTK_STYLE_PROPERTY_ANIMATED,
                                           GTK_CSS_AFFECTS_TEXT_SIZE,
                                           font_weight_parse,
-                                          gtk_css_number_value_new (PANGO_WEIGHT_NORMAL, GTK_CSS_NUMBER));
+                                          gtk_css_number_value_new (GDK_TEXT_WEIGHT_NORMAL, GTK_CSS_NUMBER));
   gtk_css_style_property_register        ("font-width",
                                           GTK_CSS_PROPERTY_FONT_WIDTH,
                                           GTK_STYLE_PROPERTY_INHERIT,
                                           GTK_CSS_AFFECTS_TEXT_SIZE,
                                           font_width_parse,
-                                          _gtk_css_font_width_value_new (PANGO_WIDTH_NORMAL));
+                                          _gtk_css_font_width_value_new (GDK_TEXT_WIDTH_NORMAL));
 
   gtk_css_style_property_register        ("letter-spacing",
                                           GTK_CSS_PROPERTY_LETTER_SPACING,
@@ -1317,7 +1317,7 @@ _gtk_css_style_property_init_properties (void)
                                           GTK_STYLE_PROPERTY_INHERIT | GTK_STYLE_PROPERTY_ANIMATED,
                                           GTK_CSS_AFFECTS_ICON_REDRAW_SYMBOLIC,
                                           icon_weight_parse,
-                                          gtk_css_number_value_new (PANGO_WEIGHT_NORMAL, GTK_CSS_NUMBER));
+                                          gtk_css_number_value_new (GDK_TEXT_WEIGHT_NORMAL, GTK_CSS_NUMBER));
   gtk_css_style_property_register        ("border-spacing",
                                           GTK_CSS_PROPERTY_BORDER_SPACING,
                                           GTK_STYLE_PROPERTY_ANIMATED,

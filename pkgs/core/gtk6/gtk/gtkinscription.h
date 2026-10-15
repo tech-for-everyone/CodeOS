@@ -60,10 +60,10 @@ GDK_AVAILABLE_IN_4_8
 void                    gtk_inscription_set_text                (GtkInscription         *self,
                                                                  const char             *text);
 GDK_AVAILABLE_IN_4_8
-PangoAttrList *         gtk_inscription_get_attributes          (GtkInscription         *self);
+GdkTextAttrList *         gtk_inscription_get_attributes          (GtkInscription         *self);
 GDK_AVAILABLE_IN_4_8
 void                    gtk_inscription_set_attributes          (GtkInscription         *self,
-                                                                 PangoAttrList          *attrs);
+                                                                 GdkTextAttrList          *attrs);
 GDK_AVAILABLE_IN_4_8
 void                    gtk_inscription_set_markup              (GtkInscription         *self,
                                                                  const char             *markup);
@@ -73,10 +73,10 @@ GDK_AVAILABLE_IN_4_8
 void                    gtk_inscription_set_text_overflow       (GtkInscription         *self,
                                                                  GtkInscriptionOverflow  overflow);
 GDK_AVAILABLE_IN_4_8
-PangoWrapMode           gtk_inscription_get_wrap_mode           (GtkInscription         *self);
+GdkTextWrapMode           gtk_inscription_get_wrap_mode           (GtkInscription         *self);
 GDK_AVAILABLE_IN_4_8
 void                    gtk_inscription_set_wrap_mode           (GtkInscription         *self,
-                                                                 PangoWrapMode           wrap_mode);
+                                                                 GdkTextWrapMode           wrap_mode);
 
 GDK_AVAILABLE_IN_4_8
 guint                   gtk_inscription_get_min_chars           (GtkInscription         *self);

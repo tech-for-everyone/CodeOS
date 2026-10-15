@@ -90,7 +90,7 @@ GDK_AVAILABLE_IN_4_22
 void              gtk_disable_portal_interfaces (const char **portal_interfaces);
 
 GDK_AVAILABLE_IN_ALL
-PangoLanguage *   gtk_get_default_language (void);
+GdkTextLanguage *   gtk_get_default_language (void);
 GDK_AVAILABLE_IN_ALL
 GtkTextDirection  gtk_get_locale_direction (void);
 

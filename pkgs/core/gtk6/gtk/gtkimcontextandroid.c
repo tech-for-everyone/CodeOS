@@ -393,7 +393,7 @@ gtk_im_context_android_set_client_widget (GtkIMContext *context,
 static void
 gtk_im_context_android_get_preedit_string (GtkIMContext   *context,
                                            gchar         **string,
-                                           PangoAttrList **attrs,
+                                           GdkTextAttrList **attrs,
                                            gint           *cursor_pos)
 {
   GtkIMContextAndroid *self = GTK_IM_CONTEXT_ANDROID (context);
@@ -405,19 +405,19 @@ gtk_im_context_android_get_preedit_string (GtkIMContext   *context,
     *cursor_pos = self->preedit_cursor >= 0 ? self->preedit_cursor : g_utf8_strlen (utf8, -1);
   if (attrs)
     {
-      *attrs = pango_attr_list_new ();
+      *attrs = gdk_text_attr_list_new ();
       if (utf8 && *utf8)
         {
           gsize len = strlen (utf8);
-          PangoAttribute *attr;
-          attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+          GdkTextAttribute *attr;
+          attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
           attr->start_index = 0;
           attr->end_index = len;
-          pango_attr_list_insert (*attrs, attr);
-          attr = pango_attr_fallback_new (TRUE);
+          gdk_text_attr_list_insert (*attrs, attr);
+          attr = gdk_text_attr_fallback_new (TRUE);
           attr->start_index = 0;
           attr->end_index = len;
-          pango_attr_list_insert (*attrs, attr);
+          gdk_text_attr_list_insert (*attrs, attr);
         }
     }
   if (string)

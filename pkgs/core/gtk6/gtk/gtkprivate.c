@@ -102,7 +102,7 @@ _gtk_get_lc_ctype (void)
    * Control Panel. Setting these env vars won't have any affect on
    * locale-dependent C library functions like ctime(). But just for
    * kicks, do obey LC_ALL, LC_CTYPE and LANG in GTK. (This also makes
-   * it easier to test GTK and Pango in various default languages, you
+   * it easier to test GTK and GdkText in various default languages, you
    * don't have to clickety-click in the Control Panel, you can simply
    * start the program with LC_ALL=something on the command line.)
    */

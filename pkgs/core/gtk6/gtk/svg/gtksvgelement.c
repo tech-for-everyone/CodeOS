@@ -359,7 +359,7 @@ svg_element_conditionally_excluded (SvgElement *element,
 {
   SvgValue *required_extensions = element->current[SVG_PROPERTY_REQUIRED_EXTENSIONS];
   SvgValue *system_language = element->current[SVG_PROPERTY_SYSTEM_LANGUAGE];
-  PangoLanguage *lang;
+  GdkTextLanguage *lang;
 
   if (svg_value_equal (required_extensions, svg_string_list_new (NULL)) &&
       svg_value_equal (system_language, svg_language_new_list (0, NULL)))
@@ -384,8 +384,8 @@ svg_element_conditionally_excluded (SvgElement *element,
       if (lang == svg_language_get (system_language, i))
         return FALSE;
 
-      l1 = pango_language_to_string (lang);
-      l2 = pango_language_to_string (svg_language_get (system_language, i));
+      l1 = gdk_text_language_to_string (lang);
+      l2 = gdk_text_language_to_string (svg_language_get (system_language, i));
 
       for (unsigned int j = 0; l1[j]; j++)
         {
@@ -1814,7 +1814,7 @@ svg_element_get_classes (SvgElement *element)
 
 void
 svg_element_add_title (SvgElement    *element,
-                       PangoLanguage *lang,
+                       GdkTextLanguage *lang,
                        const char    *title)
 {
   LangString l;
@@ -1834,7 +1834,7 @@ svg_element_get_title (SvgElement *element)
 
 void
 svg_element_add_description (SvgElement    *element,
-                             PangoLanguage *lang,
+                             GdkTextLanguage *lang,
                              const char    *description)
 {
   LangString l;
@@ -1855,7 +1855,7 @@ svg_element_get_description (SvgElement *element)
 static const char *
 pick_best_lang_string (GArray        *ls,
                        const char    *type,
-                       PangoLanguage *lang)
+                       GdkTextLanguage *lang)
 {
   const char *string = NULL;
 
@@ -1881,7 +1881,7 @@ pick_best_lang_string (GArray        *ls,
 
 void
 svg_element_set_language (SvgElement    *element,
-                          PangoLanguage *lang)
+                          GdkTextLanguage *lang)
 {
   g_set_str (&element->title, pick_best_lang_string (element->lang_strings, "title", lang));
   g_set_str (&element->description, pick_best_lang_string (element->lang_strings, "desc", lang));

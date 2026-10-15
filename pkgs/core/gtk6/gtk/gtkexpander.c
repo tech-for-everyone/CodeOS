@@ -335,7 +335,7 @@ gtk_expander_class_init (GtkExpanderClass *klass)
   /**
    * GtkExpander:use-markup:
    *
-   * Whether the text in the label is Pango markup.
+   * Whether the text in the label is GdkText markup.
    */
   props[PROP_USE_MARKUP] = g_param_spec_boolean ("use-markup", NULL, NULL,
                                                  FALSE,
@@ -986,7 +986,7 @@ gtk_expander_set_label (GtkExpander *expander,
  * Fetches the text from a label widget.
  *
  * This is including any embedded underlines indicating mnemonics and
- * Pango markup, as set by [method@Gtk.Expander.set_label]. If the label
+ * GdkText markup, as set by [method@Gtk.Expander.set_label]. If the label
  * text has not been set the return value will be %NULL. This will be the
  * case if you create an empty button with gtk_button_new() to use as a
  * container.
@@ -1055,7 +1055,7 @@ gtk_expander_get_use_underline (GtkExpander *expander)
  * @expander: a `GtkExpander`
  * @use_markup: %TRUE if the label’s text should be parsed for markup
  *
- * Sets whether the text of the label contains Pango markup.
+ * Sets whether the text of the label contains GdkText markup.
  */
 void
 gtk_expander_set_use_markup (GtkExpander *expander,
@@ -1080,7 +1080,7 @@ gtk_expander_set_use_markup (GtkExpander *expander,
  * gtk_expander_get_use_markup:
  * @expander: a `GtkExpander`
  *
- * Returns whether the label’s text is interpreted as Pango markup.
+ * Returns whether the label’s text is interpreted as GdkText markup.
  *
  * Returns: %TRUE if the label’s text will be parsed for markup
  */

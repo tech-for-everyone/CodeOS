@@ -42,16 +42,16 @@ GtkCssFontSize  _gtk_css_font_size_value_get          (const GtkCssValue *value)
 double          gtk_css_font_size_get_default_px      (GtkStyleProvider  *provider,
                                                        GtkCssStyle       *style);
 
-GtkCssValue *   _gtk_css_font_style_value_new         (PangoStyle         style);
+GtkCssValue *   _gtk_css_font_style_value_new         (GdkTextStyle         style);
 GtkCssValue *   _gtk_css_font_style_value_try_parse   (GtkCssParser      *parser);
-PangoStyle      _gtk_css_font_style_value_get         (const GtkCssValue *value);
+GdkTextStyle      _gtk_css_font_style_value_get         (const GtkCssValue *value);
 
 GtkCssValue *   gtk_css_font_weight_value_try_parse   (GtkCssParser      *parser);
-PangoWeight     gtk_css_font_weight_value_get         (const GtkCssValue *value);
+GdkTextWeight     gtk_css_font_weight_value_get         (const GtkCssValue *value);
 
-GtkCssValue *   _gtk_css_font_width_value_new         (PangoWidth         width);
+GtkCssValue *   _gtk_css_font_width_value_new         (GdkTextWidth         width);
 GtkCssValue *   _gtk_css_font_width_value_try_parse   (GtkCssParser      *parser);
-PangoWidth      _gtk_css_font_width_value_get         (const GtkCssValue *value);
+GdkTextWidth      _gtk_css_font_width_value_get         (const GtkCssValue *value);
 
 GtkCssValue *         _gtk_css_text_decoration_line_value_new     (GtkTextDecorationLine  line);
 GtkTextDecorationLine _gtk_css_text_decoration_line_try_parse_one (GtkCssParser          *parser,

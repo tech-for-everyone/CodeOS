@@ -794,10 +794,10 @@ static void
 node_to_pango_attrs (GtkIMContextWayland        *context_wayland,
                      GtkIMContextPreeditSegment *segment,
                      GtkCssNode                 *node,
-                     PangoAttrList              *attrs)
+                     GdkTextAttrList              *attrs)
 {
-  PangoAttrList *node_attrs;
-  PangoAttribute *attr;
+  GdkTextAttrList *node_attrs;
+  GdkTextAttribute *attr;
   GtkCssStyle *style;
   const GdkRGBA *color;
 
@@ -806,7 +806,7 @@ node_to_pango_attrs (GtkIMContextWayland        *context_wayland,
     {
       GSList *attr_list, *l;
 
-      attr_list = pango_attr_list_get_attributes (node_attrs);
+      attr_list = gdk_text_attr_list_get_attributes (node_attrs);
 
       /* Change start/end indexes and move to the overall list */
       for (l = attr_list; l; l = l->next)
@@ -814,10 +814,10 @@ node_to_pango_attrs (GtkIMContextWayland        *context_wayland,
           attr = l->data;
           attr->start_index = segment->start_idx;
           attr->end_index = segment->end_idx;
-          pango_attr_list_insert (attrs, attr);
+          gdk_text_attr_list_insert (attrs, attr);
         }
 
-      pango_attr_list_unref (node_attrs);
+      gdk_text_attr_list_unref (node_attrs);
       g_slist_free (attr_list);
     }
 
@@ -828,19 +828,19 @@ node_to_pango_attrs (GtkIMContextWayland        *context_wayland,
 
   if (color->alpha > 0)
     {
-      attr = pango_attr_foreground_new (CLAMP (color->red * 65535. + 0.5, 0, 65535),
+      attr = gdk_text_attr_foreground_new (CLAMP (color->red * 65535. + 0.5, 0, 65535),
                                         CLAMP (color->green * 65535. + 0.5, 0, 65535),
                                         CLAMP (color->blue * 65535. + 0.5, 0, 65535));
       attr->start_index = segment->start_idx;
       attr->end_index = segment->end_idx;
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
 
       if (color->alpha < 1)
         {
-          attr = pango_attr_foreground_alpha_new (CLAMP (color->alpha * 65535. + 0.5, 0, 65535));
+          attr = gdk_text_attr_foreground_alpha_new (CLAMP (color->alpha * 65535. + 0.5, 0, 65535));
           attr->start_index = segment->start_idx;
           attr->end_index = segment->end_idx;
-          pango_attr_list_insert (attrs, attr);
+          gdk_text_attr_list_insert (attrs, attr);
         }
     }
 
@@ -849,38 +849,38 @@ node_to_pango_attrs (GtkIMContextWayland        *context_wayland,
 
   if (color->alpha > 0)
     {
-      attr = pango_attr_background_new (CLAMP (color->red * 65535. + 0.5, 0, 65535),
+      attr = gdk_text_attr_background_new (CLAMP (color->red * 65535. + 0.5, 0, 65535),
                                         CLAMP (color->green * 65535. + 0.5, 0, 65535),
                                         CLAMP (color->blue * 65535. + 0.5, 0, 65535));
       attr->start_index = segment->start_idx;
       attr->end_index = segment->end_idx;
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
 
       if (color->alpha < 1)
         {
-          attr = pango_attr_background_alpha_new (CLAMP (color->alpha * 65535. + 0.5, 0, 65535));
+          attr = gdk_text_attr_background_alpha_new (CLAMP (color->alpha * 65535. + 0.5, 0, 65535));
           attr->start_index = segment->start_idx;
           attr->end_index = segment->end_idx;
-          pango_attr_list_insert (attrs, attr);
+          gdk_text_attr_list_insert (attrs, attr);
         }
     }
 }
 
-static PangoAttrList *
+static GdkTextAttrList *
 convert_style_hints_to_pango (GtkIMContextWayland *context_wayland,
                               const char          *text)
 {
-  PangoAttrList *attrs;
-  PangoAttribute *attr;
+  GdkTextAttrList *attrs;
+  GdkTextAttribute *attr;
   unsigned int i;
 
-  attrs = pango_attr_list_new ();
+  attrs = gdk_text_attr_list_new ();
 
   /* enable fallback, since IBus will send us things like ⎄ */
-  attr = pango_attr_fallback_new (TRUE);
+  attr = gdk_text_attr_fallback_new (TRUE);
   attr->start_index = 0;
   attr->end_index = strlen (text);
-  pango_attr_list_insert (attrs, attr);
+  gdk_text_attr_list_insert (attrs, attr);
 
   if (!context_wayland->current_preedit.style_hints)
     {
@@ -890,10 +890,10 @@ convert_style_hints_to_pango (GtkIMContextWayland *context_wayland,
        */
       if (strlen (text) > 0)
         {
-          attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+          attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
           attr->start_index = 0;
           attr->end_index = strlen (text);
-          pango_attr_list_insert (attrs, attr);
+          gdk_text_attr_list_insert (attrs, attr);
         }
       return attrs;
     }
@@ -917,7 +917,7 @@ convert_style_hints_to_pango (GtkIMContextWayland *context_wayland,
 static void
 gtk_im_context_wayland_get_preedit_string (GtkIMContext   *context,
                                            char          **str,
-                                           PangoAttrList **attrs,
+                                           GdkTextAttrList **attrs,
                                            int            *cursor_pos)
 {
   GtkIMContextWayland *context_wayland = GTK_IM_CONTEXT_WAYLAND (context);

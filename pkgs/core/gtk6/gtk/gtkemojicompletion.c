@@ -428,16 +428,16 @@ add_emoji_variation (GtkWidget *box,
 {
   GtkWidget *child;
   GtkWidget *label;
-  PangoAttrList *attrs;
+  GdkTextAttrList *attrs;
   char *text;
 
   text = gtk_emoji_data_dup_text (emoji_data, modifier);
 
   label = gtk_label_new (text);
-  attrs = pango_attr_list_new ();
-  pango_attr_list_insert (attrs, pango_attr_scale_new (PANGO_SCALE_X_LARGE));
+  attrs = gdk_text_attr_list_new ();
+  gdk_text_attr_list_insert (attrs, gdk_text_attr_scale_new (GDK_TEXT_SCALE_X_LARGE));
   gtk_label_set_attributes (GTK_LABEL (label), attrs);
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
 
   child = g_object_new (GTK_TYPE_FLOW_BOX_CHILD, "css-name", "emoji", NULL);
   gtk_flow_box_child_set_child (GTK_FLOW_BOX_CHILD (child), label);
@@ -454,7 +454,7 @@ add_emoji (GtkWidget          *list,
   GtkWidget *child;
   GtkWidget *label;
   GtkWidget *box;
-  PangoAttrList *attrs;
+  GdkTextAttrList *attrs;
   char *text;
   const char *name;
   GtkWidget *stack;
@@ -463,10 +463,10 @@ add_emoji (GtkWidget          *list,
   text = gtk_emoji_data_dup_text (emoji_data, 0);
 
   label = gtk_label_new (text);
-  attrs = pango_attr_list_new ();
-  pango_attr_list_insert (attrs, pango_attr_scale_new (PANGO_SCALE_X_LARGE));
+  attrs = gdk_text_attr_list_new ();
+  gdk_text_attr_list_insert (attrs, gdk_text_attr_scale_new (GDK_TEXT_SCALE_X_LARGE));
   gtk_label_set_attributes (GTK_LABEL (label), attrs);
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
   gtk_widget_add_css_class (label, "emoji");
 
   child = g_object_new (GTK_TYPE_LIST_BOX_ROW, "css-name", "emoji-completion-row", NULL);

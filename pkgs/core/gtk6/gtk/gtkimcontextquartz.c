@@ -151,7 +151,7 @@ on_widget_unrealize (GtkWidget          *widget,
 static void
 quartz_get_preedit_string (GtkIMContext *context,
                            char **str,
-                           PangoAttrList **attrs,
+                           GdkTextAttrList **attrs,
                            int *cursor_pos)
 {
   GtkIMContextQuartz *qc = GTK_IM_CONTEXT_QUARTZ (context);
@@ -163,12 +163,12 @@ quartz_get_preedit_string (GtkIMContext *context,
 
   if (attrs)
     {
-      *attrs = pango_attr_list_new ();
+      *attrs = gdk_text_attr_list_new ();
       int len = g_utf8_strlen (*str, -1);
       char *ch = *str;
       if (len > 0)
         {
-          PangoAttribute *attr;
+          GdkTextAttribute *attr;
           int i = 0;
           for (;;)
             {
@@ -177,9 +177,9 @@ quartz_get_preedit_string (GtkIMContext *context,
 
               if (i >= qc->cursor_index &&
 		  i < qc->cursor_index + qc->selected_len)
-                attr = pango_attr_underline_new (PANGO_UNDERLINE_DOUBLE);
+                attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_DOUBLE);
               else
-                attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+                attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
 
               attr->start_index = s - *str;
               if (!*ch)
@@ -187,7 +187,7 @@ quartz_get_preedit_string (GtkIMContext *context,
               else
                 attr->end_index = ch - *str;
 
-              pango_attr_list_change (*attrs, attr);
+              gdk_text_attr_list_change (*attrs, attr);
 
               if (!*ch)
                 break;

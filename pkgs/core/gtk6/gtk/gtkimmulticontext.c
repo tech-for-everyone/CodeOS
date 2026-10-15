@@ -67,7 +67,7 @@ static void     gtk_im_multicontext_set_client_widget  (GtkIMContext            
 							GtkWidget               *widget);
 static void     gtk_im_multicontext_get_preedit_string (GtkIMContext            *context,
 							char                   **str,
-							PangoAttrList          **attrs,
+							GdkTextAttrList          **attrs,
 							int                    *cursor_pos);
 static gboolean gtk_im_multicontext_filter_keypress    (GtkIMContext            *context,
 							GdkEvent                *event);
@@ -355,7 +355,7 @@ gtk_im_multicontext_set_client_widget (GtkIMContext *context,
 static void
 gtk_im_multicontext_get_preedit_string (GtkIMContext   *context,
 					char          **str,
-					PangoAttrList **attrs,
+					GdkTextAttrList **attrs,
 					int            *cursor_pos)
 {
   GtkIMMulticontext *multicontext = GTK_IM_MULTICONTEXT (context);
@@ -368,7 +368,7 @@ gtk_im_multicontext_get_preedit_string (GtkIMContext   *context,
       if (str)
 	*str = g_strdup ("");
       if (attrs)
-	*attrs = pango_attr_list_new ();
+	*attrs = gdk_text_attr_list_new ();
     }
 }
 

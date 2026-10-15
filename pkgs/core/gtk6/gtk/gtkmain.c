@@ -450,7 +450,7 @@ do_pre_parse_initialization (void)
     }
 
   /* Trigger fontconfig initialization early */
-  pango_cairo_font_map_get_default ();
+  gdk_text_cairo_font_map_get_default ();
 }
 
 static void
@@ -735,12 +735,12 @@ gtk_is_initialized (void)
 GtkTextDirection
 gtk_get_locale_direction (void)
 {
-  PangoLanguage *language;
-  const PangoScript *scripts;
+  GdkTextLanguage *language;
+  const GdkTextScript *scripts;
   int n_scripts;
 
   language = gtk_get_default_language ();
-  scripts = pango_language_get_scripts (language, &n_scripts);
+  scripts = gdk_text_language_get_scripts (language, &n_scripts);
 
   if (n_scripts > 0)
     {
@@ -771,7 +771,7 @@ gtk_get_locale_direction (void)
 /**
  * gtk_get_default_language:
  *
- * Returns the `PangoLanguage` for the default language
+ * Returns the `GdkTextLanguage` for the default language
  * currently in effect.
  *
  * Note that this can change over the life of an
@@ -781,15 +781,15 @@ gtk_get_locale_direction (void)
  * locale. It determines, for example, whether GTK uses
  * the right-to-left or left-to-right text direction.
  *
- * This function is equivalent to [func@Pango.Language.get_default].
+ * This function is equivalent to [func@GdkText.Language.get_default].
  * See that function for details.
  *
  * Returns: (transfer none): the default language
  */
-PangoLanguage *
+GdkTextLanguage *
 gtk_get_default_language (void)
 {
-  return pango_language_get_default ();
+  return gdk_text_language_get_default ();
 }
 
 /* }}} */

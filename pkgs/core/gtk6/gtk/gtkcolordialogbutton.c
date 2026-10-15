@@ -115,8 +115,8 @@ G_DEFINE_TYPE (GtkColorDialogButton, gtk_color_dialog_button, GTK_TYPE_WIDGET)
 static void
 gtk_color_dialog_button_init (GtkColorDialogButton *self)
 {
-  PangoLayout *layout;
-  PangoRectangle rect;
+  GdkTextLayout *layout;
+  GdkTextRectangle rect;
   GtkDragSource *source;
   GtkDropTarget *dest;
 
@@ -138,7 +138,7 @@ gtk_color_dialog_button_init (GtkColorDialogButton *self)
   gtk_widget_remove_css_class (self->swatch, "activatable");
 
   layout = gtk_widget_create_pango_layout (GTK_WIDGET (self), "Black");
-  pango_layout_get_pixel_extents (layout, NULL, &rect);
+  gdk_text_layout_get_pixel_extents (layout, NULL, &rect);
   g_object_unref (layout);
 
   gtk_widget_set_size_request (self->swatch, rect.width, rect.height);

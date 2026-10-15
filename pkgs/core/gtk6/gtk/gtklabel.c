@@ -136,22 +136,22 @@
  * The GtkLabel implementation of the GtkBuildable interface supports a
  * custom `<attributes>` element, which supports any number of `<attribute>`
  * elements. The `<attribute>` element has attributes named “name“, “value“,
- * “start“ and “end“ and allows you to specify [struct@Pango.Attribute]
+ * “start“ and “end“ and allows you to specify [struct@GdkText.Attribute]
  * values for this label.
  *
- * An example of a UI definition fragment specifying Pango attributes:
+ * An example of a UI definition fragment specifying GdkText attributes:
  *
  * ```xml
  * <object class="GtkLabel">
  *   <attributes>
- *     <attribute name="weight" value="PANGO_WEIGHT_BOLD"/>
+ *     <attribute name="weight" value="GDK_TEXT_WEIGHT_BOLD"/>
  *     <attribute name="background" value="red" start="5" end="10"/>
  *   </attributes>
  * </object>
  * ```
  *
  * The start and end attributes specify the range of characters to which the
- * Pango attribute applies. If start and end are not specified, the attribute is
+ * GdkText attribute applies. If start and end are not specified, the attribute is
  * applied to the whole text. Note that specifying ranges does not make much
  * sense with translatable attributes. Use markup embedded in the translatable
  * content instead.
@@ -212,8 +212,8 @@
  * gtk_label_set_markup (GTK_LABEL (label), "<small>Small text</small>");
  * ```
  *
- * (See the Pango manual for complete documentation] of available
- * tags, [func@Pango.parse_markup])
+ * (See the GdkText manual for complete documentation] of available
+ * tags, [func@GdkText.parse_markup])
  *
  * The markup passed to [method@Gtk.Label.set_markup] must be valid XML; for example,
  * literal `<`, `>` and `&` characters must be escaped as `&lt;`, `&gt;`, and `&amp;`.
@@ -221,13 +221,13 @@
  * [method@Gtk.Label.set_markup], you’ll want to escape it with
  * [func@GLib.markup_escape_text] or [func@GLib.markup_printf_escaped].
  *
- * Markup strings are just a convenient way to set the [struct@Pango.AttrList]
+ * Markup strings are just a convenient way to set the [struct@GdkText.AttrList]
  * on a label; [method@Gtk.Label.set_attributes] may be a simpler way to set
- * attributes in some cases. Be careful though; [struct@Pango.AttrList] tends
+ * attributes in some cases. Be careful though; [struct@GdkText.AttrList] tends
  * to cause internationalization problems, unless you’re applying attributes
  * to the entire string (i.e. unless you set the range of each attribute
  * to [0, `G_MAXINT`)). The reason is that specifying the `start_index` and
- * `end_index` for a [struct@Pango.Attribute] requires knowledge of the exact
+ * `end_index` for a [struct@GdkText.Attribute] requires knowledge of the exact
  * string being displayed, so translations will cause problems.
  *
  * ## Selectable labels
@@ -242,7 +242,7 @@
  * A label can contain any number of paragraphs, but will have
  * performance problems if it contains more than a small number.
  * Paragraphs are separated by newlines or other paragraph separators
- * understood by Pango.
+ * understood by GdkText.
  *
  * Labels can automatically wrap text if you call [method@Gtk.Label.set_wrap].
  *
@@ -262,7 +262,7 @@
  *
  * ## Links
  *
- * GTK supports markup for clickable hyperlinks in addition to regular Pango
+ * GTK supports markup for clickable hyperlinks in addition to regular GdkText
  * markup. The markup for links is borrowed from HTML, using the `<a>` tag
  * with “href“, “title“ and “class“ attributes. GTK renders links similar to
  * the way they appear in web browsers, with colored, underlined text. The
@@ -296,10 +296,10 @@ struct _GtkLabel
   GtkWidget *mnemonic_widget;
   GtkEventController *mnemonic_controller;
 
-  PangoAttrList *attrs;
-  PangoAttrList *markup_attrs;
-  PangoLayout   *layout;
-  PangoTabArray *tabs;
+  GdkTextAttrList *attrs;
+  GdkTextAttrList *markup_attrs;
+  GdkTextLayout   *layout;
+  GdkTextTabArray *tabs;
 
   GtkWidget *popup_menu;
   GMenuModel *extra_menu;
@@ -380,7 +380,7 @@ typedef struct
   gboolean visited; /* get set when the link is activated; this flag
                      * gets preserved over later set_markup() calls
                      */
-  int start;       /* position of the link in the PangoLayout */
+  int start;       /* position of the link in the GdkTextLayout */
   int end;
 } GtkLabelLink;
 
@@ -675,9 +675,9 @@ gtk_label_init (GtkLabel *self)
 
   self->jtype = GTK_JUSTIFY_LEFT;
   self->wrap = FALSE;
-  self->wrap_mode = PANGO_WRAP_WORD;
+  self->wrap_mode = GDK_TEXT_WRAP_WORD;
   self->natural_wrap_mode = GTK_NATURAL_WRAP_INHERIT;
-  self->ellipsize = PANGO_ELLIPSIZE_NONE;
+  self->ellipsize = GDK_TEXT_ELLIPSIZE_NONE;
 
   self->use_underline = FALSE;
   self->use_markup = FALSE;
@@ -693,9 +693,9 @@ gtk_label_init (GtkLabel *self)
   self->mnemonics_visible = FALSE;
 }
 
-static const GtkBuildableParser pango_parser =
+static const GtkBuildableParser gdk_text_parser =
 {
-  gtk_pango_attribute_start_element,
+  gtk_text_attribute_start_element,
 };
 
 static gboolean
@@ -712,14 +712,14 @@ gtk_label_buildable_custom_tag_start (GtkBuildable       *buildable,
 
   if (strcmp (tagname, "attributes") == 0)
     {
-      GtkPangoAttributeParserData *parser_data;
+      GtkTextAttributeParserData *parser_data;
 
       gtk_buildable_tag_deprecation_warning (buildable, builder, "attributes", "attributes");
 
-      parser_data = g_new0 (GtkPangoAttributeParserData, 1);
+      parser_data = g_new0 (GtkTextAttributeParserData, 1);
       parser_data->builder = g_object_ref (builder);
       parser_data->object = (GObject *) g_object_ref (buildable);
-      *parser = pango_parser;
+      *parser = gdk_text_parser;
       *data = parser_data;
       return TRUE;
     }
@@ -733,7 +733,7 @@ gtk_label_buildable_custom_finished (GtkBuildable *buildable,
                                      const char   *tagname,
                                      gpointer      user_data)
 {
-  GtkPangoAttributeParserData *data = user_data;
+  GtkTextAttributeParserData *data = user_data;
 
   buildable_parent_iface->custom_finished (buildable, builder, child,
                                            tagname, user_data);
@@ -743,7 +743,7 @@ gtk_label_buildable_custom_finished (GtkBuildable *buildable,
       if (data->attrs)
         {
           gtk_label_set_attributes (GTK_LABEL (buildable), data->attrs);
-          pango_attr_list_unref (data->attrs);
+          gdk_text_attr_list_unref (data->attrs);
         }
 
       g_object_unref (data->object);
@@ -843,15 +843,15 @@ gtk_label_state_flags_changed (GtkWidget     *widget,
 
 static void
 gtk_label_update_layout_attributes (GtkLabel      *self,
-                                    PangoAttrList *style_attrs)
+                                    GdkTextAttrList *style_attrs)
 {
   GtkWidget *widget = GTK_WIDGET (self);
   GtkCssStyle *style;
-  PangoAttrList *attrs;
+  GdkTextAttrList *attrs;
 
   if (self->layout == NULL)
     {
-      pango_attr_list_unref (style_attrs);
+      gdk_text_attr_list_unref (style_attrs);
       return;
     }
 
@@ -859,20 +859,20 @@ gtk_label_update_layout_attributes (GtkLabel      *self,
     {
       guint i;
 
-      attrs = pango_attr_list_new ();
+      attrs = gdk_text_attr_list_new ();
 
       for (i = 0; i < self->select_info->n_links; i++)
         {
           const GtkLabelLink *link = &self->select_info->links[i];
           const GdkRGBA *link_color;
-          PangoAttrList *link_attrs;
-          PangoAttribute *attr;
+          GdkTextAttrList *link_attrs;
+          GdkTextAttribute *attr;
 
           style = gtk_css_node_get_style (link->cssnode);
           link_attrs = gtk_css_style_get_pango_attributes (style);
           if (link_attrs)
             {
-              GSList *attributes = pango_attr_list_get_attributes (link_attrs);
+              GSList *attributes = gdk_text_attr_list_get_attributes (link_attrs);
               GSList *l;
               for (l = attributes; l; l = l->next)
                 {
@@ -880,31 +880,31 @@ gtk_label_update_layout_attributes (GtkLabel      *self,
 
                   attr->start_index = link->start;
                   attr->end_index = link->end;
-                  pango_attr_list_insert (attrs, attr);
+                  gdk_text_attr_list_insert (attrs, attr);
                 }
               g_slist_free (attributes);
             }
 
           link_color = gtk_css_color_value_get_rgba (style->used->color);
 
-          attr = pango_attr_foreground_new (CLAMP (link_color->red * 65535. + 0.5, 0, 65535),
+          attr = gdk_text_attr_foreground_new (CLAMP (link_color->red * 65535. + 0.5, 0, 65535),
                                             CLAMP (link_color->green * 65535. + 0.5, 0, 65535),
                                             CLAMP (link_color->blue * 65535. + 0.5, 0, 65535));
 
           attr->start_index = link->start;
           attr->end_index = link->end;
-          pango_attr_list_insert (attrs, attr);
+          gdk_text_attr_list_insert (attrs, attr);
 
           if (link_color->alpha < 0.999)
             {
-              attr = pango_attr_foreground_alpha_new (CLAMP (link_color->alpha * 65535. + 0.5, 0, 65535));
+              attr = gdk_text_attr_foreground_alpha_new (CLAMP (link_color->alpha * 65535. + 0.5, 0, 65535));
 
               attr->start_index = link->start;
               attr->end_index = link->end;
-              pango_attr_list_insert (attrs, attr);
+              gdk_text_attr_list_insert (attrs, attr);
             }
 
-          pango_attr_list_unref (link_attrs);
+          gdk_text_attr_list_unref (link_attrs);
         }
     }
   else
@@ -917,15 +917,15 @@ gtk_label_update_layout_attributes (GtkLabel      *self,
   if (style_attrs)
     {
       attrs = _gtk_pango_attr_list_merge (attrs, style_attrs);
-      pango_attr_list_unref (style_attrs);
+      gdk_text_attr_list_unref (style_attrs);
     }
 
   attrs = _gtk_pango_attr_list_merge (attrs, self->markup_attrs);
   attrs = _gtk_pango_attr_list_merge (attrs, self->attrs);
 
-  pango_layout_set_attributes (self->layout, attrs);
+  gdk_text_layout_set_attributes (self->layout, attrs);
 
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
 }
 
 static void
@@ -934,14 +934,14 @@ gtk_label_css_changed (GtkWidget         *widget,
 {
   GtkLabel *self = GTK_LABEL (widget);
   gboolean attrs_affected;
-  PangoAttrList *new_attrs = NULL;
+  GdkTextAttrList *new_attrs = NULL;
 
   GTK_WIDGET_CLASS (gtk_label_parent_class)->css_changed (widget, change);
 
   if (gtk_css_style_change_affects (change, GTK_CSS_AFFECTS_TEXT_ATTRS))
     {
       new_attrs = gtk_css_style_get_pango_attributes (gtk_css_style_change_get_new_style (change));
-      attrs_affected = (self->layout && pango_layout_get_attributes (self->layout)) ||
+      attrs_affected = (self->layout && gdk_text_layout_get_attributes (self->layout)) ||
                        new_attrs;
     }
   else
@@ -956,7 +956,7 @@ gtk_label_css_changed (GtkWidget         *widget,
     }
 }
 
-static PangoDirection
+static GdkTextDirection
 get_cursor_direction (GtkLabel *self)
 {
   GSList *l;
@@ -965,9 +965,9 @@ get_cursor_direction (GtkLabel *self)
 
   gtk_label_ensure_layout (self);
 
-  for (l = pango_layout_get_lines_readonly (self->layout); l; l = l->next)
+  for (l = gdk_text_layout_get_lines_readonly (self->layout); l; l = l->next)
     {
-      PangoLayoutLine *line = l->data;
+      GdkTextLayoutLine *line = l->data;
 
       /* If self->select_info->selection_end is at the very end of
        * the line, we don't know if the cursor is on this line or
@@ -976,11 +976,11 @@ get_cursor_direction (GtkLabel *self)
        * definitely in this paragraph, which is good enough
        * to figure out the resolved direction.
        */
-       if (pango_layout_line_get_start_index (line) + pango_layout_line_get_length (line) >= self->select_info->selection_end)
-        return pango_layout_line_get_resolved_direction (line);
+       if (gdk_text_layout_line_get_start_index (line) + gdk_text_layout_line_get_length (line) >= self->select_info->selection_end)
+        return gdk_text_layout_line_get_resolved_direction (line);
     }
 
-  return PANGO_DIRECTION_LTR;
+  return GDK_TEXT_DIRECTION_LTR;
 }
 
 static int
@@ -1034,7 +1034,7 @@ nope:
  * gtk_label_get_measuring_layout:
  * @self: the label
  * @existing_layout: an existing layout already in use
- * @width: the width to measure with, in Pango units, or -1 for infinite
+ * @width: the width to measure with, in GdkText units, or -1 for infinite
  *
  * Gets a layout that can be used for measuring sizes.
  *
@@ -1042,20 +1042,20 @@ nope:
  * for the layout’s width, which will be set to @width. Do not modify
  * the returned layout.
  *
- * Returns: a Pango layout
+ * Returns: a GdkText layout
  */
-static PangoLayout *
+static GdkTextLayout *
 gtk_label_get_measuring_layout (GtkLabel    *self,
-                                PangoLayout *existing_layout,
+                                GdkTextLayout *existing_layout,
                                 int          width)
 {
-  PangoLayout *copy;
+  GdkTextLayout *copy;
 
   if (existing_layout != NULL)
     {
       if (existing_layout != self->layout)
         {
-          pango_layout_set_width (existing_layout, width);
+          gdk_text_layout_set_width (existing_layout, width);
           return existing_layout;
         }
 
@@ -1064,7 +1064,7 @@ gtk_label_get_measuring_layout (GtkLabel    *self,
 
   gtk_label_ensure_layout (self);
 
-  if (pango_layout_get_width (self->layout) == width)
+  if (gdk_text_layout_get_width (self->layout) == width)
     {
       g_object_ref (self->layout);
       return self->layout;
@@ -1077,7 +1077,7 @@ gtk_label_get_measuring_layout (GtkLabel    *self,
   if (gtk_widget_get_width (GTK_WIDGET (self)) <= 1)
     {
       g_object_ref (self->layout);
-      pango_layout_set_width (self->layout, width);
+      gdk_text_layout_set_width (self->layout, width);
       return self->layout;
     }
 
@@ -1086,36 +1086,36 @@ gtk_label_get_measuring_layout (GtkLabel    *self,
    * can just return the current layout, because for measuring purposes, it will be
    * identical.
    */
-  if (!pango_layout_is_wrapped (self->layout) &&
-      !pango_layout_is_ellipsized (self->layout))
+  if (!gdk_text_layout_is_wrapped (self->layout) &&
+      !gdk_text_layout_is_ellipsized (self->layout))
     {
-      PangoRectangle rect;
+      GdkTextRectangle rect;
 
       if (width == -1)
         return g_object_ref (self->layout);
 
-      pango_layout_get_extents (self->layout, NULL, &rect);
+      gdk_text_layout_get_extents (self->layout, NULL, &rect);
       if (rect.width <= width)
         return g_object_ref (self->layout);
     }
 
-  copy = pango_layout_copy (self->layout);
-  pango_layout_set_width (copy, width);
+  copy = gdk_text_layout_copy (self->layout);
+  gdk_text_layout_set_width (copy, width);
   return copy;
 }
 
 static int
-get_char_pixels (PangoLayout *layout)
+get_char_pixels (GdkTextLayout *layout)
 {
-  PangoContext *context;
-  PangoFontMetrics *metrics;
+  GdkTextContext *context;
+  GdkTextFontMetrics *metrics;
   int char_width, digit_width;
 
-  context = pango_layout_get_context (layout);
-  metrics = pango_context_get_metrics (context, NULL, NULL);
-  char_width = pango_font_metrics_get_approximate_char_width (metrics);
-  digit_width = pango_font_metrics_get_approximate_digit_width (metrics);
-  pango_font_metrics_unref (metrics);
+  context = gdk_text_layout_get_context (layout);
+  metrics = gdk_text_context_get_metrics (context, NULL, NULL);
+  char_width = gdk_text_font_metrics_get_approximate_char_width (metrics);
+  digit_width = gdk_text_font_metrics_get_approximate_digit_width (metrics);
+  gdk_text_font_metrics_unref (metrics);
 
   return MAX (char_width, digit_width);
 }
@@ -1165,7 +1165,7 @@ get_static_size (GtkLabel       *self,
                  int            *natural_baseline)
 {
   int minimum_default, natural_default;
-  PangoLayout *layout;
+  GdkTextLayout *layout;
 
   get_default_widths (self, &minimum_default, &natural_default);
 
@@ -1173,12 +1173,12 @@ get_static_size (GtkLabel       *self,
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)
     {
-      pango_layout_get_size (layout, natural, NULL);
+      gdk_text_layout_get_size (layout, natural, NULL);
       if (self->ellipsize)
         {
           layout = gtk_label_get_measuring_layout (self, layout, 0);
-          pango_layout_get_size (layout, minimum, NULL);
-          /* yes, Pango ellipsizes even when that needs more space */
+          gdk_text_layout_get_size (layout, minimum, NULL);
+          /* yes, GdkText ellipsizes even when that needs more space */
           *minimum = MIN (*minimum, *natural);
         }
       else
@@ -1190,8 +1190,8 @@ get_static_size (GtkLabel       *self,
     }
   else
     {
-      pango_layout_get_size (layout, NULL, minimum);
-      *minimum_baseline = pango_layout_get_baseline (layout);
+      gdk_text_layout_get_size (layout, NULL, minimum);
+      *minimum_baseline = gdk_text_layout_get_baseline (layout);
 
       *natural = *minimum;
       *natural_baseline = *minimum_baseline;
@@ -1208,23 +1208,23 @@ get_height_for_width (GtkLabel *self,
                       int      *minimum_baseline,
                       int      *natural_baseline)
 {
-  PangoLayout *layout;
+  GdkTextLayout *layout;
   int natural_width, text_height, baseline;
 
   if (width < 0)
     {
       /* Minimum height is assuming infinite width */
       layout = gtk_label_get_measuring_layout (self, NULL, -1);
-      pango_layout_get_size (layout, NULL, minimum_height);
-      baseline = pango_layout_get_baseline (layout);
+      gdk_text_layout_get_size (layout, NULL, minimum_height);
+      baseline = gdk_text_layout_get_baseline (layout);
       *minimum_baseline = baseline;
 
       /* Natural height is assuming natural width */
       get_default_widths (self, NULL, &natural_width);
 
       layout = gtk_label_get_measuring_layout (self, layout, natural_width);
-      pango_layout_get_size (layout, NULL, natural_height);
-      baseline = pango_layout_get_baseline (layout);
+      gdk_text_layout_get_size (layout, NULL, natural_height);
+      baseline = gdk_text_layout_get_baseline (layout);
       *natural_baseline = baseline;
     }
   else
@@ -1232,12 +1232,12 @@ get_height_for_width (GtkLabel *self,
       /* minimum = natural for any given width */
       layout = gtk_label_get_measuring_layout (self, NULL, width);
 
-      pango_layout_get_size (layout, NULL, &text_height);
+      gdk_text_layout_get_size (layout, NULL, &text_height);
 
       *minimum_height = text_height;
       *natural_height = text_height;
 
-      baseline = pango_layout_get_baseline (layout);
+      baseline = gdk_text_layout_get_baseline (layout);
       *minimum_baseline = baseline;
       *natural_baseline = baseline;
     }
@@ -1246,22 +1246,22 @@ get_height_for_width (GtkLabel *self,
 }
 
 static int
-my_pango_layout_get_width_for_height (PangoLayout *layout,
+my_pango_layout_get_width_for_height (GdkTextLayout *layout,
                                       int          for_height,
                                       int          min,
                                       int          max)
 {
   int mid, text_width, text_height;
 
-  min = PANGO_PIXELS_CEIL (min);
-  max = PANGO_PIXELS_CEIL (max);
+  min = GDK_TEXT_PIXELS_CEIL (min);
+  max = GDK_TEXT_PIXELS_CEIL (max);
 
   while (min < max)
     {
       mid = (min + max) / 2;
-      pango_layout_set_width (layout, mid * PANGO_SCALE);
-      pango_layout_get_size (layout, &text_width, &text_height);
-      text_width = PANGO_PIXELS_CEIL (text_width);
+      gdk_text_layout_set_width (layout, mid * GDK_TEXT_SCALE);
+      gdk_text_layout_get_size (layout, &text_width, &text_height);
+      text_width = GDK_TEXT_PIXELS_CEIL (text_width);
       if (text_width > mid)
         min = text_width;
       else if (text_height > for_height)
@@ -1270,7 +1270,7 @@ my_pango_layout_get_width_for_height (PangoLayout *layout,
         max = text_width;
     }
 
-  return min * PANGO_SCALE;
+  return min * GDK_TEXT_SCALE;
 }
 
 static void
@@ -1279,7 +1279,7 @@ get_width_for_height (GtkLabel *self,
                       int      *minimum_width,
                       int      *natural_width)
 {
-  PangoLayout *layout;
+  GdkTextLayout *layout;
   int minimum_default, natural_default;
 
   get_default_widths (self, &minimum_default, &natural_default);
@@ -1288,12 +1288,12 @@ get_width_for_height (GtkLabel *self,
     {
       /* Minimum width is as many line breaks as possible */
       layout = gtk_label_get_measuring_layout (self, NULL, MAX (minimum_default, 0));
-      pango_layout_get_size (layout, minimum_width, NULL);
+      gdk_text_layout_get_size (layout, minimum_width, NULL);
       *minimum_width = MAX (*minimum_width, minimum_default);
 
       /* Natural width is natural width - or as wide as possible */
       layout = gtk_label_get_measuring_layout (self, layout, natural_default);
-      pango_layout_get_size (layout, natural_width, NULL);
+      gdk_text_layout_get_size (layout, natural_width, NULL);
       *natural_width = MAX (*natural_width, *minimum_width);
     }
   else
@@ -1303,15 +1303,15 @@ get_width_for_height (GtkLabel *self,
       /* Can't use a measuring layout here, because we need to force
        * ellipsizing mode */
       gtk_label_ensure_layout (self);
-      layout = pango_layout_copy (self->layout);
-      pango_layout_set_ellipsize (layout, PANGO_ELLIPSIZE_NONE);
+      layout = gdk_text_layout_copy (self->layout);
+      gdk_text_layout_set_ellipsize (layout, GDK_TEXT_ELLIPSIZE_NONE);
 
       /* binary search for the smallest width where the height doesn't
        * eclipse the given height */
       min = MAX (minimum_default, 0);
 
-      pango_layout_set_width (layout, -1);
-      pango_layout_get_size (layout, &max, NULL);
+      gdk_text_layout_set_width (layout, -1);
+      gdk_text_layout_get_size (layout, &max, NULL);
 
       /* first, do natural width */
       if (self->natural_wrap_mode == GTK_NATURAL_WRAP_NONE)
@@ -1321,19 +1321,19 @@ get_width_for_height (GtkLabel *self,
       else
         {
           if (self->natural_wrap_mode == GTK_NATURAL_WRAP_WORD)
-            pango_layout_set_wrap (layout, PANGO_WRAP_WORD);
+            gdk_text_layout_set_wrap (layout, GDK_TEXT_WRAP_WORD);
           *natural_width = my_pango_layout_get_width_for_height (layout, height, min, max);
         }
 
       /* then, do minimum width */
-      if (self->natural_wrap_mode == GTK_NATURAL_WRAP_INHERIT && self->ellipsize == PANGO_ELLIPSIZE_NONE)
+      if (self->natural_wrap_mode == GTK_NATURAL_WRAP_INHERIT && self->ellipsize == GDK_TEXT_ELLIPSIZE_NONE)
         {
           *minimum_width = *natural_width;
         }
       else
         {
-          pango_layout_set_wrap (layout, self->wrap_mode);
-          pango_layout_set_ellipsize (layout, self->ellipsize);
+          gdk_text_layout_set_wrap (layout, self->wrap_mode);
+          gdk_text_layout_set_ellipsize (layout, self->ellipsize);
           *minimum_width = my_pango_layout_get_width_for_height (layout, height, min, *natural_width);
         }
     }
@@ -1353,7 +1353,7 @@ gtk_label_measure (GtkWidget      *widget,
   GtkLabel *self = GTK_LABEL (widget);
 
   if (for_size > 0)
-    for_size *= PANGO_SCALE;
+    for_size *= GDK_TEXT_SCALE;
 
   if (!self->wrap)
     get_static_size (self, orientation, minimum, natural, minimum_baseline, natural_baseline);
@@ -1362,12 +1362,12 @@ gtk_label_measure (GtkWidget      *widget,
   else
     get_width_for_height (self, for_size, minimum, natural);
 
-  *minimum = PANGO_PIXELS_CEIL (*minimum);
-  *natural = PANGO_PIXELS_CEIL (*natural);
+  *minimum = GDK_TEXT_PIXELS_CEIL (*minimum);
+  *natural = GDK_TEXT_PIXELS_CEIL (*natural);
   if (*minimum_baseline > 0)
-    *minimum_baseline = PANGO_PIXELS_CEIL (*minimum_baseline);
+    *minimum_baseline = GDK_TEXT_PIXELS_CEIL (*minimum_baseline);
   if (*natural_baseline > 0)
-    *natural_baseline = PANGO_PIXELS_CEIL (*natural_baseline);
+    *natural_baseline = GDK_TEXT_PIXELS_CEIL (*natural_baseline);
 }
 
 void
@@ -1378,7 +1378,7 @@ gtk_label_get_layout_location (GtkLabel  *self,
   GtkWidget *widget = GTK_WIDGET (self);
   const int widget_width = gtk_widget_get_width (widget);
   const int widget_height = gtk_widget_get_height (widget);
-  PangoRectangle logical;
+  GdkTextRectangle logical;
   float xalign;
   int baseline;
   float x, y;
@@ -1393,13 +1393,13 @@ gtk_label_get_layout_location (GtkLabel  *self,
   if (_gtk_widget_get_direction (widget) != GTK_TEXT_DIR_LTR)
     xalign = 1.0 - xalign;
 
-  pango_layout_get_pixel_extents (self->layout, NULL, &logical);
+  gdk_text_layout_get_pixel_extents (self->layout, NULL, &logical);
   x = floor ((xalign * (widget_width - logical.width)) - logical.x);
 
   baseline = gtk_widget_get_baseline (widget);
   if (baseline != -1)
     {
-      int layout_baseline = pango_layout_get_baseline (self->layout) / PANGO_SCALE;
+      int layout_baseline = gdk_text_layout_get_baseline (self->layout) / GDK_TEXT_SCALE;
       /* yalign is 0 because we can't support yalign while baseline aligning */
       y = baseline - layout_baseline;
     }
@@ -1423,9 +1423,9 @@ gtk_label_size_allocate (GtkWidget *widget,
   if (self->layout)
     {
       if (self->ellipsize || self->wrap)
-        pango_layout_set_width (self->layout, width * PANGO_SCALE);
+        gdk_text_layout_set_width (self->layout, width * GDK_TEXT_SCALE);
       else
-        pango_layout_set_width (self->layout, -1);
+        gdk_text_layout_set_width (self->layout, -1);
     }
 
   if (self->popup_menu)
@@ -1477,7 +1477,7 @@ gtk_label_snapshot (GtkWidget   *widget,
       style = gtk_css_node_get_style (info->selection_node);
       gtk_css_boxes_init_border_box (&boxes, style, 0, 0, width, height);
 
-      range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
+      range_clip = gdk_text_layout_get_clip_region (self->layout, lx, ly, range, 1);
       for (i = 0; i < gdk_region_num_rectangles (range_clip); i++)
         {
           gdk_region_get_rectangle (range_clip, i, &clip_rect);
@@ -1504,7 +1504,7 @@ gtk_label_snapshot (GtkWidget   *widget,
           gtk_widget_has_focus (widget) &&
           gtk_widget_is_drawable (widget))
         {
-          PangoDirection cursor_direction;
+          GdkTextDirection cursor_direction;
 
           cursor_direction = get_cursor_direction (self);
           gtk_css_style_snapshot_caret (&boxes, gtk_widget_get_display (widget),
@@ -1526,7 +1526,7 @@ gtk_label_snapshot (GtkWidget   *widget,
           style = gtk_css_node_get_style (active_link->cssnode);
           gtk_css_boxes_init_border_box (&boxes, style, 0, 0, width, height);
 
-          range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
+          range_clip = gdk_text_layout_get_clip_region (self->layout, lx, ly, range, 1);
           for (i = 0; i < gdk_region_num_rectangles (range_clip); i++)
             {
               gdk_region_get_rectangle (range_clip, i, &clip_rect);
@@ -1547,7 +1547,7 @@ gtk_label_snapshot (GtkWidget   *widget,
 
           style = gtk_css_node_get_style (focus_link->cssnode);
 
-          range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
+          range_clip = gdk_text_layout_get_clip_region (self->layout, lx, ly, range, 1);
           gdk_region_get_extents (range_clip, &rect);
 
           gtk_css_boxes_init_border_box (&boxes, style, rect.x, rect.y, rect.width, rect.height);
@@ -1612,8 +1612,8 @@ gtk_label_finalize (GObject *object)
   g_free (self->text);
 
   g_clear_object (&self->layout);
-  g_clear_pointer (&self->attrs, pango_attr_list_unref);
-  g_clear_pointer (&self->markup_attrs, pango_attr_list_unref);
+  g_clear_pointer (&self->attrs, gdk_text_attr_list_unref);
+  g_clear_pointer (&self->markup_attrs, gdk_text_attr_list_unref);
 
   if (self->select_info && self->select_info->provider)
     g_object_unref (self->select_info->provider);
@@ -1624,7 +1624,7 @@ gtk_label_finalize (GObject *object)
   g_clear_pointer (&self->popup_menu, gtk_widget_unparent);
   g_clear_object (&self->extra_menu);
 
-  g_clear_pointer (&self->tabs, pango_tab_array_free);
+  g_clear_pointer (&self->tabs, gdk_text_tab_array_free);
 
   G_OBJECT_CLASS (gtk_label_parent_class)->finalize (object);
 }
@@ -1653,7 +1653,7 @@ range_is_in_ellipsis_full (GtkLabel *self,
                            int      *ellipsis_start,
                            int      *ellipsis_end)
 {
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
   gboolean in_ellipsis;
 
   if (!self->ellipsize)
@@ -1661,26 +1661,26 @@ range_is_in_ellipsis_full (GtkLabel *self,
 
   gtk_label_ensure_layout (self);
 
-  if (!pango_layout_is_ellipsized (self->layout))
+  if (!gdk_text_layout_is_ellipsized (self->layout))
     return FALSE;
 
-  iter = pango_layout_get_iter (self->layout);
+  iter = gdk_text_layout_get_iter (self->layout);
 
   in_ellipsis = FALSE;
 
   do {
-    PangoLayoutRun *run;
+    GdkTextLayoutRun *run;
 
-    run = pango_layout_iter_get_run_readonly (iter);
+    run = gdk_text_layout_iter_get_run_readonly (iter);
     if (run)
       {
-        PangoItem *item;
+        GdkTextItem *item;
 
-        item = ((PangoGlyphItem*)run)->item;
+        item = ((GdkTextGlyphItem*)run)->item;
 
         if (item->offset <= range_start && range_end <= item->offset + item->length)
           {
-            if (item->analysis.flags & PANGO_ANALYSIS_FLAG_IS_ELLIPSIS)
+            if (item->analysis.flags & GDK_TEXT_ANALYSIS_FLAG_IS_ELLIPSIS)
               {
                 if (ellipsis_start)
                   *ellipsis_start = item->offset;
@@ -1693,9 +1693,9 @@ range_is_in_ellipsis_full (GtkLabel *self,
         else if (item->offset + item->length >= range_end)
           break;
       }
-  } while (pango_layout_iter_next_run (iter));
+  } while (gdk_text_layout_iter_next_run (iter));
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   return in_ellipsis;
 }
@@ -1780,10 +1780,10 @@ get_layout_index (GtkLabel *self,
   x -= lx;
   y -= ly;
 
-  x *= PANGO_SCALE;
-  y *= PANGO_SCALE;
+  x *= GDK_TEXT_SCALE;
+  y *= GDK_TEXT_SCALE;
 
-  inside = pango_layout_xy_to_index (self->layout,
+  inside = gdk_text_layout_xy_to_index (self->layout,
                                      x, y,
                                      index, &trailing);
 
@@ -2182,7 +2182,7 @@ gtk_label_root (GtkWidget *widget)
 
   gtk_label_setup_mnemonic (self);
 
-  /* The PangoContext is replaced when the display changes, so clear the layouts */
+  /* The GdkTextContext is replaced when the display changes, so clear the layouts */
   gtk_label_clear_layout (GTK_LABEL (widget));
 }
 
@@ -2458,7 +2458,7 @@ gtk_label_class_init (GtkLabelClass *class)
    *
    * The contents of the label.
    *
-   * If the string contains Pango markup (see [func@Pango.parse_markup]),
+   * If the string contains GdkText markup (see [func@GdkText.parse_markup]),
    * you will have to set the [property@Gtk.Label:use-markup] property to
    * true in order for the label to display the markup attributes. See also
    * [method@Gtk.Label.set_markup] for a convenience function that sets both
@@ -2481,15 +2481,15 @@ gtk_label_class_init (GtkLabelClass *class)
    */
   label_props[PROP_ATTRIBUTES] =
       g_param_spec_boxed ("attributes", NULL, NULL,
-                          PANGO_TYPE_ATTR_LIST,
+                          GDK_TEXT_TYPE_ATTR_LIST,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
 
   /**
    * GtkLabel:use-markup:
    *
-   * True if the text of the label includes Pango markup.
+   * True if the text of the label includes GdkText markup.
    *
-   * See [func@Pango.parse_markup].
+   * See [func@GdkText.parse_markup].
    */
   label_props[PROP_USE_MARKUP] =
       g_param_spec_boolean ("use-markup", NULL, NULL,
@@ -2565,7 +2565,7 @@ gtk_label_class_init (GtkLabelClass *class)
    * Controls how the line wrapping is done.
    *
    * This only affects the formatting if line wrapping is on (see the
-   * [property@Gtk.Label:wrap] property). The default is [enum@Pango.WrapMode.word],
+   * [property@Gtk.Label:wrap] property). The default is [enum@GdkText.WrapMode.word],
    * which means wrap on word boundaries.
    *
    * For sizing behavior, also consider the [property@Gtk.Label:natural-wrap-mode]
@@ -2573,8 +2573,8 @@ gtk_label_class_init (GtkLabelClass *class)
    */
   label_props[PROP_WRAP_MODE] =
       g_param_spec_enum ("wrap-mode", NULL, NULL,
-                         PANGO_TYPE_WRAP_MODE,
-                         PANGO_WRAP_WORD,
+                         GDK_TEXT_TYPE_WRAP_MODE,
+                         GDK_TEXT_WRAP_WORD,
                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -2634,7 +2634,7 @@ gtk_label_class_init (GtkLabelClass *class)
    * not have enough room to display the entire string.
    *
    * Note that setting this property to a value other than
-   * [enum.Pango.EllipsizeMode.none] has the side-effect that the label requests
+   * [enum.GdkText.EllipsizeMode.none] has the side-effect that the label requests
    * only enough space to display the ellipsis "...". In particular, this
    * means that ellipsizing labels do not work well in notebook tabs, unless
    * the [property@Gtk.NotebookPage:tab-expand] child property is set to true.
@@ -2644,8 +2644,8 @@ gtk_label_class_init (GtkLabelClass *class)
    */
   label_props[PROP_ELLIPSIZE] =
       g_param_spec_enum ("ellipsize", NULL, NULL,
-                         PANGO_TYPE_ELLIPSIZE_MODE,
-                         PANGO_ELLIPSIZE_NONE,
+                         GDK_TEXT_TYPE_ELLIPSIZE_MODE,
+                         GDK_TEXT_ELLIPSIZE_NONE,
                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -2741,7 +2741,7 @@ gtk_label_class_init (GtkLabelClass *class)
    */
   label_props[PROP_TABS] =
       g_param_spec_boxed ("tabs", NULL, NULL,
-                          PANGO_TYPE_TAB_ARRAY,
+                          GDK_TEXT_TYPE_TAB_ARRAY,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, label_props);
@@ -3300,7 +3300,7 @@ gtk_label_recalculate (GtkLabel *self)
     }
   else
     {
-      g_clear_pointer (&self->markup_attrs, pango_attr_list_unref);
+      g_clear_pointer (&self->markup_attrs, gdk_text_attr_list_unref);
 
       gtk_label_set_text_internal (self, g_strdup (self->label));
     }
@@ -3369,7 +3369,7 @@ gtk_label_set_text (GtkLabel    *self,
  */
 void
 gtk_label_set_attributes (GtkLabel         *self,
-                          PangoAttrList    *attrs)
+                          GdkTextAttrList    *attrs)
 {
   g_return_if_fail (GTK_IS_LABEL (self));
 
@@ -3377,10 +3377,10 @@ gtk_label_set_attributes (GtkLabel         *self,
     return;
 
   if (attrs)
-    pango_attr_list_ref (attrs);
+    gdk_text_attr_list_ref (attrs);
 
   if (self->attrs)
-    pango_attr_list_unref (self->attrs);
+    gdk_text_attr_list_unref (self->attrs);
   self->attrs = attrs;
 
   g_object_notify_by_pspec (G_OBJECT (self), label_props[PROP_ATTRIBUTES]);
@@ -3395,16 +3395,16 @@ gtk_label_set_attributes (GtkLabel         *self,
  *
  * Gets the label's attribute list.
  *
- * This is the [struct@Pango.AttrList] that was set on the label using
+ * This is the [struct@GdkText.AttrList] that was set on the label using
  * [method@Gtk.Label.set_attributes], if any. This function does not
  * reflect attributes that come from the label's markup (see
  * [method@Gtk.Label.set_markup]). If you want to get the effective
  * attributes for the label, use
- * `pango_layout_get_attributes (gtk_label_get_layout (self))`.
+ * `gdk_text_layout_get_attributes (gtk_label_get_layout (self))`.
  *
  * Returns: (nullable) (transfer none): the attribute list
  */
-PangoAttrList *
+GdkTextAttrList *
 gtk_label_get_attributes (GtkLabel *self)
 {
   g_return_val_if_fail (GTK_IS_LABEL (self), NULL);
@@ -3419,7 +3419,7 @@ gtk_label_get_attributes (GtkLabel *self)
  *
  * Sets the text of the label.
  *
- * The label is interpreted as including embedded underlines and/or Pango
+ * The label is interpreted as including embedded underlines and/or GdkText
  * markup depending on the values of the [property@Gtk.Label:use-underline]
  * and [property@Gtk.Label:use-markup] properties.
  */
@@ -3444,7 +3444,7 @@ gtk_label_set_label (GtkLabel    *self,
  * Fetches the text from a label.
  *
  * The returned text includes any embedded underlines indicating
- * mnemonics and Pango markup. (See [method@Gtk.Label.get_text]).
+ * mnemonics and GdkText markup. (See [method@Gtk.Label.get_text]).
  *
  * Returns: the text of the label widget
  */
@@ -3868,7 +3868,7 @@ gtk_label_set_markup_internal (GtkLabel   *self,
 {
   char *text = NULL;
   GError *error = NULL;
-  PangoAttrList *attrs = NULL;
+  GdkTextAttrList *attrs = NULL;
   char *str_for_display = NULL;
   GtkLabelLink *links = NULL;
   guint n_links = 0;
@@ -3896,7 +3896,7 @@ gtk_label_set_markup_internal (GtkLabel   *self,
       gtk_widget_add_css_class (GTK_WIDGET (self), "link");
     }
 
-  if (!pango_parse_markup (str_for_display, -1,
+  if (!gdk_text_parse_markup (str_for_display, -1,
                            with_uline && do_mnemonics ? '_' : 0,
                            &attrs, &text,
                            with_uline && do_mnemonics ? &accel_keyval : NULL,
@@ -3908,7 +3908,7 @@ gtk_label_set_markup_internal (GtkLabel   *self,
   if (text)
     gtk_label_set_text_internal (self, text);
 
-  g_clear_pointer (&self->markup_attrs, pango_attr_list_unref);
+  g_clear_pointer (&self->markup_attrs, gdk_text_attr_list_unref);
   self->markup_attrs = attrs;
 
   self->mnemonic_keyval = accel_keyval ? accel_keyval : GDK_KEY_VoidSymbol;
@@ -3929,8 +3929,8 @@ error_set:
  *
  * Sets the labels text and attributes from markup.
  *
- * The string must be marked up with Pango markup
- * (see [func@Pango.parse_markup]).
+ * The string must be marked up with GdkText markup
+ * (see [func@GdkText.parse_markup]).
  *
  * If @str is external data, you may need to escape it
  * with [func@GLib.markup_escape_text] or [func@GLib.markup_printf_escaped]:
@@ -3978,7 +3978,7 @@ gtk_label_set_markup (GtkLabel    *self,
  *
  * Sets the labels text, attributes and mnemonic from markup.
  *
- * Parses @str which is marked up with Pango markup (see [func@Pango.parse_markup]),
+ * Parses @str which is marked up with GdkText markup (see [func@GdkText.parse_markup]),
  * setting the label’s text and attribute list based on the parse results.
  * If characters in @str are preceded by an underscore, they are underlined
  * indicating that they represent a keyboard accelerator called a mnemonic.
@@ -4013,7 +4013,7 @@ gtk_label_set_markup_with_mnemonic (GtkLabel    *self,
  * Gets the text of the label.
  *
  * The returned text is as it appears on screen. This does not include
- * any embedded underlines indicating mnemonics or Pango markup. (See
+ * any embedded underlines indicating mnemonics or GdkText markup. (See
  * [method@Gtk.Label.get_label])
  *
  * Returns: the text in the label widget
@@ -4090,12 +4090,12 @@ gtk_label_get_justify (GtkLabel *self)
  */
 void
 gtk_label_set_ellipsize (GtkLabel          *self,
-                         PangoEllipsizeMode mode)
+                         GdkTextEllipsizeMode mode)
 {
   g_return_if_fail (GTK_IS_LABEL (self));
-  g_return_if_fail (mode >= PANGO_ELLIPSIZE_NONE && mode <= PANGO_ELLIPSIZE_END);
+  g_return_if_fail (mode >= GDK_TEXT_ELLIPSIZE_NONE && mode <= GDK_TEXT_ELLIPSIZE_END);
 
-  if ((PangoEllipsizeMode) self->ellipsize != mode)
+  if ((GdkTextEllipsizeMode) self->ellipsize != mode)
     {
       self->ellipsize = mode;
 
@@ -4117,10 +4117,10 @@ gtk_label_set_ellipsize (GtkLabel          *self,
  *
  * Returns: the ellipsization mode
  **/
-PangoEllipsizeMode
+GdkTextEllipsizeMode
 gtk_label_get_ellipsize (GtkLabel *self)
 {
-  g_return_val_if_fail (GTK_IS_LABEL (self), PANGO_ELLIPSIZE_NONE);
+  g_return_val_if_fail (GTK_IS_LABEL (self), GDK_TEXT_ELLIPSIZE_NONE);
 
   return self->ellipsize;
 }
@@ -4267,7 +4267,7 @@ gtk_label_get_wrap (GtkLabel *self)
  * This only affects the label if line wrapping is on. (See
  * [method@Gtk.Label.set_wrap])
  *
- * The default is [enum@Pango.WrapMode.word], which means
+ * The default is [enum@GdkText.WrapMode.word], which means
  * wrap on word boundaries.
  *
  * For sizing behavior, also consider the
@@ -4275,7 +4275,7 @@ gtk_label_get_wrap (GtkLabel *self)
  */
 void
 gtk_label_set_wrap_mode (GtkLabel *self,
-                         PangoWrapMode wrap_mode)
+                         GdkTextWrapMode wrap_mode)
 {
   g_return_if_fail (GTK_IS_LABEL (self));
 
@@ -4299,10 +4299,10 @@ gtk_label_set_wrap_mode (GtkLabel *self,
  *
  * Returns: the line wrap mode
  */
-PangoWrapMode
+GdkTextWrapMode
 gtk_label_get_wrap_mode (GtkLabel *self)
 {
-  g_return_val_if_fail (GTK_IS_LABEL (self), PANGO_WRAP_WORD);
+  g_return_val_if_fail (GTK_IS_LABEL (self), GDK_TEXT_WRAP_WORD);
 
   return self->wrap_mode;
 }
@@ -4363,7 +4363,7 @@ gtk_label_clear_layout (GtkLabel *self)
 static void
 gtk_label_ensure_layout (GtkLabel *self)
 {
-  PangoAlignment align;
+  GdkTextAlignment align;
   gboolean rtl;
 
   if (self->layout)
@@ -4377,33 +4377,33 @@ gtk_label_ensure_layout (GtkLabel *self)
   switch (self->jtype)
     {
     case GTK_JUSTIFY_LEFT:
-      align = rtl ? PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT;
+      align = rtl ? GDK_TEXT_ALIGN_RIGHT : GDK_TEXT_ALIGN_LEFT;
       break;
     case GTK_JUSTIFY_RIGHT:
-      align = rtl ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT;
+      align = rtl ? GDK_TEXT_ALIGN_LEFT : GDK_TEXT_ALIGN_RIGHT;
       break;
     case GTK_JUSTIFY_CENTER:
-      align = PANGO_ALIGN_CENTER;
+      align = GDK_TEXT_ALIGN_CENTER;
       break;
     case GTK_JUSTIFY_FILL:
-      align = rtl ? PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT;
-      pango_layout_set_justify (self->layout, TRUE);
+      align = rtl ? GDK_TEXT_ALIGN_RIGHT : GDK_TEXT_ALIGN_LEFT;
+      gdk_text_layout_set_justify (self->layout, TRUE);
       break;
     default:
       g_assert_not_reached();
     }
 
-  pango_layout_set_alignment (self->layout, align);
-  pango_layout_set_ellipsize (self->layout, self->ellipsize);
-  pango_layout_set_wrap (self->layout, self->wrap_mode);
-  pango_layout_set_single_paragraph_mode (self->layout, self->single_line_mode);
+  gdk_text_layout_set_alignment (self->layout, align);
+  gdk_text_layout_set_ellipsize (self->layout, self->ellipsize);
+  gdk_text_layout_set_wrap (self->layout, self->wrap_mode);
+  gdk_text_layout_set_single_paragraph_mode (self->layout, self->single_line_mode);
   if (self->lines > 0)
-    pango_layout_set_height (self->layout, - self->lines);
+    gdk_text_layout_set_height (self->layout, - self->lines);
 
   if (self->ellipsize || self->wrap)
-    pango_layout_set_width (self->layout, gtk_widget_get_width (GTK_WIDGET (self)) * PANGO_SCALE);
+    gdk_text_layout_set_width (self->layout, gtk_widget_get_width (GTK_WIDGET (self)) * GDK_TEXT_SCALE);
 
-  pango_layout_set_tabs (self->layout, self->tabs);
+  gdk_text_layout_set_tabs (self->layout, self->tabs);
 }
 
 /**
@@ -4449,12 +4449,12 @@ gtk_label_move_forward_word (GtkLabel *self,
   length = g_utf8_strlen (self->text, -1);
   if (new_pos < length)
     {
-      const PangoLogAttr *log_attrs;
+      const GdkTextLogAttr *log_attrs;
       int n_attrs;
 
       gtk_label_ensure_layout (self);
 
-      log_attrs = pango_layout_get_log_attrs_readonly (self->layout, &n_attrs);
+      log_attrs = gdk_text_layout_get_log_attrs_readonly (self->layout, &n_attrs);
 
       /* Find the next word end */
       new_pos++;
@@ -4473,12 +4473,12 @@ gtk_label_move_backward_word (GtkLabel *self,
 
   if (new_pos > 0)
     {
-      const PangoLogAttr *log_attrs;
+      const GdkTextLogAttr *log_attrs;
       int n_attrs;
 
       gtk_label_ensure_layout (self);
 
-      log_attrs = pango_layout_get_log_attrs_readonly (self->layout, &n_attrs);
+      log_attrs = gdk_text_layout_get_log_attrs_readonly (self->layout, &n_attrs);
 
       new_pos -= 1;
 
@@ -5415,7 +5415,7 @@ gtk_label_get_selection_bounds (GtkLabel  *self,
  * gtk_label_get_layout:
  * @self: a label
  *
- * Gets the Pango layout used to display the label.
+ * Gets the GdkText layout used to display the label.
  *
  * The layout is useful to e.g. convert text positions to pixel
  * positions, in combination with [method@Gtk.Label.get_layout_offsets].
@@ -5423,9 +5423,9 @@ gtk_label_get_selection_bounds (GtkLabel  *self,
  * freed by the caller. The @label is free to recreate its layout
  * at any time, so it should be considered read-only.
  *
- * Returns: (transfer none): the [class@Pango.Layout] for this label
+ * Returns: (transfer none): the [class@GdkText.Layout] for this label
  */
-PangoLayout*
+GdkTextLayout*
 gtk_label_get_layout (GtkLabel *self)
 {
   g_return_val_if_fail (GTK_IS_LABEL (self), NULL);
@@ -5441,13 +5441,13 @@ gtk_label_get_layout (GtkLabel *self)
  * @x: (out) (optional): location to store X offset of layout
  * @y: (out) (optional): location to store Y offset of layout
  *
- * Obtains the coordinates where the label will draw its Pango layout.
+ * Obtains the coordinates where the label will draw its GdkText layout.
  *
  * The coordinates are useful to convert mouse events into coordinates
- * inside the [class@Pango.Layout], e.g. to take some action if some part
- * of the label is clicked. Remember when using the [class@Pango.Layout]
- * functions you need to convert to and from pixels using `PANGO_PIXELS()`
- * or [const@Pango.SCALE].
+ * inside the [class@GdkText.Layout], e.g. to take some action if some part
+ * of the label is clicked. Remember when using the [class@GdkText.Layout]
+ * functions you need to convert to and from pixels using `GDK_TEXT_PIXELS()`
+ * or [const@GdkText.SCALE].
  */
 void
 gtk_label_get_layout_offsets (GtkLabel *self,
@@ -5493,7 +5493,7 @@ gtk_label_set_use_markup (GtkLabel *self,
  * gtk_label_get_use_markup:
  * @self: a label
  *
- * Returns whether the label’s text is interpreted as Pango markup.
+ * Returns whether the label’s text is interpreted as GdkText markup.
  *
  * See [method@Gtk.Label.set_use_markup].
  *
@@ -5601,10 +5601,10 @@ get_better_cursor (GtkLabel *self,
 {
   GdkSeat *seat;
   GdkDevice *keyboard;
-  PangoDirection keymap_direction;
-  PangoDirection cursor_direction;
+  GdkTextDirection keymap_direction;
+  GdkTextDirection cursor_direction;
   gboolean split_cursor;
-  PangoRectangle strong_pos, weak_pos;
+  GdkTextRectangle strong_pos, weak_pos;
 
   seat = gdk_display_get_default_seat (gtk_widget_get_display (GTK_WIDGET (self)));
   if (seat)
@@ -5614,7 +5614,7 @@ get_better_cursor (GtkLabel *self,
   if (keyboard)
     keymap_direction = gdk_device_get_direction (keyboard);
   else
-    keymap_direction = PANGO_DIRECTION_LTR;
+    keymap_direction = GDK_TEXT_DIRECTION_LTR;
 
   cursor_direction = get_cursor_direction (self);
 
@@ -5624,25 +5624,25 @@ get_better_cursor (GtkLabel *self,
 
   gtk_label_ensure_layout (self);
 
-  pango_layout_get_cursor_pos (self->layout, index,
+  gdk_text_layout_get_cursor_pos (self->layout, index,
                                &strong_pos, &weak_pos);
 
   if (split_cursor)
     {
-      *x = strong_pos.x / PANGO_SCALE;
-      *y = strong_pos.y / PANGO_SCALE;
+      *x = strong_pos.x / GDK_TEXT_SCALE;
+      *y = strong_pos.y / GDK_TEXT_SCALE;
     }
   else
     {
       if (keymap_direction == cursor_direction)
         {
-          *x = strong_pos.x / PANGO_SCALE;
-          *y = strong_pos.y / PANGO_SCALE;
+          *x = strong_pos.x / GDK_TEXT_SCALE;
+          *y = strong_pos.y / GDK_TEXT_SCALE;
         }
       else
         {
-          *x = weak_pos.x / PANGO_SCALE;
-          *y = weak_pos.y / PANGO_SCALE;
+          *x = weak_pos.x / GDK_TEXT_SCALE;
+          *y = weak_pos.y / GDK_TEXT_SCALE;
         }
     }
 }
@@ -5657,7 +5657,7 @@ gtk_label_move_logically (GtkLabel *self,
 
   if (self->text)
     {
-      const PangoLogAttr *log_attrs;
+      const GdkTextLogAttr *log_attrs;
       int n_attrs;
       int length;
 
@@ -5665,7 +5665,7 @@ gtk_label_move_logically (GtkLabel *self,
 
       length = g_utf8_strlen (self->text, -1);
 
-      log_attrs = pango_layout_get_log_attrs_readonly (self->layout, &n_attrs);
+      log_attrs = gdk_text_layout_get_log_attrs_readonly (self->layout, &n_attrs);
 
       while (count > 0 && offset < length)
         {
@@ -5715,7 +5715,7 @@ gtk_label_move_visually (GtkLabel *self,
         {
           GdkSeat *seat;
           GdkDevice *keyboard;
-          PangoDirection keymap_direction;
+          GdkTextDirection keymap_direction;
 
           seat = gdk_display_get_default_seat (gtk_widget_get_display (GTK_WIDGET (self)));
           if (seat)
@@ -5725,19 +5725,19 @@ gtk_label_move_visually (GtkLabel *self,
           if (keyboard)
             keymap_direction = gdk_device_get_direction (keyboard);
           else
-            keymap_direction = PANGO_DIRECTION_LTR;
+            keymap_direction = GDK_TEXT_DIRECTION_LTR;
 
           strong = keymap_direction == get_cursor_direction (self);
         }
 
       if (count > 0)
         {
-          pango_layout_move_cursor_visually (self->layout, strong, index, 0, 1, &new_index, &new_trailing);
+          gdk_text_layout_move_cursor_visually (self->layout, strong, index, 0, 1, &new_index, &new_trailing);
           count--;
         }
       else
         {
-          pango_layout_move_cursor_visually (self->layout, strong, index, 0, -1, &new_index, &new_trailing);
+          gdk_text_layout_move_cursor_visually (self->layout, strong, index, 0, -1, &new_index, &new_trailing);
           count++;
         }
 
@@ -6208,7 +6208,7 @@ gtk_label_get_extra_menu (GtkLabel *self)
  */
 void
 gtk_label_set_tabs (GtkLabel      *self,
-                    PangoTabArray *tabs)
+                    GdkTextTabArray *tabs)
 {
   g_return_if_fail (GTK_IS_LABEL (self));
 
@@ -6216,8 +6216,8 @@ gtk_label_set_tabs (GtkLabel      *self,
     return;
 
   if (self->tabs)
-    pango_tab_array_free (self->tabs);
-  self->tabs = pango_tab_array_copy (tabs);
+    gdk_text_tab_array_free (self->tabs);
+  self->tabs = gdk_text_tab_array_copy (tabs);
 
   gtk_label_clear_layout (self);
   g_object_notify_by_pspec (G_OBJECT (self), label_props[PROP_TABS]);
@@ -6237,12 +6237,12 @@ gtk_label_set_tabs (GtkLabel      *self,
  *
  * Since: 4.8
  */
-PangoTabArray *
+GdkTextTabArray *
 gtk_label_get_tabs (GtkLabel *self)
 {
   g_return_val_if_fail (GTK_IS_LABEL (self), NULL);
 
-  return self->tabs ? pango_tab_array_copy (self->tabs) : NULL;
+  return self->tabs ? gdk_text_tab_array_copy (self->tabs) : NULL;
 }
 
 /* {{{ GtkAccessible implementation */
@@ -6360,8 +6360,8 @@ gtk_label_accessible_text_get_contents_at (GtkAccessibleText            *self,
                                            unsigned int                 *start,
                                            unsigned int                 *end)
 {
-  PangoLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
-  char *string = gtk_pango_get_string_at (layout, offset, granularity, start, end);
+  GdkTextLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
+  char *string = gtk_text_get_string_at (layout, offset, granularity, start, end);
 
   return g_bytes_new_take (string, strlen (string));
 }
@@ -6399,10 +6399,10 @@ gtk_label_accessible_text_get_default_attributes (GtkAccessibleText   *self,
                                                   char              ***attribute_names,
                                                   char              ***attribute_values)
 {
-  PangoLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
+  GdkTextLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
   char **names, **values;
 
-  gtk_pango_get_default_attributes (layout, &names, &values);
+  gtk_text_get_default_attributes (layout, &names, &values);
 
   if (attribute_names != NULL)
     *attribute_names = names;
@@ -6423,11 +6423,11 @@ gtk_label_accessible_text_get_attributes (GtkAccessibleText        *self,
                                           char                   ***attribute_names,
                                           char                   ***attribute_values)
 {
-  PangoLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
+  GdkTextLayout *layout = gtk_label_get_layout (GTK_LABEL (self));
   unsigned int start, end;
   char **names, **values;
 
-  gtk_pango_get_run_attributes (layout, offset, &names, &values, &start, &end);
+  gtk_text_get_run_attributes (layout, offset, &names, &values, &start, &end);
 
   *n_ranges = g_strv_length (names);
 
@@ -6463,7 +6463,7 @@ gtk_label_accessible_text_get_extents (GtkAccessibleText *self,
                                        graphene_rect_t   *extents)
 {
   GtkLabel *label = GTK_LABEL (self);
-  PangoLayout *layout;
+  GdkTextLayout *layout;
   const char *text;
   float lx, ly;
   GdkRegion *range_clip;
@@ -6477,7 +6477,7 @@ gtk_label_accessible_text_get_extents (GtkAccessibleText *self,
   range[0] = g_utf8_pointer_to_offset (text, text + start);
   range[1] = g_utf8_pointer_to_offset (text, text + end);
 
-  range_clip = gdk_pango_layout_get_clip_region (layout, lx, ly, range, 1);
+  range_clip = gdk_text_layout_get_clip_region (layout, lx, ly, range, 1);
   gdk_region_get_extents (range_clip, &clip_rect);
   gdk_region_destroy (range_clip);
 

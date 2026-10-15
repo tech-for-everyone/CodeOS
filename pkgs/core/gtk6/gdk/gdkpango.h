@@ -32,13 +32,13 @@ G_BEGIN_DECLS
  */
 
 GDK_AVAILABLE_IN_ALL
-GdkRegion    *gdk_pango_layout_line_get_clip_region (PangoLayoutLine *line,
+GdkRegion    *gdk_text_layout_line_get_clip_region (GdkTextLayoutLine *line,
                                                      int              x_origin,
                                                      int              y_origin,
                                                      const int       *index_ranges,
                                                      int              n_ranges);
 GDK_AVAILABLE_IN_ALL
-GdkRegion    *gdk_pango_layout_get_clip_region      (PangoLayout     *layout,
+GdkRegion    *gdk_text_layout_get_clip_region      (GdkTextLayout     *layout,
                                                      int              x_origin,
                                                      int              y_origin,
                                                      const int       *index_ranges,

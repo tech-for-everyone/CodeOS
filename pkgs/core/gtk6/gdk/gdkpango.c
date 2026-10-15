@@ -31,24 +31,24 @@
  * region as clip, only the given ranges are drawn.
  */
 static GdkRegion*
-layout_iter_get_line_clip_region (PangoLayoutIter *iter,
+layout_iter_get_line_clip_region (GdkTextLayoutIter *iter,
 				  int              x_origin,
 				  int              y_origin,
 				  const int       *index_ranges,
 				  int              n_ranges)
 {
-  PangoLayoutLine *line;
+  GdkTextLayoutLine *line;
   GdkRegion *clip_region;
-  PangoRectangle logical_rect;
+  GdkTextRectangle logical_rect;
   int baseline;
   int i;
 
-  line = pango_layout_iter_get_line_readonly (iter);
+  line = gdk_text_layout_iter_get_line_readonly (iter);
 
   clip_region = gdk_region_create ();
 
-  pango_layout_iter_get_line_extents (iter, NULL, &logical_rect);
-  baseline = pango_layout_iter_get_baseline (iter);
+  gdk_text_layout_iter_get_line_extents (iter, NULL, &logical_rect);
+  baseline = gdk_text_layout_iter_get_baseline (iter);
 
   i = 0;
   while (i < n_ranges)
@@ -59,9 +59,9 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
 
       /* Note that get_x_ranges returns layout coordinates
        */
-      if (index_ranges[i*2+1] >= pango_layout_line_get_start_index (line) &&
-	  index_ranges[i*2] < pango_layout_line_get_start_index (line) + pango_layout_line_get_length (line))
-	pango_layout_line_get_x_ranges (line,
+      if (index_ranges[i*2+1] >= gdk_text_layout_line_get_start_index (line) &&
+	  index_ranges[i*2] < gdk_text_layout_line_get_start_index (line) + gdk_text_layout_line_get_length (line))
+	gdk_text_layout_line_get_x_ranges (line,
 					index_ranges[i*2],
 					index_ranges[i*2+1],
 					&pixel_ranges, &n_pixel_ranges);
@@ -71,13 +71,13 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
           GdkRectangle rect;
 	  int x_off, y_off;
 
-          x_off = PANGO_PIXELS (pixel_ranges[2*j] - logical_rect.x);
-	  y_off = PANGO_PIXELS (baseline - logical_rect.y);
+          x_off = GDK_TEXT_PIXELS (pixel_ranges[2*j] - logical_rect.x);
+	  y_off = GDK_TEXT_PIXELS (baseline - logical_rect.y);
 
           rect.x = x_origin + x_off;
           rect.y = y_origin - y_off;
-          rect.width = PANGO_PIXELS (pixel_ranges[2*j + 1] - logical_rect.x) - x_off;
-          rect.height = PANGO_PIXELS (baseline - logical_rect.y + logical_rect.height) - y_off;
+          rect.width = GDK_TEXT_PIXELS (pixel_ranges[2*j + 1] - logical_rect.x) - x_off;
+          rect.height = GDK_TEXT_PIXELS (baseline - logical_rect.y + logical_rect.height) - y_off;
 
           gdk_region_union_rectangle (clip_region, &rect);
         }
@@ -89,8 +89,8 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
 }
 
 /**
- * gdk_pango_layout_line_get_clip_region: (skip)
- * @line: a `PangoLayoutLine`
+ * gdk_text_layout_line_get_clip_region: (skip)
+ * @line: a `GdkTextLayoutLine`
  * @x_origin: X pixel where you intend to draw the layout line with this clip
  * @y_origin: baseline pixel where you intend to draw the layout line with this clip
  * @index_ranges: (array): array of byte indexes into the layout, where even
@@ -116,32 +116,32 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
  * Returns: a clip region containing the given ranges
  */
 GdkRegion*
-gdk_pango_layout_line_get_clip_region (PangoLayoutLine *line,
+gdk_text_layout_line_get_clip_region (GdkTextLayoutLine *line,
                                        int              x_origin,
                                        int              y_origin,
                                        const int       *index_ranges,
                                        int              n_ranges)
 {
   GdkRegion *clip_region;
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
 
   g_return_val_if_fail (line != NULL, NULL);
   g_return_val_if_fail (index_ranges != NULL, NULL);
 
-  iter = pango_layout_get_iter (line->layout);
-  while (pango_layout_iter_get_line_readonly (iter) != line)
-    pango_layout_iter_next_line (iter);
+  iter = gdk_text_layout_get_iter (line->layout);
+  while (gdk_text_layout_iter_get_line_readonly (iter) != line)
+    gdk_text_layout_iter_next_line (iter);
 
   clip_region = layout_iter_get_line_clip_region(iter, x_origin, y_origin, index_ranges, n_ranges);
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   return clip_region;
 }
 
 /**
- * gdk_pango_layout_get_clip_region: (skip)
- * @layout: a `PangoLayout`
+ * gdk_text_layout_get_clip_region: (skip)
+ * @layout: a `GdkTextLayout`
  * @x_origin: X pixel where you intend to draw the layout with this clip
  * @y_origin: Y pixel where you intend to draw the layout with this clip
  * @index_ranges: array of byte indexes into the layout, where even members of array are start indexes and odd elements are end indexes
@@ -161,43 +161,43 @@ gdk_pango_layout_line_get_clip_region (PangoLayoutLine *line,
  * Returns: a clip region containing the given ranges
  */
 GdkRegion*
-gdk_pango_layout_get_clip_region (PangoLayout *layout,
+gdk_text_layout_get_clip_region (GdkTextLayout *layout,
                                   int          x_origin,
                                   int          y_origin,
                                   const int   *index_ranges,
                                   int          n_ranges)
 {
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
   GdkRegion *clip_region;
 
-  g_return_val_if_fail (PANGO_IS_LAYOUT (layout), NULL);
+  g_return_val_if_fail (GDK_TEXT_IS_LAYOUT (layout), NULL);
   g_return_val_if_fail (index_ranges != NULL, NULL);
 
   clip_region = gdk_region_create ();
 
-  iter = pango_layout_get_iter (layout);
+  iter = gdk_text_layout_get_iter (layout);
 
   do
     {
-      PangoRectangle logical_rect;
+      GdkTextRectangle logical_rect;
       GdkRegion *line_region;
       int baseline;
 
-      pango_layout_iter_get_line_extents (iter, NULL, &logical_rect);
-      baseline = pango_layout_iter_get_baseline (iter);
+      gdk_text_layout_iter_get_line_extents (iter, NULL, &logical_rect);
+      baseline = gdk_text_layout_iter_get_baseline (iter);
 
       line_region = layout_iter_get_line_clip_region(iter,
-						     x_origin + PANGO_PIXELS (logical_rect.x),
-						     y_origin + PANGO_PIXELS (baseline),
+						     x_origin + GDK_TEXT_PIXELS (logical_rect.x),
+						     y_origin + GDK_TEXT_PIXELS (baseline),
 						     index_ranges,
 						     n_ranges);
 
       gdk_region_union (clip_region, line_region);
       gdk_region_destroy (line_region);
     }
-  while (pango_layout_iter_next_line (iter));
+  while (gdk_text_layout_iter_next_line (iter));
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   return clip_region;
 }

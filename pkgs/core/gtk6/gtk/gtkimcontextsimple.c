@@ -151,7 +151,7 @@ static gboolean gtk_im_context_simple_filter_keypress    (GtkIMContext          
 static void     gtk_im_context_simple_reset              (GtkIMContext             *context);
 static void     gtk_im_context_simple_get_preedit_string (GtkIMContext             *context,
                                                           char                    **str,
-                                                          PangoAttrList           **attrs,
+                                                          GdkTextAttrList           **attrs,
                                                           int                      *cursor_pos);
 
 static void init_compose_table_async (GCancellable         *cancellable,
@@ -1263,7 +1263,7 @@ check_compose_sequence (guint     *keys,
 static void
 gtk_im_context_simple_get_preedit_string (GtkIMContext   *context,
                                           char          **str,
-                                          PangoAttrList **attrs,
+                                          GdkTextAttrList **attrs,
                                           int            *cursor_pos)
 {
   GtkIMContextSimple *context_simple = GTK_IM_CONTEXT_SIMPLE (context);
@@ -1353,21 +1353,21 @@ gtk_im_context_simple_get_preedit_string (GtkIMContext   *context,
 
   if (attrs)
     {
-      *attrs = pango_attr_list_new ();
+      *attrs = gdk_text_attr_list_new ();
 
       if (s->len)
         {
-          PangoAttribute *attr;
+          GdkTextAttribute *attr;
 
-          attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+          attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
           attr->start_index = 0;
           attr->end_index = s->len;
-          pango_attr_list_insert (*attrs, attr);
+          gdk_text_attr_list_insert (*attrs, attr);
 
-          attr = pango_attr_fallback_new (TRUE);
+          attr = gdk_text_attr_fallback_new (TRUE);
           attr->start_index = 0;
           attr->end_index = s->len;
-          pango_attr_list_insert (*attrs, attr);
+          gdk_text_attr_list_insert (*attrs, attr);
         }
     }
 

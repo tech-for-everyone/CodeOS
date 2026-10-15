@@ -29,13 +29,13 @@ typedef struct
 {
   SvgValue base;
   unsigned int len;
-  PangoLanguage *values[1];
+  GdkTextLanguage *values[1];
 } SvgLanguage;
 
 static unsigned int
 svg_language_size (unsigned int n)
 {
-  return sizeof (SvgLanguage) + (n > 0 ? n - 1 : 0) * sizeof (PangoLanguage *);
+  return sizeof (SvgLanguage) + (n > 0 ? n - 1 : 0) * sizeof (GdkTextLanguage *);
 }
 
 static gboolean
@@ -88,7 +88,7 @@ svg_language_print (const SvgValue *value,
     {
       if (i > 0)
         g_string_append_c (string, ' ');
-      g_string_append (string, pango_language_to_string (l->values[i]));
+      g_string_append (string, gdk_text_language_to_string (l->values[i]));
     }
 }
 
@@ -105,7 +105,7 @@ static const SvgValueClass SVG_LANGUAGE_CLASS = {
 
 SvgValue *
 svg_language_new_list (unsigned int    len,
-                       PangoLanguage **langs)
+                       GdkTextLanguage **langs)
 {
   static SvgLanguage empty = { { &SVG_LANGUAGE_CLASS, 0 }, .len = 0, .values[0] = NULL, };
   SvgLanguage *result;
@@ -125,7 +125,7 @@ svg_language_new_list (unsigned int    len,
 }
 
 SvgValue *
-svg_language_new (PangoLanguage *language)
+svg_language_new (GdkTextLanguage *language)
 {
   return svg_language_new_list (1, &language);
 }
@@ -151,7 +151,7 @@ svg_language_get_length (const SvgValue *value)
   return l->len;
 }
 
-PangoLanguage *
+GdkTextLanguage *
 svg_language_get (const SvgValue *value,
                   unsigned int    pos)
 {

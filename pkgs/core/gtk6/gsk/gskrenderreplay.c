@@ -380,14 +380,14 @@ gsk_render_replay_set_font_filter (GskRenderReplay           *self,
  *
  * Since: 4.22
  **/
-PangoFont *
+GdkTextFont *
 gsk_render_replay_filter_font (GskRenderReplay *self,
-                               PangoFont       *font)
+                               GdkTextFont       *font)
 {
-  PangoFont *result;
+  GdkTextFont *result;
 
   g_return_val_if_fail (self != NULL, NULL);
-  g_return_val_if_fail (PANGO_IS_FONT (font), NULL);
+  g_return_val_if_fail (GDK_TEXT_IS_FONT (font), NULL);
 
   if (!self->font_filter)
     return g_object_ref (font);

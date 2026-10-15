@@ -1980,7 +1980,7 @@ text_buffer_new (GtkAboutDialog  *about,
 
               tag = gtk_text_buffer_create_tag (buffer, NULL,
                                                 "foreground-rgba", color,
-                                                "underline", PANGO_UNDERLINE_SINGLE,
+                                                "underline", GDK_TEXT_UNDERLINE_SINGLE,
                                                 NULL);
 
               about->link_tags = g_slist_prepend (about->link_tags, tag);
@@ -2014,7 +2014,7 @@ text_buffer_new (GtkAboutDialog  *about,
     }
 
   tag = gtk_text_buffer_create_tag (buffer, NULL,
-                                    "scale", PANGO_SCALE_SMALL,
+                                    "scale", GDK_TEXT_SCALE_SMALL,
                                     NULL);
 
   gtk_text_buffer_get_start_iter (buffer, &start_iter);

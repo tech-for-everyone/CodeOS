@@ -31,51 +31,51 @@
 
 G_BEGIN_DECLS
 
-PangoAttrList *_gtk_pango_attr_list_merge (PangoAttrList *into,
-                                           PangoAttrList *from) G_GNUC_WARN_UNUSED_RESULT;
+GdkTextAttrList *_gtk_pango_attr_list_merge (GdkTextAttrList *into,
+                                           GdkTextAttrList *from) G_GNUC_WARN_UNUSED_RESULT;
 
 typedef struct {
   GtkBuilder    *builder;
   GObject       *object;
-  PangoAttrList *attrs;
-} GtkPangoAttributeParserData;
+  GdkTextAttrList *attrs;
+} GtkTextAttributeParserData;
 
 void
-gtk_pango_attribute_start_element (GtkBuildableParseContext  *context,
+gtk_text_attribute_start_element (GtkBuildableParseContext  *context,
                                    const char                *element_name,
                                    const char               **names,
                                    const char               **values,
                                    gpointer                   user_data,
                                    GError                   **error);
 
-const char *pango_wrap_mode_to_string (PangoWrapMode mode);
-const char *pango_underline_to_string (PangoUnderline underline);
-const char *pango_overline_to_string (PangoOverline overline);
-const char *pango_stretch_to_string (PangoStretch stretch);
-const char *pango_style_to_string (PangoStyle style);
-const char *pango_variant_to_string (PangoVariant variant);
-const char *pango_align_to_string (PangoAlignment align);
+const char *gdk_text_wrap_mode_to_string (GdkTextWrapMode mode);
+const char *gdk_text_underline_to_string (GdkTextUnderline underline);
+const char *gdk_text_overline_to_string (GdkTextOverline overline);
+const char *gdk_text_stretch_to_string (GdkTextStretch stretch);
+const char *gdk_text_style_to_string (GdkTextStyle style);
+const char *gdk_text_variant_to_string (GdkTextVariant variant);
+const char *gdk_text_align_to_string (GdkTextAlignment align);
 
-void gtk_pango_get_font_attributes (PangoFontDescription   *font,
+void gtk_text_get_font_attributes (GdkTextFontDescription   *font,
                                     char                 ***attribute_names,
                                     char                 ***attribute_values);
-void gtk_pango_get_default_attributes (PangoLayout     *layout,
+void gtk_text_get_default_attributes (GdkTextLayout     *layout,
                                        char          ***attribute_names,
                                        char          ***attribute_values);
-void gtk_pango_get_run_attributes     (PangoLayout     *layout,
+void gtk_text_get_run_attributes     (GdkTextLayout     *layout,
                                        unsigned int     offset,
                                        char          ***attribute_names,
                                        char          ***attribute_values,
                                        unsigned int    *start_offset,
                                        unsigned int    *end_offset);
 
-char *gtk_pango_get_string_at   (PangoLayout                  *layout,
+char *gtk_text_get_string_at   (GdkTextLayout                  *layout,
                                  unsigned int                  offset,
                                  GtkAccessibleTextGranularity  granularity,
                                  unsigned int                 *start_offset,
                                  unsigned int                 *end_offset);
 
-gboolean gtk_pango_glyph_item_has_color_glyphs (PangoGlyphItem *item);
-gboolean gtk_pango_layout_has_color_glyphs     (PangoLayout    *layout);
+gboolean gtk_text_glyph_item_has_color_glyphs (GdkTextGlyphItem *item);
+gboolean gtk_text_layout_has_color_glyphs     (GdkTextLayout    *layout);
 
 G_END_DECLS

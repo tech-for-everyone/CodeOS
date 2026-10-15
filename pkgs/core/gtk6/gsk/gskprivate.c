@@ -27,7 +27,7 @@ gsk_ensure_resources (void)
 
 /*< private >
  * gsk_reload_font:
- * @font: a `PangoFont`
+ * @font: a `GdkTextFont`
  * @scale: the scale to apply
  * @hint_metris: hint metrics to use or `GDK_PAINT_HINT_METRICS_DEFAILT` to keep the
  *   hint metrics of the font unchanged
@@ -39,28 +39,28 @@ gsk_ensure_resources (void)
  * Returns a font that is just like @font, but uses the
  * given scale and hinting options for its glyphs and metrics.
  *
- * Returns: (transfer full): the modified `PangoFont`
+ * Returns: (transfer full): the modified `GdkTextFont`
  */
-PangoFont *
-gsk_reload_font (PangoFont            *font,
+GdkTextFont *
+gsk_reload_font (GdkTextFont            *font,
                  float                 scale,
                  GdkPaintHintMetrics  hint_metrics,
                  GdkPaintHintStyle    hint_style,
                  GdkPaintAntialias     antialias)
 {
   static GdkPaintFontOptions *options = NULL;
-  static PangoContext *context = NULL;
+  static GdkTextContext *context = NULL;
   GdkPaintScaledFont *sf;
 
   /* These requests often come in sequentially so keep the result
    * around and re-use it if everything matches.
    */
-  static PangoFont *last_font;
+  static GdkTextFont *last_font;
   static float last_scale;
   static GdkPaintHintMetrics last_hint_metrics;
   static GdkPaintHintStyle last_hint_style;
   static GdkPaintAntialias last_antialias;
-  static PangoFont *last_result;
+  static GdkTextFont *last_result;
 
   if (last_result != NULL &&
       last_font == font &&
@@ -81,7 +81,7 @@ gsk_reload_font (PangoFont            *font,
   if (G_UNLIKELY (options == NULL))
     options = gdk_paint_font_options_create ();
 
-  sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
+  sf = gdk_text_cairo_font_get_scaled_font (GDK_TEXT_CAIRO_FONT (font));
   gdk_paint_scaled_font_get_font_options (sf, options);
 
   if (hint_metrics == GDK_PAINT_HINT_METRICS_DEFAULT)
@@ -109,33 +109,33 @@ gsk_reload_font (PangoFont            *font,
   gdk_paint_font_options_set_subpixel_order (options, GDK_PAINT_SUBPIXEL_ORDER_DEFAULT);
 
   if (G_UNLIKELY (context == NULL))
-    context = pango_context_new ();
+    context = gdk_text_context_new ();
 
-  pango_context_set_round_glyph_positions (context, hint_metrics == GDK_PAINT_HINT_METRICS_ON);
-  pango_cairo_context_set_font_options (context, options);
+  gdk_text_context_set_round_glyph_positions (context, hint_metrics == GDK_PAINT_HINT_METRICS_ON);
+  gdk_text_cairo_context_set_font_options (context, options);
 
-  last_result = pango_font_map_reload_font (pango_font_get_font_map (font), font, scale, context, NULL);
+  last_result = gdk_text_font_map_reload_font (gdk_text_font_get_font_map (font), font, scale, context, NULL);
 
   return g_object_ref (last_result);
 }
 
 /*< private >
  * gsk_get_glyph_string_extents:
- * @glyphs: a `PangoGlyphString`
- * @font: a `PangoFont`
+ * @glyphs: a `GdkTextGlyphString`
+ * @font: a `GdkTextFont`
  * @ink_rect: (out): rectangle used to store the extents of the glyph string as drawn
  *
  * Compute the ink extents of a glyph string.
  *
- * This is like [method@Pango.GlyphString.extents], but it
+ * This is like [method@GdkText.GlyphString.extents], but it
  * ignores hinting of the font.
  */
 void
-gsk_get_glyph_string_extents (PangoGlyphString *glyphs,
-                              PangoFont        *font,
-                              PangoRectangle   *ink_rect)
+gsk_get_glyph_string_extents (GdkTextGlyphString *glyphs,
+                              GdkTextFont        *font,
+                              GdkTextRectangle   *ink_rect)
 {
-  PangoFont *unhinted;
+  GdkTextFont *unhinted;
 
   unhinted = gsk_reload_font (font,
                               1.0,
@@ -143,21 +143,21 @@ gsk_get_glyph_string_extents (PangoGlyphString *glyphs,
                               GDK_PAINT_HINT_STYLE_NONE,
                               GDK_PAINT_ANTIALIAS_DEFAULT);
 
-  pango_glyph_string_extents (glyphs, unhinted, ink_rect, NULL);
+  gdk_text_glyph_string_extents (glyphs, unhinted, ink_rect, NULL);
 
   g_object_unref (unhinted);
 }
 
 /*< private >
  * gsk_font_get_hint_style:
- * @font: a `PangoFont`
+ * @font: a `GdkTextFont`
  *
  * Get the hint style from the cairo font options.
  *
  * Returns: the hint style
  */
 GdkPaintHintStyle
-gsk_font_get_hint_style (PangoFont *font)
+gsk_font_get_hint_style (GdkTextFont *font)
 {
   static GdkPaintFontOptions *options = NULL;
   GdkPaintScaledFont *sf;
@@ -166,7 +166,7 @@ gsk_font_get_hint_style (PangoFont *font)
   if (G_UNLIKELY (options == NULL))
     options = gdk_paint_font_options_create ();
 
-  sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
+  sf = gdk_text_cairo_font_get_scaled_font (GDK_TEXT_CAIRO_FONT (font));
   gdk_paint_scaled_font_get_font_options (sf, options);
   style = gdk_paint_font_options_get_hint_style (options);
 

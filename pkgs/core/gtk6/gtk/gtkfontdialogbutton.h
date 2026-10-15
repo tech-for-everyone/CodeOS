@@ -52,7 +52,7 @@ void             gtk_font_dialog_button_set_dialog       (GtkFontDialogButton *s
  *
  * The level of granularity for the font selection.
  *
- * Depending on this value, the `PangoFontDescription` that
+ * Depending on this value, the `GdkTextFontDescription` that
  * is returned by [method@Gtk.FontDialogButton.get_font_desc]
  * will have more or less fields set.
  *
@@ -74,12 +74,12 @@ void             gtk_font_dialog_button_set_level        (GtkFontDialogButton *s
                                                           GtkFontLevel         level);
 
 GDK_AVAILABLE_IN_4_10
-PangoFontDescription *
+GdkTextFontDescription *
                  gtk_font_dialog_button_get_font_desc    (GtkFontDialogButton *self);
 
 GDK_AVAILABLE_IN_4_10
 void             gtk_font_dialog_button_set_font_desc    (GtkFontDialogButton        *self,
-                                                          const PangoFontDescription *font_desc);
+                                                          const GdkTextFontDescription *font_desc);
 
 GDK_AVAILABLE_IN_4_10
 const char *     gtk_font_dialog_button_get_font_features
@@ -91,11 +91,11 @@ void             gtk_font_dialog_button_set_font_features
                                                           const char           *font_features);
 
 GDK_AVAILABLE_IN_4_10
-PangoLanguage *  gtk_font_dialog_button_get_language     (GtkFontDialogButton *self);
+GdkTextLanguage *  gtk_font_dialog_button_get_language     (GtkFontDialogButton *self);
 
 GDK_AVAILABLE_IN_4_10
 void             gtk_font_dialog_button_set_language     (GtkFontDialogButton  *self,
-                                                          PangoLanguage        *language);
+                                                          GdkTextLanguage        *language);
 
 GDK_AVAILABLE_IN_4_10
 gboolean         gtk_font_dialog_button_get_use_font     (GtkFontDialogButton *self);

@@ -25,21 +25,21 @@
 #include "gsk/gskpathbuilder.h"
 
 GskPath *
-svg_pango_layout_to_path (PangoLayout          *layout,
-                          PangoRenderComponent  component)
+svg_pango_layout_to_path (GdkTextLayout          *layout,
+                          GdkTextRenderComponent  component)
 {
   GdkPaintSurface *surface;
   GdkPainter *cr;
   GdkPaintPath *path;
   GskPathBuilder *builder;
-  PangoRectangle rect;
+  GdkTextRectangle rect;
 
-  pango_layout_get_pixel_extents (layout, &rect, NULL);
+  gdk_text_layout_get_pixel_extents (layout, &rect, NULL);
   surface = gdk_paint_recording_surface_create (GDK_PAINT_CONTENT_COLOR_ALPHA,
                                             &(GdkPaintRectangle) { rect.x, rect.y, rect.width, rect.height });
 
   cr = gdk_paint_create (surface);
-  pango_cairo_layout_path_for_components (cr, layout, component);
+  gdk_text_cairo_layout_path_for_components (cr, layout, component);
   path = gdk_paint_copy_path (cr);
   builder = gsk_path_builder_new ();
   gsk_path_builder_add_cairo_path (builder, path);

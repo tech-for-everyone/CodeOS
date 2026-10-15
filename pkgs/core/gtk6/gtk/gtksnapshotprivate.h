@@ -29,20 +29,20 @@
 G_BEGIN_DECLS
 
 void                    gtk_snapshot_append_text                (GtkSnapshot            *snapshot,
-                                                                 PangoFont              *font,
-                                                                 PangoGlyphString       *glyphs,
+                                                                 GdkTextFont              *font,
+                                                                 GdkTextGlyphString       *glyphs,
                                                                  const GdkRGBA          *color,
                                                                  float                   x,
                                                                  float                   y);
 void                    gtk_snapshot_add_text                   (GtkSnapshot            *snapshot,
-                                                                 PangoFont              *font,
-                                                                 PangoGlyphString       *glyphs,
+                                                                 GdkTextFont              *font,
+                                                                 GdkTextGlyphString       *glyphs,
                                                                  const GdkColor         *color,
                                                                  float                   x,
                                                                  float                   y);
 
 void                    gtk_snapshot_add_layout                 (GtkSnapshot            *snapshot,
-                                                                 PangoLayout            *layout,
+                                                                 GdkTextLayout            *layout,
                                                                  const GdkColor         *color);
 
 void                    gtk_snapshot_push_collect               (GtkSnapshot            *snapshot);

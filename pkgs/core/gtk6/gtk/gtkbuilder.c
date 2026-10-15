@@ -166,9 +166,9 @@
  *   e.g., “GTK_INPUT_HINT_EMOJI|GTK_INPUT_HINT_LOWERCASE”, or “emoji|lowercase” or 520).
  * - colors (in the format understood by [method@Gdk.RGBA.parse])
  * - transforms (in the format understood by [func@Gsk.Transform.parse])
- * - Pango attribute lists (in the format understood by [method@Pango.AttrList.to_string])
- * - Pango tab arrays (in the format understood by [method@Pango.TabArray.to_string])
- * - Pango font descriptions (in the format understood by [func@Pango.FontDescription.from_string])
+ * - GdkText attribute lists (in the format understood by [method@GdkText.AttrList.to_string])
+ * - GdkText tab arrays (in the format understood by [method@GdkText.TabArray.to_string])
+ * - GdkText font descriptions (in the format understood by [func@GdkText.FontDescription.from_string])
  * - `GVariant` (in the format understood by [func@GLib.Variant.parse])
  * - textures (can be specified as an object id, a resource path or a filename of an image file to load relative to the Builder file or the CWD if [method@Gtk.Builder.add_from_string] was used)
  * - GFile (like textures, can be specified as an object id, a URI or a filename of a file to load relative to the Builder file or the CWD if [method@Gtk.Builder.add_from_string] was used)
@@ -2527,11 +2527,11 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
         {
           g_value_take_boxed (value, g_bytes_new (string, strlen (string)));
         }
-      else if (G_VALUE_HOLDS (value, PANGO_TYPE_ATTR_LIST))
+      else if (G_VALUE_HOLDS (value, GDK_TEXT_TYPE_ATTR_LIST))
         {
-          PangoAttrList *attrs;
+          GdkTextAttrList *attrs;
 
-          attrs = pango_attr_list_from_string (string);
+          attrs = gdk_text_attr_list_from_string (string);
           if (attrs)
             {
               g_value_take_boxed (value, attrs);
@@ -2541,16 +2541,16 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
               g_set_error (error,
                            GTK_BUILDER_ERROR,
                            GTK_BUILDER_ERROR_INVALID_VALUE,
-                           "Could not parse PangoAttrList '%s'",
+                           "Could not parse GdkTextAttrList '%s'",
                            string);
               ret = FALSE;
             }
         }
-      else if (G_VALUE_HOLDS (value, PANGO_TYPE_TAB_ARRAY))
+      else if (G_VALUE_HOLDS (value, GDK_TEXT_TYPE_TAB_ARRAY))
         {
-          PangoTabArray *tabs;
+          GdkTextTabArray *tabs;
 
-          tabs = pango_tab_array_from_string (string);
+          tabs = gdk_text_tab_array_from_string (string);
           if (tabs)
             {
               g_value_take_boxed (value, tabs);
@@ -2560,16 +2560,16 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
               g_set_error (error,
                            GTK_BUILDER_ERROR,
                            GTK_BUILDER_ERROR_INVALID_VALUE,
-                           "Could not parse PangoTabArray '%s'",
+                           "Could not parse GdkTextTabArray '%s'",
                            string);
               ret = FALSE;
             }
         }
-      else if (G_VALUE_HOLDS (value, PANGO_TYPE_FONT_DESCRIPTION))
+      else if (G_VALUE_HOLDS (value, GDK_TEXT_TYPE_FONT_DESCRIPTION))
         {
-          PangoFontDescription *desc;
+          GdkTextFontDescription *desc;
 
-          desc = pango_font_description_from_string (string);
+          desc = gdk_text_font_description_from_string (string);
           if (desc)
             {
               g_value_take_boxed (value, desc);
@@ -2579,7 +2579,7 @@ gtk_builder_value_from_string_type (GtkBuilder   *builder,
               g_set_error (error,
                            GTK_BUILDER_ERROR,
                            GTK_BUILDER_ERROR_INVALID_VALUE,
-                           "Could not parse PangoFontDescription '%s'",
+                           "Could not parse GdkTextFontDescription '%s'",
                            string);
               ret = FALSE;
             }

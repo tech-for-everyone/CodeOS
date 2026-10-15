@@ -64,7 +64,7 @@ struct _GtkIMContextClass
 				   GtkWidget      *widget);
   void     (*get_preedit_string)  (GtkIMContext   *context,
 				   char          **str,
-				   PangoAttrList **attrs,
+				   GdkTextAttrList **attrs,
 				   int            *cursor_pos);
   gboolean (*filter_keypress)     (GtkIMContext   *context,
 			           GdkEvent       *event);
@@ -117,7 +117,7 @@ void     gtk_im_context_set_client_widget   (GtkIMContext       *context,
 GDK_AVAILABLE_IN_ALL
 void     gtk_im_context_get_preedit_string  (GtkIMContext       *context,
 					     char              **str,
-					     PangoAttrList     **attrs,
+					     GdkTextAttrList     **attrs,
 					     int                *cursor_pos);
 GDK_AVAILABLE_IN_ALL
 gboolean gtk_im_context_filter_keypress     (GtkIMContext       *context,

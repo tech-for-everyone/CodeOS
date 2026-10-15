@@ -1610,7 +1610,7 @@ gsk_path_builder_rel_html_arc_to (GskPathBuilder *self,
  */
 void
 gsk_path_builder_add_layout (GskPathBuilder *self,
-                             PangoLayout    *layout)
+                             GdkTextLayout    *layout)
 {
   GdkPaintSurface *surface;
   GdkPainter *cr;
@@ -1619,7 +1619,7 @@ gsk_path_builder_add_layout (GskPathBuilder *self,
   surface = gdk_paint_recording_surface_create (GDK_PAINT_CONTENT_COLOR_ALPHA, NULL);
   cr = gdk_paint_create (surface);
 
-  pango_cairo_layout_path (cr, layout);
+  gdk_text_cairo_layout_path (cr, layout);
   gdk_paint_path = gdk_paint_copy_path (cr);
 
   gsk_path_builder_add_cairo_path (self, gdk_paint_path);

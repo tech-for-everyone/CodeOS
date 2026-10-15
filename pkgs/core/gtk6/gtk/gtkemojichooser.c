@@ -650,7 +650,7 @@ grid_popup_action (GSimpleAction *action,
 static GtkWidget *
 create_grid_cell (void)
 {
-  PangoAttrList *attrs = pango_attr_list_new ();
+  GdkTextAttrList *attrs = gdk_text_attr_list_new ();
   GtkWidget *label = gtk_inscription_new (NULL);
 
   gtk_widget_set_size_request (label, 44, 44);
@@ -661,9 +661,9 @@ create_grid_cell (void)
   gtk_inscription_set_nat_lines (GTK_INSCRIPTION (label), 0);
   gtk_inscription_set_xalign (GTK_INSCRIPTION (label), 0.5);
   gtk_inscription_set_yalign (GTK_INSCRIPTION (label), 0.5);
-  pango_attr_list_insert (attrs, pango_attr_scale_new (PANGO_SCALE_X_LARGE));
+  gdk_text_attr_list_insert (attrs, gdk_text_attr_scale_new (GDK_TEXT_SCALE_X_LARGE));
   gtk_inscription_set_attributes (GTK_INSCRIPTION (label), attrs);
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
 
   return label;
 }
@@ -723,8 +723,8 @@ grid_validate_item (GtkEmojiChooser *chooser,
                     GtkInscription  *inscription,
                     GtkEmojiItem    *item)
 {
-  PangoLayout *layout;
-  PangoRectangle rect;
+  GdkTextLayout *layout;
+  GdkTextRectangle rect;
   guint id;
 
   id = gtk_emoji_item_get_id (item);
@@ -733,27 +733,27 @@ grid_validate_item (GtkEmojiChooser *chooser,
 
   if (chooser->emoji_max_width == 0)
     {
-      PangoLayout *reference = gtk_widget_create_pango_layout (GTK_WIDGET (inscription), "🙂");
-      PangoAttrList *reference_attrs = pango_attr_list_new ();
-      PangoRectangle reference_rect;
+      GdkTextLayout *reference = gtk_widget_create_pango_layout (GTK_WIDGET (inscription), "🙂");
+      GdkTextAttrList *reference_attrs = gdk_text_attr_list_new ();
+      GdkTextRectangle reference_rect;
 
-      pango_attr_list_insert (reference_attrs, pango_attr_scale_new (PANGO_SCALE_X_LARGE));
-      pango_layout_set_attributes (reference, reference_attrs);
-      pango_layout_get_extents (reference, &reference_rect, NULL);
+      gdk_text_attr_list_insert (reference_attrs, gdk_text_attr_scale_new (GDK_TEXT_SCALE_X_LARGE));
+      gdk_text_layout_set_attributes (reference, reference_attrs);
+      gdk_text_layout_get_extents (reference, &reference_rect, NULL);
       chooser->emoji_max_width = reference_rect.width;
-      pango_attr_list_unref (reference_attrs);
+      gdk_text_attr_list_unref (reference_attrs);
       g_object_unref (reference);
     }
 
-  layout = pango_layout_copy (gtk_inscription_get_layout (inscription));
-  pango_layout_set_width (layout, -1);
-  pango_layout_set_height (layout, -1);
-  pango_layout_get_extents (layout, &rect, NULL);
+  layout = gdk_text_layout_copy (gtk_inscription_get_layout (inscription));
+  gdk_text_layout_set_width (layout, -1);
+  gdk_text_layout_set_height (layout, -1);
+  gdk_text_layout_get_extents (layout, &rect, NULL);
 
   if (id != G_MAXUINT)
     gtk_bitset_add (chooser->tested_emoji, id);
 
-  if (pango_layout_get_unknown_glyphs_count (layout) > 0 ||
+  if (gdk_text_layout_get_unknown_glyphs_count (layout) > 0 ||
       (chooser->emoji_max_width > 0 &&
        rect.width >= 1.5 * chooser->emoji_max_width))
     {

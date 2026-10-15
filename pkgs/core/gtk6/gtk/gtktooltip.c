@@ -195,11 +195,11 @@ gtk_tooltip_dispose (GObject *object)
 /**
  * gtk_tooltip_set_markup:
  * @tooltip: a `GtkTooltip`
- * @markup: (nullable): a string with Pango markup or %NLL
+ * @markup: (nullable): a string with GdkText markup or %NLL
  *
  * Sets the text of the tooltip to be @markup.
  *
- * The string must be marked up with Pango markup.
+ * The string must be marked up with GdkText markup.
  * If @markup is %NULL, the label will be hidden.
  */
 void

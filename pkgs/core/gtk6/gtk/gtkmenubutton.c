@@ -1177,8 +1177,8 @@ gtk_menu_button_set_label (GtkMenuButton *menu_button,
   gtk_label_set_use_underline (GTK_LABEL (label_widget),
                                gtk_button_get_use_underline (GTK_BUTTON (menu_button->button)));
   gtk_label_set_ellipsize (GTK_LABEL (label_widget),
-                           menu_button->can_shrink ? PANGO_ELLIPSIZE_END
-                                                   : PANGO_ELLIPSIZE_NONE);
+                           menu_button->can_shrink ? GDK_TEXT_ELLIPSIZE_END
+                                                   : GDK_TEXT_ELLIPSIZE_NONE);
   gtk_widget_set_hexpand (label_widget, TRUE);
   arrow = gtk_builtin_icon_new ("arrow");
   menu_button->arrow_widget = arrow;
@@ -1633,8 +1633,8 @@ gtk_menu_button_set_can_shrink (GtkMenuButton *menu_button,
   if (menu_button->label_widget != NULL)
     {
       gtk_label_set_ellipsize (GTK_LABEL (menu_button->label_widget),
-                               can_shrink ? PANGO_ELLIPSIZE_END
-                                          : PANGO_ELLIPSIZE_NONE);
+                               can_shrink ? GDK_TEXT_ELLIPSIZE_END
+                                          : GDK_TEXT_ELLIPSIZE_NONE);
     }
 
   g_object_notify_by_pspec (G_OBJECT (menu_button), menu_button_props[PROP_CAN_SHRINK]);

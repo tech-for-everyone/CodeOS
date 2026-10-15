@@ -240,19 +240,19 @@ gdk_rgba_parse (GdkRGBA    *rgba,
     }
   else
     {
-      PangoColor pango_color;
+      GdkTextColor gdk_text_color;
       guint16 alpha;
 
-      /* Resort on PangoColor for rgb.txt color
+      /* Resort on GdkTextColor for rgb.txt color
        * map and '#' prefixed colors
        */
-      if (pango_color_parse_with_alpha (&pango_color, &alpha, str))
+      if (gdk_text_color_parse_with_alpha (&gdk_text_color, &alpha, str))
         {
           if (rgba)
             {
-              rgba->red = pango_color.red / 65535.;
-              rgba->green = pango_color.green / 65535.;
-              rgba->blue = pango_color.blue / 65535.;
+              rgba->red = gdk_text_color.red / 65535.;
+              rgba->green = gdk_text_color.green / 65535.;
+              rgba->blue = gdk_text_color.blue / 65535.;
               rgba->alpha = alpha / 65535.;
             }
 

@@ -1546,16 +1546,16 @@ gtk_scale_finalize (GObject *object)
  * gtk_scale_get_layout:
  * @scale: A `GtkScale`
  *
- * Gets the `PangoLayout` used to display the scale.
+ * Gets the `GdkTextLayout` used to display the scale.
  *
  * The returned object is owned by the scale so does not need
  * to be freed by the caller.
  *
- * Returns: (transfer none) (nullable): the [class@Pango.Layout]
+ * Returns: (transfer none) (nullable): the [class@GdkText.Layout]
  *   for this scale, or %NULL if the [property@Gtk.Scale:draw-value]
  *   property is %FALSE.
  */
-PangoLayout *
+GdkTextLayout *
 gtk_scale_get_layout (GtkScale *scale)
 {
   GtkScalePrivate *priv = gtk_scale_get_instance_private (scale);
@@ -1575,10 +1575,10 @@ gtk_scale_get_layout (GtkScale *scale)
  * @y: (out) (optional): location to store Y offset of layout
  *
  * Obtains the coordinates where the scale will draw the
- * `PangoLayout` representing the text in the scale.
+ * `GdkTextLayout` representing the text in the scale.
  *
- * Remember when using the `PangoLayout` function you need to
- * convert to and from pixels using `PANGO_PIXELS()` or `PANGO_SCALE`.
+ * Remember when using the `GdkTextLayout` function you need to
+ * convert to and from pixels using `GDK_TEXT_PIXELS()` or `GDK_TEXT_SCALE`.
  *
  * If the [property@Gtk.Scale:draw-value] property is %FALSE, the return
  * values are undefined.
@@ -1652,7 +1652,7 @@ gtk_scale_clear_marks (GtkScale *scale)
  *   and %GTK_POS_LEFT are drawn above the scale, anything else below.
  *   For a vertical scale, %GTK_POS_LEFT and %GTK_POS_TOP are drawn to
  *   the left of the scale, anything else to the right.
- * @markup: (nullable): Text to be shown at the mark, using Pango markup
+ * @markup: (nullable): Text to be shown at the mark, using GdkText markup
  *
  * Adds a mark at @value.
  *

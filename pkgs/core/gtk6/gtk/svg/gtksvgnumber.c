@@ -327,7 +327,7 @@ svg_number_new (double value)
     { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = 2 },
     { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = 4 }, /* default miter limit */
     { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = DEFAULT_FONT_SIZE },
-    { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = PANGO_WEIGHT_NORMAL },
+    { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = GDK_TEXT_WEIGHT_NORMAL },
     { { &SVG_NUMBER_CLASS, 0 }, .unit = SVG_UNIT_NUMBER, .value = -1 }, /* unset path length */
   };
   SvgValue *result;

@@ -118,7 +118,7 @@ typedef struct
   } text;
   uint64_t num_loaded_elements;
   gboolean load_user_style;
-  PangoLanguage *lang;
+  GdkTextLanguage *lang;
   char *media;
 } ParserData;
 
@@ -2156,7 +2156,7 @@ start_element_cb (GMarkupParseContext  *context,
         {
           if (strcmp (attr_names[i], "lang") == 0)
             {
-              data->lang = pango_language_from_string (attr_values[i]);
+              data->lang = gdk_text_language_from_string (attr_values[i]);
               break;
             }
         }

@@ -225,9 +225,9 @@ gtk_css_font_size_get_default_px (GtkStyleProvider *provider,
   if (font_size == 0)
     return DEFAULT_FONT_SIZE_PT * get_dpi (style) / 72.0;
   else if (gtk_settings_get_font_size_is_absolute (settings))
-    return (double) font_size / PANGO_SCALE;
+    return (double) font_size / GDK_TEXT_SCALE;
   else
-    return ((double) font_size / PANGO_SCALE) * get_dpi (style) / 72.0;
+    return ((double) font_size / GDK_TEXT_SCALE) * get_dpi (style) / 72.0;
 }
 
 static GtkCssValue *
@@ -345,7 +345,7 @@ _gtk_css_font_size_value_get (const GtkCssValue *value)
 }
 
 /* }}} */
-/* {{{ PangoStyle */
+/* {{{ GdkTextStyle */
 
 static const GtkCssValueClass GTK_CSS_VALUE_FONT_STYLE = {
   "GtkCssFontStyleValue",
@@ -360,13 +360,13 @@ static const GtkCssValueClass GTK_CSS_VALUE_FONT_STYLE = {
 };
 
 static GtkCssValue font_style_values[] = {
-  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, PANGO_STYLE_NORMAL, "normal" },
-  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, PANGO_STYLE_OBLIQUE, "oblique" },
-  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, PANGO_STYLE_ITALIC, "italic" }
+  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, GDK_TEXT_STYLE_NORMAL, "normal" },
+  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, GDK_TEXT_STYLE_OBLIQUE, "oblique" },
+  { &GTK_CSS_VALUE_FONT_STYLE, 1, 1, 0, 0, GDK_TEXT_STYLE_ITALIC, "italic" }
 };
 
 GtkCssValue *
-_gtk_css_font_style_value_new (PangoStyle font_style)
+_gtk_css_font_style_value_new (GdkTextStyle font_style)
 {
   g_return_val_if_fail (font_style < G_N_ELEMENTS (font_style_values), NULL);
 
@@ -389,16 +389,16 @@ _gtk_css_font_style_value_try_parse (GtkCssParser *parser)
   return NULL;
 }
 
-PangoStyle
+GdkTextStyle
 _gtk_css_font_style_value_get (const GtkCssValue *value)
 {
-  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_STYLE, PANGO_STYLE_NORMAL);
+  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_STYLE, GDK_TEXT_STYLE_NORMAL);
 
   return value->value;
 }
 
 /* }}} */
-/* {{{ PangoWeight */
+/* {{{ GdkTextWeight */
 
 #define BOLDER -1
 #define LIGHTER -2
@@ -408,7 +408,7 @@ gtk_css_value_font_weight_compute (GtkCssValue          *value,
                                    guint                 property_id,
                                    GtkCssComputeContext *context)
 {
-  PangoWeight new_weight;
+  GdkTextWeight new_weight;
   int parent_value;
 
   if (value->value >= 0)
@@ -440,7 +440,7 @@ gtk_css_value_font_weight_compute (GtkCssValue          *value,
   else
     {
       g_assert_not_reached ();
-      new_weight = PANGO_WEIGHT_NORMAL;
+      new_weight = GDK_TEXT_WEIGHT_NORMAL;
     }
 
   return gtk_css_number_value_new (new_weight, GTK_CSS_NUMBER);
@@ -477,17 +477,17 @@ gtk_css_font_weight_value_try_parse (GtkCssParser *parser)
     }
 
   if (gtk_css_parser_try_ident (parser, "normal"))
-    return gtk_css_number_value_new (PANGO_WEIGHT_NORMAL, GTK_CSS_NUMBER);
+    return gtk_css_number_value_new (GDK_TEXT_WEIGHT_NORMAL, GTK_CSS_NUMBER);
   if (gtk_css_parser_try_ident (parser, "bold"))
-    return gtk_css_number_value_new (PANGO_WEIGHT_BOLD, GTK_CSS_NUMBER);
+    return gtk_css_number_value_new (GDK_TEXT_WEIGHT_BOLD, GTK_CSS_NUMBER);
 
   return NULL;
 }
 
-PangoWeight
+GdkTextWeight
 gtk_css_font_weight_value_get (const GtkCssValue *value)
 {
-  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_WEIGHT, PANGO_WEIGHT_NORMAL);
+  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_WEIGHT, GDK_TEXT_WEIGHT_NORMAL);
 
   return value->value;
 }
@@ -496,7 +496,7 @@ gtk_css_font_weight_value_get (const GtkCssValue *value)
 #undef LIGHTER
 
 /* }}} */
-/* {{{ PangoWidth */
+/* {{{ GdkTextWidth */
 
 static GtkCssValue *
 gtk_css_value_font_width_compute (GtkCssValue          *value,
@@ -519,19 +519,19 @@ static const GtkCssValueClass GTK_CSS_VALUE_FONT_WIDTH = {
 };
 
 static GtkCssValue font_width_values[] = {
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_ULTRA_CONDENSED, "ultra-condensed" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_EXTRA_CONDENSED, "extra-condensed" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_CONDENSED, "condensed" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_SEMI_CONDENSED, "semi-condensed" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_NORMAL, "normal" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_SEMI_EXPANDED, "semi-expanded" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_EXPANDED, "expanded" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_EXTRA_EXPANDED, "extra-expanded" },
-  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, PANGO_WIDTH_ULTRA_EXPANDED, "ultra-expanded" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_ULTRA_CONDENSED, "ultra-condensed" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_EXTRA_CONDENSED, "extra-condensed" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_CONDENSED, "condensed" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_SEMI_CONDENSED, "semi-condensed" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_NORMAL, "normal" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_SEMI_EXPANDED, "semi-expanded" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_EXPANDED, "expanded" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_EXTRA_EXPANDED, "extra-expanded" },
+  { &GTK_CSS_VALUE_FONT_WIDTH, 1, 0, 0, 0, GDK_TEXT_WIDTH_ULTRA_EXPANDED, "ultra-expanded" },
 };
 
 GtkCssValue *
-_gtk_css_font_width_value_new (PangoWidth font_width)
+_gtk_css_font_width_value_new (GdkTextWidth font_width)
 {
   for (unsigned int i = 0; i < G_N_ELEMENTS (font_width_values); i++)
     {
@@ -556,10 +556,10 @@ _gtk_css_font_width_value_try_parse (GtkCssParser *parser)
   return NULL;
 }
 
-PangoWidth
+GdkTextWidth
 _gtk_css_font_width_value_get (const GtkCssValue *value)
 {
-  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_WIDTH, PANGO_WIDTH_NORMAL);
+  g_return_val_if_fail (value->class == &GTK_CSS_VALUE_FONT_WIDTH, GDK_TEXT_WIDTH_NORMAL);
 
   return value->value;
 }

@@ -3116,8 +3116,8 @@ gtk_snapshot_add_color (GtkSnapshot           *snapshot,
 
 void
 gtk_snapshot_append_text (GtkSnapshot           *snapshot,
-                          PangoFont             *font,
-                          PangoGlyphString      *glyphs,
+                          GdkTextFont             *font,
+                          GdkTextGlyphString      *glyphs,
                           const GdkRGBA         *color,
                           float                  x,
                           float                  y)
@@ -3131,8 +3131,8 @@ gtk_snapshot_append_text (GtkSnapshot           *snapshot,
 
 void
 gtk_snapshot_add_text (GtkSnapshot      *snapshot,
-                       PangoFont        *font,
-                       PangoGlyphString *glyphs,
+                       GdkTextFont        *font,
+                       GdkTextGlyphString *glyphs,
                        const GdkColor   *color,
                        float             x,
                        float             y)
@@ -3141,7 +3141,7 @@ gtk_snapshot_add_text (GtkSnapshot      *snapshot,
   float dx, dy;
 
   g_return_if_fail (snapshot != NULL);
-  g_return_if_fail (PANGO_IS_FONT (font));
+  g_return_if_fail (GDK_TEXT_IS_FONT (font));
   g_return_if_fail (glyphs != NULL);
   g_return_if_fail (color != NULL);
 

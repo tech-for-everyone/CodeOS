@@ -81,12 +81,12 @@ struct _GtkFontDialogButton
 
   GtkFontDialog *dialog;
   GCancellable *cancellable;
-  PangoFontDescription *font_desc;
+  GdkTextFontDescription *font_desc;
   char *font_features;
-  PangoLanguage *language;
+  GdkTextLanguage *language;
 
-  PangoFontFamily *font_family;
-  PangoFontFace *font_face;
+  GdkTextFontFamily *font_family;
+  GdkTextFontFace *font_face;
 };
 
 /* Properties */
@@ -119,7 +119,7 @@ static void
 gtk_font_dialog_button_init (GtkFontDialogButton *self)
 {
   GtkWidget *box;
-  PangoFontDescription *font_desc;
+  GdkTextFontDescription *font_desc;
 
   g_signal_connect_swapped (self, "activate", G_CALLBACK (activated), self);
 
@@ -145,9 +145,9 @@ gtk_font_dialog_button_init (GtkFontDialogButton *self)
   self->use_font = FALSE;
   self->use_size = FALSE;
 
-  font_desc = pango_font_description_from_string ("Sans 12");
+  font_desc = gdk_text_font_description_from_string ("Sans 12");
   gtk_font_dialog_button_set_font_desc (self, font_desc);
-  pango_font_description_free (font_desc);
+  gdk_text_font_description_free (font_desc);
 
   gtk_widget_add_css_class (self->button, "font");
 
@@ -276,7 +276,7 @@ gtk_font_dialog_button_finalize (GObject *object)
 
   g_assert (self->cancellable == NULL);
   g_clear_object (&self->dialog);
-  pango_font_description_free (self->font_desc);
+  gdk_text_font_description_free (self->font_desc);
   g_clear_object (&self->font_family);
   g_clear_object (&self->font_face);
   g_free (self->font_features);
@@ -339,7 +339,7 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
    */
   properties[PROP_FONT_DESC] =
       g_param_spec_boxed ("font-desc", NULL, NULL,
-                          PANGO_TYPE_FONT_DESCRIPTION,
+                          GDK_TEXT_TYPE_FONT_DESCRIPTION,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -375,7 +375,7 @@ gtk_font_dialog_button_class_init (GtkFontDialogButtonClass *class)
    */
   properties[PROP_LANGUAGE] =
       g_param_spec_boxed ("language", NULL, NULL,
-                          PANGO_TYPE_LANGUAGE,
+                          GDK_TEXT_TYPE_LANGUAGE,
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
@@ -444,19 +444,19 @@ family_chosen (GObject      *source,
 {
   GtkFontDialog *dialog = GTK_FONT_DIALOG (source);
   GtkFontDialogButton *self = data;
-  PangoFontFamily *family;
+  GdkTextFontFamily *family;
 
   family = gtk_font_dialog_choose_family_finish (dialog, result, NULL);
   if (family)
     {
-      PangoFontDescription *desc;
+      GdkTextFontDescription *desc;
 
-      desc = pango_font_description_new ();
-      pango_font_description_set_family (desc, pango_font_family_get_name (family));
+      desc = gdk_text_font_description_new ();
+      gdk_text_font_description_set_family (desc, gdk_text_font_family_get_name (family));
 
       gtk_font_dialog_button_set_font_desc (self, desc);
 
-      pango_font_description_free (desc);
+      gdk_text_font_description_free (desc);
       g_object_unref (family);
     }
 
@@ -471,18 +471,18 @@ face_chosen (GObject      *source,
 {
   GtkFontDialog *dialog = GTK_FONT_DIALOG (source);
   GtkFontDialogButton *self = data;
-  PangoFontFace *face;
+  GdkTextFontFace *face;
 
   face = gtk_font_dialog_choose_face_finish (dialog, result, NULL);
   if (face)
     {
-      PangoFontDescription *desc;
+      GdkTextFontDescription *desc;
 
-      desc = pango_font_face_describe (face);
+      desc = gdk_text_font_face_describe (face);
 
       gtk_font_dialog_button_set_font_desc (self, desc);
 
-      pango_font_description_free (desc);
+      gdk_text_font_description_free (desc);
       g_object_unref (face);
     }
 
@@ -497,13 +497,13 @@ font_chosen (GObject      *source,
 {
   GtkFontDialog *dialog = GTK_FONT_DIALOG (source);
   GtkFontDialogButton *self = data;
-  PangoFontDescription *desc;
+  GdkTextFontDescription *desc;
 
   desc = gtk_font_dialog_choose_font_finish (dialog, result, NULL);
   if (desc)
     {
       gtk_font_dialog_button_set_font_desc (self, desc);
-      pango_font_description_free (desc);
+      gdk_text_font_description_free (desc);
     }
 
   g_clear_object (&self->cancellable);
@@ -517,9 +517,9 @@ font_and_features_chosen (GObject      *source,
 {
   GtkFontDialog *dialog = GTK_FONT_DIALOG (source);
   GtkFontDialogButton *self = data;
-  PangoFontDescription *desc;
+  GdkTextFontDescription *desc;
   char *features;
-  PangoLanguage *language;
+  GdkTextLanguage *language;
 
   if (gtk_font_dialog_choose_font_and_features_finish (dialog, result,
                                                        &desc, &features, &language,
@@ -529,7 +529,7 @@ font_and_features_chosen (GObject      *source,
       gtk_font_dialog_button_set_font_features (self, features);
       gtk_font_dialog_button_set_language (self, language);
 
-      pango_font_description_free (desc);
+      gdk_text_font_description_free (desc);
       g_free (features);
     }
 
@@ -585,19 +585,19 @@ button_clicked (GtkFontDialogButton *self)
 }
 
 static gboolean
-font_description_style_equal (const PangoFontDescription *a,
-                              const PangoFontDescription *b)
+font_description_style_equal (const GdkTextFontDescription *a,
+                              const GdkTextFontDescription *b)
 {
-  return (pango_font_description_get_weight (a) == pango_font_description_get_weight (b) &&
-          pango_font_description_get_style (a) == pango_font_description_get_style (b) &&
-          pango_font_description_get_stretch (a) == pango_font_description_get_stretch (b) &&
-          pango_font_description_get_variant (a) == pango_font_description_get_variant (b));
+  return (gdk_text_font_description_get_weight (a) == gdk_text_font_description_get_weight (b) &&
+          gdk_text_font_description_get_style (a) == gdk_text_font_description_get_style (b) &&
+          gdk_text_font_description_get_stretch (a) == gdk_text_font_description_get_stretch (b) &&
+          gdk_text_font_description_get_variant (a) == gdk_text_font_description_get_variant (b));
 }
 
 static void
 update_font_data (GtkFontDialogButton *self)
 {
-  PangoFontMap *fontmap = NULL;
+  GdkTextFontMap *fontmap = NULL;
   const char *family_name;
 
   g_assert (self->font_desc != NULL);
@@ -605,19 +605,19 @@ update_font_data (GtkFontDialogButton *self)
   g_clear_object (&self->font_family);
   g_clear_object (&self->font_face);
 
-  family_name = pango_font_description_get_family (self->font_desc);
+  family_name = gdk_text_font_description_get_family (self->font_desc);
   if (family_name == NULL)
     return;
 
   if (self->dialog)
     fontmap = gtk_font_dialog_get_font_map (self->dialog);
   if (!fontmap)
-    fontmap = pango_cairo_font_map_get_default ();
+    fontmap = gdk_text_cairo_font_map_get_default ();
 
   for (unsigned int i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (fontmap)); i++)
     {
-      PangoFontFamily *family = g_list_model_get_item (G_LIST_MODEL (fontmap), i);
-      const char *name = pango_font_family_get_name (family);
+      GdkTextFontFamily *family = g_list_model_get_item (G_LIST_MODEL (fontmap), i);
+      const char *name = gdk_text_font_family_get_name (family);
       g_object_unref (family);
 
       if (g_ascii_strcasecmp (name, family_name) == 0)
@@ -632,18 +632,18 @@ update_font_data (GtkFontDialogButton *self)
 
   for (unsigned i = 0; i < g_list_model_get_n_items (G_LIST_MODEL (self->font_family)); i++)
     {
-      PangoFontFace *face = g_list_model_get_item (G_LIST_MODEL (self->font_family), i);
-      PangoFontDescription *tmp_desc = pango_font_face_describe (face);
+      GdkTextFontFace *face = g_list_model_get_item (G_LIST_MODEL (self->font_family), i);
+      GdkTextFontDescription *tmp_desc = gdk_text_font_face_describe (face);
       g_object_unref (face);
 
       if (font_description_style_equal (tmp_desc, self->font_desc))
         {
           g_set_object (&self->font_face, face);
-          pango_font_description_free (tmp_desc);
+          gdk_text_font_description_free (tmp_desc);
           break;
         }
       else
-        pango_font_description_free (tmp_desc);
+        gdk_text_font_description_free (tmp_desc);
     }
 }
 
@@ -656,11 +656,11 @@ update_font_info (GtkFontDialogButton *self)
   char *size;
 
   if (self->font_family)
-    fam_name = pango_font_family_get_name (self->font_family);
+    fam_name = gdk_text_font_family_get_name (self->font_family);
   else
     fam_name = C_("font", "None");
   if (self->font_face)
-    face_name = pango_font_face_get_face_name (self->font_face);
+    face_name = gdk_text_font_face_get_face_name (self->font_face);
   else
     face_name = "";
 
@@ -674,10 +674,10 @@ update_font_info (GtkFontDialogButton *self)
 
   if (self->level >= GTK_FONT_LEVEL_FONT)
     {
-      /* mirror Pango, which doesn't translate this either */
+      /* mirror GdkText, which doesn't translate this either */
       size = g_strdup_printf ("%2.4g%s",
-                              pango_font_description_get_size (self->font_desc) / (double)PANGO_SCALE,
-                              pango_font_description_get_size_is_absolute (self->font_desc) ? "px" : "");
+                              gdk_text_font_description_get_size (self->font_desc) / (double)GDK_TEXT_SCALE,
+                              gdk_text_font_description_get_size_is_absolute (self->font_desc) ? "px" : "");
 
       gtk_label_set_text (GTK_LABEL (self->size_label), size);
       g_free (size);
@@ -693,24 +693,24 @@ apply_use_font (GtkFontDialogButton *self)
     gtk_label_set_attributes (GTK_LABEL (self->font_label), NULL);
   else
     {
-      PangoFontDescription *desc;
-      PangoAttrList *attrs;
-      PangoLanguage *language;
+      GdkTextFontDescription *desc;
+      GdkTextAttrList *attrs;
+      GdkTextLanguage *language;
 
-      desc = pango_font_description_copy (self->font_desc);
+      desc = gdk_text_font_description_copy (self->font_desc);
 
       if (!self->use_size)
-        pango_font_description_unset_fields (desc, PANGO_FONT_MASK_SIZE);
+        gdk_text_font_description_unset_fields (desc, GDK_TEXT_FONT_MASK_SIZE);
 
-      attrs = pango_attr_list_new ();
+      attrs = gdk_text_attr_list_new ();
 
       /* Prevent font fallback */
-      pango_attr_list_insert (attrs, pango_attr_fallback_new (FALSE));
+      gdk_text_attr_list_insert (attrs, gdk_text_attr_fallback_new (FALSE));
 
       /* Force current font and features */
-      pango_attr_list_insert (attrs, pango_attr_font_desc_new (desc));
+      gdk_text_attr_list_insert (attrs, gdk_text_attr_font_desc_new (desc));
       if (self->font_features)
-        pango_attr_list_insert (attrs, pango_attr_font_features_new (self->font_features));
+        gdk_text_attr_list_insert (attrs, gdk_text_attr_font_features_new (self->font_features));
       if (self->language)
         language = self->language;
       else if (self->dialog)
@@ -718,12 +718,12 @@ apply_use_font (GtkFontDialogButton *self)
       else
         language = NULL;
       if (language)
-        pango_attr_list_insert (attrs, pango_attr_language_new (language));
+        gdk_text_attr_list_insert (attrs, gdk_text_attr_language_new (language));
 
       gtk_label_set_attributes (GTK_LABEL (self->font_label), attrs);
 
-      pango_attr_list_unref (attrs);
-      pango_font_description_free (desc);
+      gdk_text_attr_list_unref (attrs);
+      gdk_text_font_description_free (desc);
     }
 }
 
@@ -861,20 +861,20 @@ gtk_font_dialog_button_set_level (GtkFontDialogButton *self,
  */
 void
 gtk_font_dialog_button_set_font_desc (GtkFontDialogButton        *self,
-                                      const PangoFontDescription *font_desc)
+                                      const GdkTextFontDescription *font_desc)
 {
   g_return_if_fail (GTK_IS_FONT_DIALOG_BUTTON (self));
   g_return_if_fail (font_desc != NULL);
 
   if (self->font_desc == font_desc ||
       (self->font_desc && font_desc &&
-       pango_font_description_equal (self->font_desc, font_desc)))
+       gdk_text_font_description_equal (self->font_desc, font_desc)))
     return;
 
   if (self->font_desc)
-    pango_font_description_free (self->font_desc);
+    gdk_text_font_description_free (self->font_desc);
 
-  self->font_desc = pango_font_description_copy (font_desc);
+  self->font_desc = gdk_text_font_description_copy (font_desc);
 
   update_font_data (self);
   update_font_info (self);
@@ -897,7 +897,7 @@ gtk_font_dialog_button_set_font_desc (GtkFontDialogButton        *self,
  *
  * Since: 4.10
  */
-PangoFontDescription *
+GdkTextFontDescription *
 gtk_font_dialog_button_get_font_desc (GtkFontDialogButton *self)
 {
   g_return_val_if_fail (GTK_IS_FONT_DIALOG_BUTTON (self), NULL);
@@ -971,7 +971,7 @@ gtk_font_dialog_button_get_font_features (GtkFontDialogButton *self)
  */
 void
 gtk_font_dialog_button_set_language (GtkFontDialogButton *self,
-                                     PangoLanguage       *language)
+                                     GdkTextLanguage       *language)
 {
   g_return_if_fail (GTK_IS_FONT_DIALOG_BUTTON (self));
 
@@ -995,7 +995,7 @@ gtk_font_dialog_button_set_language (GtkFontDialogButton *self,
  *
  * Since: 4.10
  */
-PangoLanguage *
+GdkTextLanguage *
 gtk_font_dialog_button_get_language (GtkFontDialogButton *self)
 {
   g_return_val_if_fail (GTK_IS_FONT_DIALOG_BUTTON (self), NULL);

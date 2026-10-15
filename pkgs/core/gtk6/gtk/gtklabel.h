@@ -51,9 +51,9 @@ GDK_AVAILABLE_IN_ALL
 const char *          gtk_label_get_text          (GtkLabel      *self);
 GDK_AVAILABLE_IN_ALL
 void                  gtk_label_set_attributes    (GtkLabel      *self,
-						   PangoAttrList *attrs);
+						   GdkTextAttrList *attrs);
 GDK_AVAILABLE_IN_ALL
-PangoAttrList        *gtk_label_get_attributes    (GtkLabel      *self);
+GdkTextAttrList        *gtk_label_get_attributes    (GtkLabel      *self);
 GDK_AVAILABLE_IN_ALL
 void                  gtk_label_set_label         (GtkLabel      *self,
 						   const char    *str);
@@ -93,9 +93,9 @@ GDK_AVAILABLE_IN_ALL
 GtkJustification gtk_label_get_justify            (GtkLabel         *self);
 GDK_AVAILABLE_IN_ALL
 void     gtk_label_set_ellipsize                  (GtkLabel         *self,
-                                                   PangoEllipsizeMode mode);
+                                                   GdkTextEllipsizeMode mode);
 GDK_AVAILABLE_IN_ALL
-PangoEllipsizeMode gtk_label_get_ellipsize        (GtkLabel         *self);
+GdkTextEllipsizeMode gtk_label_get_ellipsize        (GtkLabel         *self);
 GDK_AVAILABLE_IN_ALL
 void     gtk_label_set_width_chars                (GtkLabel         *self,
                                                    int               n_chars);
@@ -118,9 +118,9 @@ GDK_AVAILABLE_IN_ALL
 gboolean gtk_label_get_wrap                       (GtkLabel         *self);
 GDK_AVAILABLE_IN_ALL
 void     gtk_label_set_wrap_mode                  (GtkLabel         *self,
-                                                   PangoWrapMode     wrap_mode);
+                                                   GdkTextWrapMode     wrap_mode);
 GDK_AVAILABLE_IN_ALL
-PangoWrapMode gtk_label_get_wrap_mode             (GtkLabel         *self);
+GdkTextWrapMode gtk_label_get_wrap_mode             (GtkLabel         *self);
 GDK_AVAILABLE_IN_4_6
 void          gtk_label_set_natural_wrap_mode     (GtkLabel         *self,
                                                    GtkNaturalWrapMode wrap_mode);
@@ -141,7 +141,7 @@ gboolean gtk_label_get_selection_bounds           (GtkLabel         *self,
                                                    int              *end);
 
 GDK_AVAILABLE_IN_ALL
-PangoLayout *gtk_label_get_layout         (GtkLabel *self);
+GdkTextLayout *gtk_label_get_layout         (GtkLabel *self);
 GDK_AVAILABLE_IN_ALL
 void         gtk_label_get_layout_offsets (GtkLabel *self,
                                            int      *x,
@@ -178,10 +178,10 @@ GMenuModel * gtk_label_get_extra_menu (GtkLabel   *self);
 
 GDK_AVAILABLE_IN_4_8
 void             gtk_label_set_tabs (GtkLabel      *self,
-                                     PangoTabArray *tabs);
+                                     GdkTextTabArray *tabs);
 
 GDK_AVAILABLE_IN_4_8
-PangoTabArray * gtk_label_get_tabs  (GtkLabel      *self);
+GdkTextTabArray * gtk_label_get_tabs  (GtkLabel      *self);
 
 
 

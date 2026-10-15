@@ -1352,30 +1352,30 @@ settings_invalidate_style (GtkSettings *settings)
 static void
 settings_update_font_values (GtkSettings *settings)
 {
-  PangoFontDescription *desc;
+  GdkTextFontDescription *desc;
   const char *font_name;
 
   font_name = g_value_get_string (&settings->property_values[PROP_FONT_NAME - 1].value);
-  desc = pango_font_description_from_string (font_name);
+  desc = gdk_text_font_description_from_string (font_name);
 
   if (desc != NULL &&
-      (pango_font_description_get_set_fields (desc) & PANGO_FONT_MASK_SIZE) != 0)
+      (gdk_text_font_description_get_set_fields (desc) & GDK_TEXT_FONT_MASK_SIZE) != 0)
     {
-      settings->font_size = pango_font_description_get_size (desc);
-      settings->font_size_absolute = pango_font_description_get_size_is_absolute (desc);
+      settings->font_size = gdk_text_font_description_get_size (desc);
+      settings->font_size_absolute = gdk_text_font_description_get_size_is_absolute (desc);
     }
   else
     {
-      settings->font_size = 10 * PANGO_SCALE;
+      settings->font_size = 10 * GDK_TEXT_SCALE;
       settings->font_size_absolute = FALSE;
     }
 
   g_free (settings->font_family);
 
   if (desc != NULL &&
-      (pango_font_description_get_set_fields (desc) & PANGO_FONT_MASK_FAMILY) != 0)
+      (gdk_text_font_description_get_set_fields (desc) & GDK_TEXT_FONT_MASK_FAMILY) != 0)
     {
-      settings->font_family = g_strdup (pango_font_description_get_family (desc));
+      settings->font_family = g_strdup (gdk_text_font_description_get_family (desc));
     }
   else
     {
@@ -1383,7 +1383,7 @@ settings_update_font_values (GtkSettings *settings)
     }
 
   if (desc)
-    pango_font_description_free (desc);
+    gdk_text_font_description_free (desc);
 }
 
 static void
@@ -1669,13 +1669,13 @@ settings_update_fontconfig (GtkSettings *settings)
 
   if (timestamp != last_update_timestamp)
     {
-      PangoFontMap *fontmap = pango_cairo_font_map_get_default ();
+      GdkTextFontMap *fontmap = gdk_text_cairo_font_map_get_default ();
       gboolean update_needed = FALSE;
 
       /* bug 547680 */
-      if (PANGO_IS_FC_FONT_MAP (fontmap) && !FcConfigUptoDate (NULL))
+      if (GDK_TEXT_IS_FC_FONT_MAP (fontmap) && !FcConfigUptoDate (NULL))
         {
-          pango_fc_font_map_config_changed (PANGO_FC_FONT_MAP (fontmap));
+          gdk_text_fc_font_map_config_changed (GDK_TEXT_FC_FONT_MAP (fontmap));
           if (FcInitReinitialize ())
             update_needed = TRUE;
         }

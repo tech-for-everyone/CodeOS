@@ -516,7 +516,7 @@ ensure_fontmap (GtkSvg *svg)
   if (svg->fontmap)
     return;
 
-  svg->fontmap = pango_cairo_font_map_new ();
+  svg->fontmap = gdk_text_cairo_font_map_new ();
 
   if ((svg->features & GTK_SVG_SYSTEM_RESOURCES) == 0)
     {
@@ -525,7 +525,7 @@ ensure_fontmap (GtkSvg *svg)
       FcConfig *config;
 
       config = FcConfigCreate ();
-      pango_fc_font_map_set_config (PANGO_FC_FONT_MAP (svg->fontmap), config);
+      gdk_text_fc_font_map_set_config (GDK_TEXT_FC_FONT_MAP (svg->fontmap), config);
       FcConfigDestroy (config);
 #endif
     }
@@ -540,7 +540,7 @@ add_font_from_file (GtkSvg      *svg,
 {
   ensure_fontmap (svg);
 
-  if (!pango_font_map_add_font_file (svg->fontmap, path, error))
+  if (!gdk_text_font_map_add_font_file (svg->fontmap, path, error))
     return FALSE;
 
   g_ptr_array_add (svg->font_files, g_strdup (path));

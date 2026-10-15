@@ -29,10 +29,10 @@ struct _GtkFontFilter
 {
   GtkFilter parent_instance;
 
-  PangoContext *pango_context;
+  GdkTextContext *gdk_text_context;
 
   gboolean monospace;
-  PangoLanguage *language;
+  GdkTextLanguage *language;
 };
 
 enum {
@@ -82,7 +82,7 @@ gtk_font_filter_get_property (GObject         *object,
   switch (prop_id)
     {
     case PROP_PANGO_CONTEXT:
-      g_value_set_object (value, self->pango_context);
+      g_value_set_object (value, self->gdk_text_context);
       break;
     case PROP_MONOSPACE:
       g_value_set_boolean (value, _gtk_font_filter_get_monospace (self));
@@ -101,37 +101,37 @@ gtk_font_filter_match (GtkFilter *filter,
                        gpointer   item)
 {
   GtkFontFilter *self = GTK_FONT_FILTER (filter);
-  PangoFontFamily *family;
-  PangoFontFace *face;
+  GdkTextFontFamily *family;
+  GdkTextFontFace *face;
 
-  if (PANGO_IS_FONT_FAMILY (item))
+  if (GDK_TEXT_IS_FONT_FAMILY (item))
     {
       family = item;
-      face = pango_font_family_get_face (family, NULL);
+      face = gdk_text_font_family_get_face (family, NULL);
     }
   else
     {
-      face = PANGO_FONT_FACE (item);
-      family = pango_font_face_get_family (face);
+      face = GDK_TEXT_FONT_FACE (item);
+      family = gdk_text_font_face_get_family (face);
     }
 
   if (self->monospace &&
-      !pango_font_family_is_monospace (family))
+      !gdk_text_font_family_is_monospace (family))
     return FALSE;
 
   if (self->language)
     {
-      PangoFontDescription *desc;
-      PangoFont *font;
-      PangoLanguage **langs;
+      GdkTextFontDescription *desc;
+      GdkTextFont *font;
+      GdkTextLanguage **langs;
       gboolean ret = FALSE;
 
-      desc = pango_font_face_describe (face);
-      pango_font_description_set_size (desc, 20);
+      desc = gdk_text_font_face_describe (face);
+      gdk_text_font_description_set_size (desc, 20);
 
-      font = pango_context_load_font (self->pango_context, desc);
+      font = gdk_text_context_load_font (self->gdk_text_context, desc);
 
-      langs = pango_font_get_languages (font);
+      langs = gdk_text_font_get_languages (font);
       if (langs)
         {
           for (int i = 0; langs[i]; i++)
@@ -145,7 +145,7 @@ gtk_font_filter_match (GtkFilter *filter,
         }
 
       g_object_unref (font);
-      pango_font_description_free (desc);
+      gdk_text_font_description_free (desc);
 
       return ret;
     }
@@ -178,7 +178,7 @@ gtk_font_filter_class_init (GtkFontFilterClass *klass)
 
   properties[PROP_PANGO_CONTEXT] =
     g_param_spec_object ("pango-context", NULL, NULL,
-                         PANGO_TYPE_CONTEXT,
+                         GDK_TEXT_TYPE_CONTEXT,
                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
   properties[PROP_MONOSPACE] =
     g_param_spec_boolean ("monospace", NULL, NULL,
@@ -186,7 +186,7 @@ gtk_font_filter_class_init (GtkFontFilterClass *klass)
                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
   properties[PROP_LANGUAGE] =
     g_param_spec_boxed ("language", NULL, NULL,
-                        PANGO_TYPE_LANGUAGE,
+                        GDK_TEXT_TYPE_LANGUAGE,
                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
 
   g_object_class_install_properties (gobject_class, N_PROPS, properties);
@@ -199,15 +199,15 @@ gtk_font_filter_init (GtkFontFilter *self)
 
 void
 _gtk_font_filter_set_pango_context (GtkFontFilter *self,
-                                    PangoContext  *context)
+                                    GdkTextContext  *context)
 {
   g_return_if_fail (GTK_IS_FONT_FILTER (self));
-  g_return_if_fail (PANGO_IS_CONTEXT (context));
+  g_return_if_fail (GDK_TEXT_IS_CONTEXT (context));
 
-  if (self->pango_context == context)
+  if (self->gdk_text_context == context)
     return;
 
-  self->pango_context = context;
+  self->gdk_text_context = context;
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_PANGO_CONTEXT]);
 }
 
@@ -235,7 +235,7 @@ _gtk_font_filter_set_monospace (GtkFontFilter *self,
                                 : GTK_FILTER_CHANGE_LESS_STRICT);
 }
 
-PangoLanguage *
+GdkTextLanguage *
 _gtk_font_filter_get_language (GtkFontFilter *self)
 {
   g_return_val_if_fail (GTK_IS_FONT_FILTER (self), NULL);
@@ -245,7 +245,7 @@ _gtk_font_filter_get_language (GtkFontFilter *self)
 
 void
 _gtk_font_filter_set_language (GtkFontFilter *self,
-                               PangoLanguage *lang)
+                               GdkTextLanguage *lang)
 {
   GtkFilterChange filter_change = GTK_FILTER_CHANGE_DIFFERENT;
 

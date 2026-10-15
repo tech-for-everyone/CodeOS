@@ -87,6 +87,7 @@ RULES = [
     (r"\bcairo_matrix_t\b",                   "GdkPaintMatrix"),
     (r"\bcairo_device_t\b",                   "GdkPaintDevice"),
     (r"\bcairo_status_t\b",                   "GdkPaintStatus"),
+    (r"\bcairo_font_type_t\b",                "GdkPaintFontType"),
     (r"\bcairo_format_t\b",                   "GdkPaintFormat"),
     (r"\bcairo_content_t\b",                  "GdkPaintContent"),
     (r"\bcairo_operator_t\b",                 "GdkPaintOperator"),

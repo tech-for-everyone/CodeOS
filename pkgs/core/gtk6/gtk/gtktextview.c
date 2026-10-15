@@ -226,7 +226,7 @@ struct _GtkTextViewPrivate
   GtkTextLayout *layout;
   GtkTextBuffer *buffer;
 
-  PangoContext *mru_line_height_context;
+  GdkTextContext *mru_line_height_context;
   guint mru_line_height_context_serial;
   int mru_line_height;
 
@@ -332,7 +332,7 @@ struct _GtkTextViewPrivate
   guint32 obscured_cursor_timestamp;
 
   gint64 handle_place_time;
-  PangoTabArray *tabs;
+  GdkTextTabArray *tabs;
 
   guint editable : 1;
 
@@ -1118,7 +1118,7 @@ gtk_text_view_class_init (GtkTextViewClass *klass)
    * Custom tabs for this text.
    */
   props[PROP_TABS] = g_param_spec_boxed ("tabs", NULL, NULL,
-                                         PANGO_TYPE_TAB_ARRAY,
+                                         GDK_TEXT_TYPE_TAB_ARRAY,
                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME);
 
   /**
@@ -3037,7 +3037,7 @@ gtk_text_view_update_im_spot_location (GtkTextView *text_view)
   area.x -= text_view->priv->xoffset - x_offset;
   area.y -= text_view->priv->yoffset - y_offset;
 
-  /* Width returned by Pango indicates direction of cursor,
+  /* Width returned by GdkText indicates direction of cursor,
    * by its sign more than the size of cursor.
    */
   area.width = 0;
@@ -3857,7 +3857,7 @@ gtk_text_view_get_indent (GtkTextView *text_view)
 /**
  * gtk_text_view_set_tabs:
  * @text_view: a `GtkTextView`
- * @tabs: tabs as a `PangoTabArray`
+ * @tabs: tabs as a `GdkTextTabArray`
  *
  * Sets the default tab stops for paragraphs in @text_view.
  *
@@ -3865,7 +3865,7 @@ gtk_text_view_get_indent (GtkTextView *text_view)
  */
 void
 gtk_text_view_set_tabs (GtkTextView   *text_view,
-                        PangoTabArray *tabs)
+                        GdkTextTabArray *tabs)
 {
   GtkTextViewPrivate *priv;
 
@@ -3874,18 +3874,18 @@ gtk_text_view_set_tabs (GtkTextView   *text_view,
   priv = text_view->priv;
 
   if (priv->tabs)
-    pango_tab_array_free (priv->tabs);
+    gdk_text_tab_array_free (priv->tabs);
 
-  priv->tabs = tabs ? pango_tab_array_copy (tabs) : NULL;
+  priv->tabs = tabs ? gdk_text_tab_array_copy (tabs) : NULL;
 
   if (priv->layout && priv->layout->default_style)
     {
       /* some unkosher futzing in internal struct details... */
       if (priv->layout->default_style->tabs)
-        pango_tab_array_free (priv->layout->default_style->tabs);
+        gdk_text_tab_array_free (priv->layout->default_style->tabs);
 
       priv->layout->default_style->tabs =
-        priv->tabs ? pango_tab_array_copy (priv->tabs) : NULL;
+        priv->tabs ? gdk_text_tab_array_copy (priv->tabs) : NULL;
 
       gtk_text_layout_default_style_changed (priv->layout);
     }
@@ -3901,18 +3901,18 @@ gtk_text_view_set_tabs (GtkTextView   *text_view,
  *
  * Tags in the buffer may override the defaults. The returned array
  * will be %NULL if “standard” (8-space) tabs are used. Free the
- * return value with [method@Pango.TabArray.free].
+ * return value with [method@GdkText.TabArray.free].
  *
  * Returns: (nullable) (transfer full): copy of default tab array,
  *   or %NULL if standard tabs are used; must be freed with
- *   [method@Pango.TabArray.free].
+ *   [method@GdkText.TabArray.free].
  */
-PangoTabArray*
+GdkTextTabArray*
 gtk_text_view_get_tabs (GtkTextView *text_view)
 {
   g_return_val_if_fail (GTK_IS_TEXT_VIEW (text_view), NULL);
 
-  return text_view->priv->tabs ? pango_tab_array_copy (text_view->priv->tabs) : NULL;
+  return text_view->priv->tabs ? gdk_text_tab_array_copy (text_view->priv->tabs) : NULL;
 }
 
 static void
@@ -4106,7 +4106,7 @@ gtk_text_view_finalize (GObject *object)
   cancel_pending_scroll (text_view);
 
   if (priv->tabs)
-    pango_tab_array_free (priv->tabs);
+    gdk_text_tab_array_free (priv->tabs);
 
   if (priv->hadjustment)
     g_object_unref (priv->hadjustment);
@@ -4715,21 +4715,21 @@ gtk_text_view_get_mru_line_height (GtkTextView *text_view)
 {
   GtkTextViewPrivate *priv = text_view->priv;
   GtkWidget *widget = GTK_WIDGET (text_view);
-  PangoContext *context;
-  PangoLayout *layout;
+  GdkTextContext *context;
+  GdkTextLayout *layout;
   guint serial;
   int height;
 
   context = gtk_widget_get_pango_context (widget);
-  serial = pango_context_get_serial (context);
+  serial = gdk_text_context_get_serial (context);
 
   if (priv->mru_line_height_context == context &&
       priv->mru_line_height_context_serial == serial)
     return priv->mru_line_height;
 
-  layout = pango_layout_new (context);
-  pango_layout_set_text (layout, "X", 1);
-  pango_layout_get_pixel_size (layout, NULL, &height);
+  layout = gdk_text_layout_new (context);
+  gdk_text_layout_set_text (layout, "X", 1);
+  gdk_text_layout_get_pixel_size (layout, NULL, &height);
   g_object_unref (layout);
 
   g_set_object (&priv->mru_line_height_context, context);
@@ -6477,7 +6477,7 @@ iter_line_is_rtl (const GtkTextIter *iter)
 {
   GtkTextIter start, end;
   char *text;
-  PangoDirection direction;
+  GdkTextDirection direction;
 
   start = end = *iter;
   gtk_text_iter_set_line_offset (&start, 0);
@@ -6487,7 +6487,7 @@ iter_line_is_rtl (const GtkTextIter *iter)
 
   g_free (text);
 
-  return direction == PANGO_DIRECTION_RTL;
+  return direction == GDK_TEXT_DIRECTION_RTL;
 }
 
 static void
@@ -7958,7 +7958,7 @@ gtk_text_view_set_attributes_from_style (GtkTextView        *text_view,
   *values->appearance.fg_rgba = *gtk_css_color_value_get_rgba (style->used->color);
 
   if (values->font)
-    pango_font_description_free (values->font);
+    gdk_text_font_description_free (values->font);
 
   values->font = gtk_css_style_get_pango_font (style);
 
@@ -7973,14 +7973,14 @@ gtk_text_view_set_attributes_from_style (GtkTextView        *text_view,
       switch (decoration_style)
         {
         case GTK_CSS_TEXT_DECORATION_STYLE_DOUBLE:
-          values->appearance.underline = PANGO_UNDERLINE_DOUBLE;
+          values->appearance.underline = GDK_TEXT_UNDERLINE_DOUBLE;
           break;
         case GTK_CSS_TEXT_DECORATION_STYLE_WAVY:
-          values->appearance.underline = PANGO_UNDERLINE_ERROR;
+          values->appearance.underline = GDK_TEXT_UNDERLINE_ERROR;
           break;
         case GTK_CSS_TEXT_DECORATION_STYLE_SOLID:
         default:
-          values->appearance.underline = PANGO_UNDERLINE_SINGLE;
+          values->appearance.underline = GDK_TEXT_UNDERLINE_SINGLE;
           break;
         }
 
@@ -7991,13 +7991,13 @@ gtk_text_view_set_attributes_from_style (GtkTextView        *text_view,
     }
   else
     {
-      values->appearance.underline = PANGO_UNDERLINE_NONE;
+      values->appearance.underline = GDK_TEXT_UNDERLINE_NONE;
       g_clear_pointer (&values->appearance.underline_rgba, gdk_rgba_free);
     }
 
   if (decoration_line & GTK_CSS_TEXT_DECORATION_LINE_OVERLINE)
     {
-      values->appearance.overline = PANGO_OVERLINE_SINGLE;
+      values->appearance.overline = GDK_TEXT_OVERLINE_SINGLE;
       if (values->appearance.overline_rgba)
         *values->appearance.overline_rgba = *decoration_color;
       else
@@ -8005,7 +8005,7 @@ gtk_text_view_set_attributes_from_style (GtkTextView        *text_view,
     }
   else
     {
-      values->appearance.overline = PANGO_OVERLINE_NONE;
+      values->appearance.overline = GDK_TEXT_OVERLINE_NONE;
       g_clear_pointer (&values->appearance.overline_rgba, gdk_rgba_free);
     }
 
@@ -8024,7 +8024,7 @@ gtk_text_view_set_attributes_from_style (GtkTextView        *text_view,
     }
 
   /* letter-spacing */
-  values->letter_spacing = gtk_css_number_value_get (style->font->letter_spacing, 100) * PANGO_SCALE;
+  values->letter_spacing = gtk_css_number_value_get (style->font->letter_spacing, 100) * GDK_TEXT_SCALE;
 
   /* line-height */
   values->line_height = gtk_css_line_height_value_get (style->font->line_height);
@@ -8050,7 +8050,7 @@ gtk_text_view_check_keymap_direction (GtkTextView *text_view)
   GtkSettings *settings = gtk_widget_get_settings (GTK_WIDGET (text_view));
   GdkSeat *seat;
   GdkDevice *keyboard;
-  PangoDirection direction;
+  GdkTextDirection direction;
   GtkTextDirection new_cursor_dir;
   GtkTextDirection new_keyboard_dir;
   gboolean split_cursor;
@@ -8067,13 +8067,13 @@ gtk_text_view_check_keymap_direction (GtkTextView *text_view)
   if (keyboard)
     direction = gdk_device_get_direction (keyboard);
   else
-    direction = PANGO_DIRECTION_LTR;
+    direction = GDK_TEXT_DIRECTION_LTR;
 
   g_object_get (settings,
                 "gtk-split-cursor", &split_cursor,
                 NULL);
 
-  if (direction == PANGO_DIRECTION_RTL)
+  if (direction == GDK_TEXT_DIRECTION_RTL)
     new_keyboard_dir = GTK_TEXT_DIR_RTL;
   else
     new_keyboard_dir  = GTK_TEXT_DIR_LTR;
@@ -8101,7 +8101,7 @@ gtk_text_view_ensure_layout (GtkTextView *text_view)
     {
       GtkTextAttributes *style;
       const GList *iter;
-      PangoContext *ltr_context, *rtl_context;
+      GdkTextContext *ltr_context, *rtl_context;
 
       DV(g_print(G_STRLOC"\n"));
 
@@ -8135,8 +8135,8 @@ gtk_text_view_ensure_layout (GtkTextView *text_view)
 
       ltr_context = gtk_widget_create_pango_context (GTK_WIDGET (text_view));
       rtl_context = gtk_widget_create_pango_context (GTK_WIDGET (text_view));
-      pango_context_set_base_dir (ltr_context, PANGO_DIRECTION_LTR);
-      pango_context_set_base_dir (rtl_context, PANGO_DIRECTION_RTL);
+      gdk_text_context_set_base_dir (ltr_context, GDK_TEXT_DIRECTION_LTR);
+      gdk_text_context_set_base_dir (rtl_context, GDK_TEXT_DIRECTION_RTL);
       gtk_text_layout_set_contexts (priv->layout, ltr_context, rtl_context);
       g_object_unref (ltr_context);
       g_object_unref (rtl_context);
@@ -8157,7 +8157,7 @@ gtk_text_view_ensure_layout (GtkTextView *text_view)
       style->right_margin = priv->right_margin;
 
       style->indent = priv->indent;
-      style->tabs = priv->tabs ? pango_tab_array_copy (priv->tabs) : NULL;
+      style->tabs = priv->tabs ? gdk_text_tab_array_copy (priv->tabs) : NULL;
 
       style->wrap_mode = priv->wrap_mode;
       style->justification = priv->justify;
@@ -8823,7 +8823,7 @@ gtk_text_view_preedit_changed_handler (GtkIMContext *context,
 {
   GtkTextViewPrivate *priv;
   char *str;
-  PangoAttrList *attrs;
+  GdkTextAttrList *attrs;
   int cursor_pos;
   GtkTextIter iter;
   GdkDisplay *display;
@@ -8863,7 +8863,7 @@ gtk_text_view_preedit_changed_handler (GtkIMContext *context,
 					gtk_text_buffer_get_insert (get_buffer (text_view)));
 
 out:
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
   g_free (str);
 }
 
@@ -10503,16 +10503,16 @@ gtk_text_view_update_undo_action (GtkTextView *view)
  * gtk_text_view_get_ltr_context:
  * @text_view: a `GtkTextView`
  *
- * Gets the `PangoContext` that is used for rendering LTR directed
+ * Gets the `GdkTextContext` that is used for rendering LTR directed
  * text layouts.
  *
  * The context may be replaced when CSS changes occur.
  *
- * Returns: (transfer none): a `PangoContext`
+ * Returns: (transfer none): a `GdkTextContext`
  *
  * Since: 4.4
  */
-PangoContext *
+GdkTextContext *
 gtk_text_view_get_ltr_context (GtkTextView *text_view)
 {
   g_return_val_if_fail (GTK_IS_TEXT_VIEW (text_view), NULL);
@@ -10526,16 +10526,16 @@ gtk_text_view_get_ltr_context (GtkTextView *text_view)
  * gtk_text_view_get_rtl_context:
  * @text_view: a `GtkTextView`
  *
- * Gets the `PangoContext` that is used for rendering RTL directed
+ * Gets the `GdkTextContext` that is used for rendering RTL directed
  * text layouts.
  *
  * The context may be replaced when CSS changes occur.
  *
- * Returns: (transfer none): a `PangoContext`
+ * Returns: (transfer none): a `GdkTextContext`
  *
  * Since: 4.4
  */
-PangoContext *
+GdkTextContext *
 gtk_text_view_get_rtl_context (GtkTextView *text_view)
 {
   g_return_val_if_fail (GTK_IS_TEXT_VIEW (text_view), NULL);
@@ -10602,7 +10602,7 @@ gtk_text_view_accessible_text_get_contents_at (GtkAccessibleText            *sel
   GtkTextBuffer *text_buffer;
   GtkTextIter iter;
   GtkTextLine *line;
-  PangoLayout *line_layout;
+  GdkTextLayout *line_layout;
   char *string;
   unsigned int line_start, line_end, line_offset;
 
@@ -10613,7 +10613,7 @@ gtk_text_view_accessible_text_get_contents_at (GtkAccessibleText            *sel
   line_offset = gtk_text_iter_get_offset (&iter) - gtk_text_iter_get_line_offset (&iter);
 
   line_layout = gtk_text_layout_get_line_display (text_layout, line, FALSE)->layout;
-  string = gtk_pango_get_string_at (line_layout, offset - line_offset, granularity, &line_start, &line_end);
+  string = gtk_text_get_string_at (line_layout, offset - line_offset, granularity, &line_start, &line_end);
 
   if (start != NULL)
     *start = line_offset + line_start;
@@ -10737,7 +10737,7 @@ gtk_text_view_add_default_attributes (GtkTextView *view,
                                       GHashTable  *attributes)
 {
   GtkTextAttributes *text_attrs;
-  PangoFontDescription *font;
+  GdkTextFontDescription *font;
 
   text_attrs = gtk_text_view_get_default_attributes (view);
 
@@ -10747,7 +10747,7 @@ gtk_text_view_add_default_attributes (GtkTextView *view,
     {
       char **names, **values;
 
-      gtk_pango_get_font_attributes (font, &names, &values);
+      gtk_text_get_font_attributes (font, &names, &values);
 
       for (unsigned i = 0; names[i] != NULL; i++)
         g_hash_table_insert (attributes,
@@ -10785,7 +10785,7 @@ gtk_text_view_add_default_attributes (GtkTextView *view,
   ADD_STR_ATTR (attributes, "justification", gtk_justification_to_string (text_attrs->justification));
   ADD_STR_ATTR (attributes, "direction", gtk_text_direction_to_string (text_attrs->direction));
   ADD_STR_ATTR (attributes, "wrap-mode", gtk_wrap_mode_to_string (text_attrs->wrap_mode));
-  ADD_STR_ATTR (attributes, "underline", pango_underline_to_string (text_attrs->appearance.underline));
+  ADD_STR_ATTR (attributes, "underline", gdk_text_underline_to_string (text_attrs->appearance.underline));
 
   ADD_BOOL_ATTR (attributes, "editable", text_attrs->editable);
   ADD_BOOL_ATTR (attributes, "invisible", text_attrs->invisible);

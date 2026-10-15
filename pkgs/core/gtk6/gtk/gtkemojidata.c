@@ -98,7 +98,7 @@ gtk_emoji_data_load (void)
   GBytes *bytes;
   const char *lang;
 
-  lang = pango_language_to_string (gtk_get_default_language ());
+  lang = gdk_text_language_to_string (gtk_get_default_language ());
   bytes = get_emoji_data_by_language (lang);
   if (bytes)
     return bytes;

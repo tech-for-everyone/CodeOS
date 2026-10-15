@@ -29,12 +29,12 @@
 G_BEGIN_DECLS
 
 SvgValue *     svg_language_new_list    (unsigned int    len,
-                                         PangoLanguage **langs);
-SvgValue *     svg_language_new         (PangoLanguage  *language);
+                                         GdkTextLanguage **langs);
+SvgValue *     svg_language_new         (GdkTextLanguage  *language);
 SvgValue *     svg_language_new_default (void);
 
 unsigned int   svg_language_get_length  (const SvgValue *value);
-PangoLanguage *svg_language_get         (const SvgValue *value,
+GdkTextLanguage *svg_language_get         (const SvgValue *value,
                                          unsigned int    pos);
 
 G_END_DECLS

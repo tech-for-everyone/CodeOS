@@ -417,7 +417,7 @@ strip_mnemonic (const char *s)
     return NULL;
 
   escaped = g_markup_escape_text (s, -1);
-  pango_parse_markup (escaped, -1, '_', NULL, &ret, NULL, NULL);
+  gdk_text_parse_markup (escaped, -1, '_', NULL, &ret, NULL, NULL);
 
   if (ret != NULL)
     {

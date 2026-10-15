@@ -887,8 +887,8 @@ gtk_button_set_label (GtkButton  *button,
 
   gtk_label_set_label (GTK_LABEL (priv->child), label);
   gtk_label_set_ellipsize (GTK_LABEL (priv->child),
-                           priv->can_shrink ? PANGO_ELLIPSIZE_END
-                                            : PANGO_ELLIPSIZE_NONE);
+                           priv->can_shrink ? GDK_TEXT_ELLIPSIZE_END
+                                            : GDK_TEXT_ELLIPSIZE_NONE);
 
   gtk_button_set_child_type (button, LABEL_CHILD);
 
@@ -1155,8 +1155,8 @@ gtk_button_set_can_shrink (GtkButton *button,
         {
         case LABEL_CHILD:
           gtk_label_set_ellipsize (GTK_LABEL (priv->child),
-                                   priv->can_shrink ? PANGO_ELLIPSIZE_END
-                                                    : PANGO_ELLIPSIZE_NONE);
+                                   priv->can_shrink ? GDK_TEXT_ELLIPSIZE_END
+                                                    : GDK_TEXT_ELLIPSIZE_NONE);
           break;
 
         case ICON_CHILD:

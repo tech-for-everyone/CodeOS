@@ -30,11 +30,11 @@
 
 
 static void
-get_text_bounds (PangoLayout     *layout,
+get_text_bounds (GdkTextLayout     *layout,
                  graphene_rect_t *bounds)
 {
-  PangoRectangle ink_rect;
-  pango_layout_get_pixel_extents (layout, &ink_rect, NULL);
+  GdkTextRectangle ink_rect;
+  gdk_text_layout_get_pixel_extents (layout, &ink_rect, NULL);
   graphene_rect_init (bounds, ink_rect.x, ink_rect.y, ink_rect.width, ink_rect.height);
 }
 
@@ -43,7 +43,7 @@ gtk_css_style_snapshot_layout (GtkCssBoxes *boxes,
                                GtkSnapshot *snapshot,
                                int          x,
                                int          y,
-                               PangoLayout *layout)
+                               GdkTextLayout *layout)
 {
   GtkCssStyle *style;
   GdkColor text_color;
@@ -77,7 +77,7 @@ gtk_css_style_snapshot_layout (GtkCssBoxes *boxes,
           if (radius != 0)
             gtk_snapshot_push_blur (snapshot, radius);
 
-          if (gtk_pango_layout_has_color_glyphs (layout))
+          if (gtk_text_layout_has_color_glyphs (layout))
             {
               GdkColor black = GDK_COLOR_SRGB (0, 0, 0, 1);
               graphene_rect_t bounds;
@@ -120,7 +120,7 @@ draw_insertion_cursor (GdkPainter         *cr,
                        double           height,
                        double           aspect_ratio,
                        const GdkColor  *color,
-                       PangoDirection   direction,
+                       GdkTextDirection   direction,
                        gboolean         draw_arrow)
 {
   int stem_width;
@@ -156,7 +156,7 @@ draw_insertion_cursor (GdkPainter         *cr,
 
   if (draw_arrow)
     {
-      if (direction == PANGO_DIRECTION_RTL)
+      if (direction == GDK_TEXT_DIRECTION_RTL)
         {
           double x0, y0, x1, y1, x2, y2;
 
@@ -174,7 +174,7 @@ draw_insertion_cursor (GdkPainter         *cr,
           gdk_paint_line_to (cr, x1, y1);
           gdk_paint_line_to (cr, xx1 - dx, yy1 - dy);
         }
-      else if (direction == PANGO_DIRECTION_LTR)
+      else if (direction == GDK_TEXT_DIRECTION_LTR)
         {
           double x0, y0, x1, y1, x2, y2;
 
@@ -212,7 +212,7 @@ static void
 get_insertion_cursor_bounds (double           width,
                              double           height,
                              double           aspect_ratio,
-                             PangoDirection   direction,
+                             GdkTextDirection   direction,
                              gboolean         draw_arrow,
                              graphene_rect_t *bounds)
 {
@@ -235,7 +235,7 @@ snapshot_insertion_cursor (GtkSnapshot     *snapshot,
                            double           height,
                            double           aspect_ratio,
                            gboolean         is_primary,
-                           PangoDirection   direction,
+                           GdkTextDirection   direction,
                            gboolean         draw_arrow)
 {
   GdkColor color;
@@ -265,7 +265,7 @@ snapshot_insertion_cursor (GtkSnapshot     *snapshot,
       stem_width = height * aspect_ratio + 1;
 
       /* put (stem_width % 2) on the proper side of the cursor */
-      if (direction == PANGO_DIRECTION_LTR)
+      if (direction == GDK_TEXT_DIRECTION_LTR)
         offset = stem_width / 2;
       else
         offset = stem_width - stem_width / 2;
@@ -282,17 +282,17 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
                               GtkSnapshot    *snapshot,
                               int             x,
                               int             y,
-                              PangoLayout    *layout,
+                              GdkTextLayout    *layout,
                               int             index,
-                              PangoDirection  direction)
+                              GdkTextDirection  direction)
 {
   gboolean split_cursor;
   double aspect_ratio;
-  PangoRectangle strong_pos, weak_pos;
-  PangoRectangle *cursor1, *cursor2;
+  GdkTextRectangle strong_pos, weak_pos;
+  GdkTextRectangle *cursor1, *cursor2;
   GdkSeat *seat;
-  PangoDirection keyboard_direction;
-  PangoDirection direction2;
+  GdkTextDirection keyboard_direction;
+  GdkTextDirection direction2;
   gboolean width_was_zero;
 
   g_object_get (gtk_settings_get_for_display (display),
@@ -300,7 +300,7 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
                 "gtk-cursor-aspect-ratio", &aspect_ratio,
                 NULL);
 
-  keyboard_direction = PANGO_DIRECTION_LTR;
+  keyboard_direction = GDK_TEXT_DIRECTION_LTR;
   seat = gdk_display_get_default_seat (display);
   if (seat)
     {
@@ -310,22 +310,22 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
         keyboard_direction = gdk_device_get_direction (keyboard);
     }
 
-  pango_layout_get_caret_pos (layout, index, &strong_pos, &weak_pos);
+  gdk_text_layout_get_caret_pos (layout, index, &strong_pos, &weak_pos);
 
   /* We special-case a width of zero here, because we don't want
    * an upright cursor go sloped due to rounding.
    */
   width_was_zero = strong_pos.width == 0;
-  pango_extents_to_pixels (&strong_pos, NULL);
+  gdk_text_extents_to_pixels (&strong_pos, NULL);
   if (width_was_zero)
     strong_pos.width = 0;
 
   width_was_zero = weak_pos.width == 0;
-  pango_extents_to_pixels (&weak_pos, NULL);
+  gdk_text_extents_to_pixels (&weak_pos, NULL);
   if (width_was_zero)
     weak_pos.width = 0;
 
-  direction2 = PANGO_DIRECTION_NEUTRAL;
+  direction2 = GDK_TEXT_DIRECTION_NEUTRAL;
   cursor2 = NULL; /* poor MSVC */
 
   if (split_cursor)
@@ -334,7 +334,7 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
 
       if (strong_pos.x != weak_pos.x || strong_pos.y != weak_pos.y)
         {
-          direction2 = (direction == PANGO_DIRECTION_LTR) ? PANGO_DIRECTION_RTL : PANGO_DIRECTION_LTR;
+          direction2 = (direction == GDK_TEXT_DIRECTION_LTR) ? GDK_TEXT_DIRECTION_RTL : GDK_TEXT_DIRECTION_LTR;
           cursor2 = &weak_pos;
         }
     }
@@ -355,10 +355,10 @@ gtk_css_style_snapshot_caret (GtkCssBoxes    *boxes,
                              aspect_ratio,
                              TRUE,
                              direction,
-                             direction2 != PANGO_DIRECTION_NEUTRAL);
+                             direction2 != GDK_TEXT_DIRECTION_NEUTRAL);
   gtk_snapshot_restore (snapshot);
 
-  if (direction2 != PANGO_DIRECTION_NEUTRAL)
+  if (direction2 != GDK_TEXT_DIRECTION_NEUTRAL)
     {
       gtk_snapshot_save (snapshot);
       gtk_snapshot_translate (snapshot, &GRAPHENE_POINT_INIT (x + MIN (cursor2->x, cursor2->x + cursor2->width), y + cursor2->y));

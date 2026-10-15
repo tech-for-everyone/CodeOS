@@ -144,7 +144,8 @@ GTK4_CFLAGS = \
     -I$(GTK4_GEN) -I$(GTK4_GEN)/gdk -I$(GTK4_GEN)/gtk -I$(GTK4_GEN)/gsk \
     -I$(HERE) \
     -I$(HERE)/gdk -I$(HERE)/gsk -I$(HERE)/gtk \
-    -I$(HERE)/gtk/css -I$(HERE)/gtk/svg
+    -I$(HERE)/gtk/css -I$(HERE)/gtk/svg \
+    -I$(HERE)/gdk/text
 
 GTK4_GEN_SRCS := \
     gdk/gdkmarshalers.c \
@@ -163,7 +164,7 @@ GTK4_OWN_OBJ := $(patsubst %.c,build/obj/gtk4/src/%.o,$(GTK4_OWN_SRCS))
 
 # Compile-only probes for the surgery: each adds a public header that upstream
 # dragged cairo/pango in through.  They are never linked or run.
-GTK4_PROBES := tests/gdktypes.c tests/gdkregion.c tests/gdkpaint.c
+GTK4_PROBES := tests/gdktypes.c tests/gdkregion.c tests/gdkpaint.c tests/gdktext.c
 
 
 .PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-ledger gtk4-clean

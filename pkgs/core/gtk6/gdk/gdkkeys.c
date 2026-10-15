@@ -296,16 +296,16 @@ gdk_keyval_is_lower (guint keyval)
  * Returns the direction of effective layout of the keymap.
  *
  * The direction of a layout is the direction of the majority of its
- * symbols. See [func@Pango.unichar_direction].
+ * symbols. See [func@GdkText.unichar_direction].
  *
- * Returns: `PANGO_DIRECTION_LTR` or `PANGO_DIRECTION_RTL`
- *   if it can determine the direction, and `PANGO_DIRECTION_NEUTRAL`
+ * Returns: `GDK_TEXT_DIRECTION_LTR` or `GDK_TEXT_DIRECTION_RTL`
+ *   if it can determine the direction, and `GDK_TEXT_DIRECTION_NEUTRAL`
  *   otherwise.
  */
-PangoDirection
+GdkTextDirection
 gdk_keymap_get_direction (GdkKeymap *keymap)
 {
-  g_return_val_if_fail (GDK_IS_KEYMAP (keymap), PANGO_DIRECTION_LTR);
+  g_return_val_if_fail (GDK_IS_KEYMAP (keymap), GDK_TEXT_DIRECTION_LTR);
 
   return GDK_KEYMAP_GET_CLASS (keymap)->get_direction (keymap);
 }

@@ -393,9 +393,9 @@ gtk_message_dialog_class_init (GtkMessageDialogClass *class)
   /**
    * GtkMessageDialog:use-markup:
    *
-   * %TRUE if the primary text of the dialog includes Pango markup.
+   * %TRUE if the primary text of the dialog includes GdkText markup.
    *
-   * See [func@Pango.parse_markup].
+   * See [func@GdkText.parse_markup].
    */
   props[PROP_USE_MARKUP] = g_param_spec_boolean ("use-markup", NULL, NULL,
                                                  FALSE,
@@ -411,9 +411,9 @@ gtk_message_dialog_class_init (GtkMessageDialogClass *class)
   /**
    * GtkMessageDialog:secondary-use-markup:
    *
-   * %TRUE if the secondary text of the dialog includes Pango markup.
+   * %TRUE if the secondary text of the dialog includes GdkText markup.
    *
-   * See [func@Pango.parse_markup].
+   * See [func@GdkText.parse_markup].
    */
   props[PROP_SECONDARY_USE_MARKUP] = g_param_spec_boolean ("secondary-use-markup", NULL, NULL,
                                                            FALSE,
@@ -541,7 +541,7 @@ gtk_message_dialog_new (GtkWindow     *parent,
  * Creates a new message dialog.
  *
  * This is a simple dialog with some text that is marked up with
- * Pango markup. When the user clicks a button a “response” signal
+ * GdkText markup. When the user clicks a button a “response” signal
  * is emitted with response IDs from [enum@Gtk.ResponseType]. See
  * [class@Gtk.Dialog] for more details.
  *
@@ -549,7 +549,7 @@ gtk_message_dialog_new (GtkWindow     *parent,
  * function will automatically be escaped as necessary.
  * (See g_markup_printf_escaped() for how this is implemented.)
  * Usually this is what you want, but if you have an existing
- * Pango markup string that you want to use literally as the
+ * GdkText markup string that you want to use literally as the
  * label, then you need to use [method@Gtk.MessageDialog.set_markup]
  * instead, since you can’t pass the markup string either
  * as the format (it might contain “%” characters) or as a string
@@ -604,7 +604,7 @@ gtk_message_dialog_new_with_markup (GtkWindow     *parent,
 /**
  * gtk_message_dialog_set_markup:
  * @message_dialog: a `GtkMessageDialog`
- * @str: string with Pango markup
+ * @str: string with GdkText markup
  *
  * Sets the text of the message dialog.
  *
@@ -668,12 +668,12 @@ gtk_message_dialog_format_secondary_text (GtkMessageDialog *message_dialog,
 /**
  * gtk_message_dialog_format_secondary_markup:
  * @message_dialog: a `GtkMessageDialog`
- * @message_format: printf()-style string with Pango markup
+ * @message_format: printf()-style string with GdkText markup
  * @...: arguments for @message_format
  *
  * Sets the secondary text of the message dialog.
  *
- * The @message_format is assumed to contain Pango markup.
+ * The @message_format is assumed to contain GdkText markup.
  *
  * Due to an oversight, this function does not escape special
  * XML characters like [ctor@Gtk.MessageDialog.new_with_markup]

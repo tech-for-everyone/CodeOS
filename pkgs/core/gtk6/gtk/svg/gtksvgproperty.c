@@ -60,10 +60,10 @@ parse_language (GtkCssParser *parser)
   if (gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_IDENT))
     {
       const GtkCssToken *token;
-      PangoLanguage *lang;
+      GdkTextLanguage *lang;
 
       token = gtk_css_parser_get_token (parser);
-      lang = pango_language_from_string (gtk_css_token_get_string (token));
+      lang = gdk_text_language_from_string (gtk_css_token_get_string (token));
       gtk_css_parser_skip (parser);
 
       if (lang)
@@ -111,7 +111,7 @@ parse_language_list (GtkCssParser *parser)
   while (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_EOF))
     {
       const GtkCssToken *token;
-      PangoLanguage *lang;
+      GdkTextLanguage *lang;
 
       gtk_css_parser_skip_whitespace (parser);
 
@@ -122,7 +122,7 @@ parse_language_list (GtkCssParser *parser)
         }
 
       token = gtk_css_parser_get_token (parser);
-      lang = pango_language_from_string (gtk_css_token_get_string (token));
+      lang = gdk_text_language_from_string (gtk_css_token_get_string (token));
       gtk_css_parser_skip (parser);
 
       if (!lang)
@@ -135,7 +135,7 @@ parse_language_list (GtkCssParser *parser)
       skip_whitespace_and_optional_comma (parser);
     }
 
-  value = svg_language_new_list (langs->len, (PangoLanguage **) langs->pdata);
+  value = svg_language_new_list (langs->len, (GdkTextLanguage **) langs->pdata);
   g_ptr_array_unref (langs);
 
   return value;
@@ -1270,10 +1270,10 @@ shape_attrs_init_default_values (void)
   shape_attrs[SVG_PROPERTY_CLIP_RULE].initial_value = svg_fill_rule_new (GSK_FILL_RULE_WINDING);
   shape_attrs[SVG_PROPERTY_MASK].initial_value = svg_mask_new_none ();
   shape_attrs[SVG_PROPERTY_FONT_FAMILY].initial_value = svg_string_list_new (NULL);
-  shape_attrs[SVG_PROPERTY_FONT_STYLE].initial_value = svg_font_style_new (PANGO_STYLE_NORMAL);
-  shape_attrs[SVG_PROPERTY_FONT_VARIANT].initial_value = svg_font_variant_new (PANGO_VARIANT_NORMAL);
+  shape_attrs[SVG_PROPERTY_FONT_STYLE].initial_value = svg_font_style_new (GDK_TEXT_STYLE_NORMAL);
+  shape_attrs[SVG_PROPERTY_FONT_VARIANT].initial_value = svg_font_variant_new (GDK_TEXT_VARIANT_NORMAL);
   shape_attrs[SVG_PROPERTY_FONT_WEIGHT].initial_value = svg_font_weight_new (FONT_WEIGHT_NORMAL);
-  shape_attrs[SVG_PROPERTY_FONT_WIDTH].initial_value = svg_font_width_new (PANGO_WIDTH_NORMAL);
+  shape_attrs[SVG_PROPERTY_FONT_WIDTH].initial_value = svg_font_width_new (GDK_TEXT_WIDTH_NORMAL);
   shape_attrs[SVG_PROPERTY_FILL].initial_value = svg_paint_new_black ();
   shape_attrs[SVG_PROPERTY_FILL_OPACITY].initial_value = svg_number_new (1);
   shape_attrs[SVG_PROPERTY_FILL_RULE].initial_value = svg_fill_rule_new (GSK_FILL_RULE_WINDING);
@@ -1317,7 +1317,7 @@ shape_attrs_init_default_values (void)
   shape_attrs[SVG_PROPERTY_TEXT_DX].initial_value = svg_numbers_new_none ();
   shape_attrs[SVG_PROPERTY_TEXT_DY].initial_value = svg_numbers_new_none ();
   shape_attrs[SVG_PROPERTY_UNICODE_BIDI].initial_value = svg_unicode_bidi_new (UNICODE_BIDI_NORMAL);
-  shape_attrs[SVG_PROPERTY_DIRECTION].initial_value = svg_direction_new (PANGO_DIRECTION_LTR);
+  shape_attrs[SVG_PROPERTY_DIRECTION].initial_value = svg_direction_new (GDK_TEXT_DIRECTION_LTR);
   shape_attrs[SVG_PROPERTY_WRITING_MODE].initial_value = svg_writing_mode_new (WRITING_MODE_HORIZONTAL_TB);
   shape_attrs[SVG_PROPERTY_BASELINE_SHIFT].initial_value = svg_number_new (0);
   shape_attrs[SVG_PROPERTY_LETTER_SPACING].initial_value = svg_number_new (0);

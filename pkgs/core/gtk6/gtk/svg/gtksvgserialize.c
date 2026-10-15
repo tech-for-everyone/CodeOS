@@ -223,7 +223,7 @@ serialize_shape_attrs (GString              *s,
               if (width == 1000)
                 {
                   svg_value_unref (value);
-                  value = svg_font_width_new (PANGO_WIDTH_NORMAL);
+                  value = svg_font_width_new (GDK_TEXT_WIDTH_NORMAL);
                 }
             }
 

@@ -382,12 +382,12 @@ typedef enum
 /**
  * GtkNaturalWrapMode:
  * @GTK_NATURAL_WRAP_INHERIT: Inherit the minimum size request.
- *   In particular, this should be used with %PANGO_WRAP_CHAR.
+ *   In particular, this should be used with %GDK_TEXT_WRAP_CHAR.
  * @GTK_NATURAL_WRAP_NONE: Try not to wrap the text. This mode is the
  *   closest to GTK3's behavior but can lead to a wide label leaving
  *   lots of empty space below the text.
  * @GTK_NATURAL_WRAP_WORD: Attempt to wrap at word boundaries. This
- *   is useful in particular when using %PANGO_WRAP_WORD_CHAR as the
+ *   is useful in particular when using %GDK_TEXT_WRAP_WORD_CHAR as the
  *   wrap mode.
  *
  * Options for selecting a different wrap mode for natural size
@@ -567,7 +567,7 @@ typedef enum
  * @GTK_WRAP_NONE: do not wrap lines; just make the text area wider
  * @GTK_WRAP_CHAR: wrap text, breaking lines anywhere the cursor can
  *   appear (between characters, usually - if you want to be technical,
- *   between graphemes, see pango_get_log_attrs())
+ *   between graphemes, see gdk_text_get_log_attrs())
  * @GTK_WRAP_WORD: wrap text, breaking lines in between words
  * @GTK_WRAP_WORD_CHAR: wrap text, breaking lines in between words, or if
  *   that is not enough, also between graphemes

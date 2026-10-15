@@ -403,9 +403,9 @@ GDK_AVAILABLE_IN_ALL
 int              gtk_text_view_get_indent             (GtkTextView      *text_view);
 GDK_AVAILABLE_IN_ALL
 void             gtk_text_view_set_tabs               (GtkTextView      *text_view,
-                                                       PangoTabArray    *tabs);
+                                                       GdkTextTabArray    *tabs);
 GDK_AVAILABLE_IN_ALL
-PangoTabArray*   gtk_text_view_get_tabs               (GtkTextView      *text_view);
+GdkTextTabArray*   gtk_text_view_get_tabs               (GtkTextView      *text_view);
 
 GDK_AVAILABLE_IN_ALL
 void             gtk_text_view_set_input_purpose      (GtkTextView      *text_view,
@@ -431,9 +431,9 @@ void             gtk_text_view_set_extra_menu         (GtkTextView      *text_vi
 GDK_AVAILABLE_IN_ALL
 GMenuModel *     gtk_text_view_get_extra_menu         (GtkTextView      *text_view);
 GDK_AVAILABLE_IN_4_4
-PangoContext    *gtk_text_view_get_rtl_context        (GtkTextView      *text_view);
+GdkTextContext    *gtk_text_view_get_rtl_context        (GtkTextView      *text_view);
 GDK_AVAILABLE_IN_4_4
-PangoContext    *gtk_text_view_get_ltr_context        (GtkTextView      *text_view);
+GdkTextContext    *gtk_text_view_get_ltr_context        (GtkTextView      *text_view);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkTextView, g_object_unref)
 

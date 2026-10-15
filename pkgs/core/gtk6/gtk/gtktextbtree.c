@@ -552,7 +552,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
 {
   GtkTextBTree *tree = _gtk_text_iter_get_btree (start);
   GtkTextLine *start_line, *end_line, *start_line_prev, *end_line_next, *line;
-  PangoDirection last_strong, dir_above_propagated, dir_below_propagated;
+  GdkTextDirection last_strong, dir_above_propagated, dir_below_propagated;
 
   /* Resolve the strong bidi direction for all lines between
    * start and end.
@@ -568,19 +568,19 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
       /* Loop through the segments and search for a strong character
        */
       GtkTextLineSegment *seg = line->segments;
-      line->dir_strong = PANGO_DIRECTION_NEUTRAL;
+      line->dir_strong = GDK_TEXT_DIRECTION_NEUTRAL;
 
       while (seg)
         {
           if (seg->type == &gtk_text_char_type && seg->byte_count > 0)
             {
-	      PangoDirection pango_dir;
+	      GdkTextDirection gdk_text_dir;
 
-              pango_dir = gdk_find_base_dir (seg->body.chars, seg->byte_count);
+              gdk_text_dir = gdk_find_base_dir (seg->body.chars, seg->byte_count);
 
-              if (pango_dir != PANGO_DIRECTION_NEUTRAL)
+              if (gdk_text_dir != GDK_TEXT_DIRECTION_NEUTRAL)
                 {
-                  line->dir_strong = pango_dir;
+                  line->dir_strong = gdk_text_dir;
                   break;
                 }
             }
@@ -596,7 +596,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
    * direction before start. It is neutral if start is in the beginning
    * of the buffer.
    */
-  dir_above_propagated = PANGO_DIRECTION_NEUTRAL;
+  dir_above_propagated = GDK_TEXT_DIRECTION_NEUTRAL;
   if (start_line_prev)
     dir_above_propagated = start_line_prev->dir_propagated_forward;
 
@@ -607,7 +607,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
   last_strong = dir_above_propagated;
   while (line != end_line_next)
     {
-      if (line->dir_strong != PANGO_DIRECTION_NEUTRAL)
+      if (line->dir_strong != GDK_TEXT_DIRECTION_NEUTRAL)
         last_strong = line->dir_strong;
 
       line->dir_propagated_forward = last_strong;
@@ -622,7 +622,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
     GtkTextIter end_propagate;
 
     while (line &&
-	   line->dir_strong == PANGO_DIRECTION_NEUTRAL &&
+	   line->dir_strong == GDK_TEXT_DIRECTION_NEUTRAL &&
 	   line->dir_propagated_forward != last_strong)
       {
         GtkTextLine *prev = line;
@@ -654,7 +654,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
    * direction after end. It is neutral if end is at the end of
    * the buffer.
   */
-  dir_below_propagated = PANGO_DIRECTION_NEUTRAL;
+  dir_below_propagated = GDK_TEXT_DIRECTION_NEUTRAL;
   if (end_line_next)
     dir_below_propagated = end_line_next->dir_propagated_back;
 
@@ -665,7 +665,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
   last_strong = dir_below_propagated;
   while (line != start_line_prev)
     {
-      if (line->dir_strong != PANGO_DIRECTION_NEUTRAL)
+      if (line->dir_strong != GDK_TEXT_DIRECTION_NEUTRAL)
         last_strong = line->dir_strong;
 
       line->dir_propagated_back = last_strong;
@@ -680,7 +680,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
     GtkTextIter start_propagate;
 
     while (line &&
-	   line->dir_strong == PANGO_DIRECTION_NEUTRAL &&
+	   line->dir_strong == GDK_TEXT_DIRECTION_NEUTRAL &&
 	   line->dir_propagated_back != last_strong)
       {
         GtkTextLine *prev = line;
@@ -698,7 +698,7 @@ gtk_text_btree_resolve_bidi (GtkTextIter *start,
      * line we ended up on didn't get a direction from forwards
      * propagation.
      */
-    if (line && line->dir_propagated_forward == PANGO_DIRECTION_NEUTRAL)
+    if (line && line->dir_propagated_forward == GDK_TEXT_DIRECTION_NEUTRAL)
       {
         _gtk_text_btree_get_iter_at_line (tree, &start_propagate, line, 0);
         _gtk_text_btree_invalidate_region (tree, &start_propagate, start, FALSE);
@@ -1134,7 +1134,7 @@ _gtk_text_btree_insert (GtkTextIter *iter,
     {
       sol = eol;
 
-      pango_find_paragraph_boundary (text + sol,
+      gdk_text_find_paragraph_boundary (text + sol,
                                      len - sol,
                                      &delim,
                                      &eol);
@@ -4710,9 +4710,9 @@ gtk_text_line_new (void)
   GtkTextLine *line;
 
   line = g_new0 (GtkTextLine, 1);
-  line->dir_strong = PANGO_DIRECTION_NEUTRAL;
-  line->dir_propagated_forward = PANGO_DIRECTION_NEUTRAL;
-  line->dir_propagated_back = PANGO_DIRECTION_NEUTRAL;
+  line->dir_strong = GDK_TEXT_DIRECTION_NEUTRAL;
+  line->dir_propagated_forward = GDK_TEXT_DIRECTION_NEUTRAL;
+  line->dir_propagated_back = GDK_TEXT_DIRECTION_NEUTRAL;
 
   return line;
 }

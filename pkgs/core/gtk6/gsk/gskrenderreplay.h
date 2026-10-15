@@ -92,8 +92,8 @@ typedef GdkTexture *   (* GskRenderReplayTextureFilter)         (GskRenderReplay
  *
  * Since: 4.22
  */
-typedef PangoFont  *   (* GskRenderReplayFontFilter)            (GskRenderReplay                *replay,
-                                                                 PangoFont                      *font,
+typedef GdkTextFont  *   (* GskRenderReplayFontFilter)            (GskRenderReplay                *replay,
+                                                                 GdkTextFont                      *font,
                                                                  gpointer                        user_data);
 
 
@@ -130,8 +130,8 @@ void                    gsk_render_replay_set_font_filter       (GskRenderReplay
                                                                  gpointer                        user_data,
                                                                  GDestroyNotify                  user_destroy);
 GDK_AVAILABLE_IN_4_22
-PangoFont *             gsk_render_replay_filter_font           (GskRenderReplay                *self,
-                                                                 PangoFont                      *font);
+GdkTextFont *             gsk_render_replay_filter_font           (GskRenderReplay                *self,
+                                                                 GdkTextFont                      *font);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskRenderReplay, gsk_render_replay_free)
 

@@ -334,9 +334,43 @@ The port itself is not done. What it needs:
   `gdk.h` no longer pulls in `<gdk/gdkcairo.h>`, `<gdk/gdkpango.h>` or
   `<gdk/deprecated/gdkpixbuf.h>`. Those three headers still exist for the `.c`
   files that implement them and get removed as their call sites are ported; the
-  next wall is `PangoDirection` (`cairo_t` is already gone, above). The
+  next wall is `gdk-pixbuf` (`cairo_t` and the text types are gone, above and
+  below). The
   replacements are already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get
   wired in during the bring-up.
+* **The text API is gone from the sources: `PangoDirection` was the last
+  wall.** The ledger went from **60/621** (blocked by `PangoDirection`, 440
+  files) to **84/621**, and its top blocker is now `gdk-pixbuf` (471 files,
+  below). The mechanism is deliberately the same as the cairo one, but the
+  shape of the dependency is different: Pango's public headers are not one
+  header, they are a graph of thirty-odd headers that include each other by
+  `<pango/...>` path and lean on `pango-version-macros.h` for the
+  `PANGO_AVAILABLE_IN_*` markers on almost every declaration. A first attempt
+  concatenated them into a single `gdk/gdktext.h` and dropped the intra-pango
+  includes; that breaks the graph, so the tree failed with
+  `expected ';' before 'int'` at every `GDK_TEXT_AVAILABLE_IN_*` line. The
+  working shape vendors the real headers, under their real names, into
+  `gdk/text/pango/` (`scripts/gtk4-gen-text.py`, the reproducible spec; only
+  `<cairo.h>` is rewritten, to `<gdk/gdkpaint.h>`), and puts `gdk/text` on the
+  include path, so `<pango/pango.h>` and `<pango/pangocairo.h>` keep working
+  everywhere — in the sources and inside the vendored copies. `gdk/gdktext.h`
+  is the single public entry point (it includes both umbrellas) and is pulled
+  in from the end of `gdktypes.h`, like `gdkregion.h` and `gdkpaint.h`.
+* **The text rename is a script too.** `scripts/gtk4-rename-pango.py` rewrites
+  163 files: the glue (`gdk_pango_*`→`gdk_text_*`, `gsk_pango_*`→`gsk_text_*`,
+  `GskPangoRenderer`→`GskTextRenderer`, `gtk_pango_*`→`gtk_text_*`) first, then
+  `PANGO_*`→`GDK_TEXT_*`, `Pango*`→`GdkText*`, `pango_*`→`gdk_text_*`. It runs
+  over the sources *and* over `gdk/text/pango/`, so the vendored declarations
+  and their call sites can never drift apart, and it does not touch any
+  `#include` (the vendored headers include each other by the `<pango/...>`
+  names, which must keep resolving). `gdk/gdktext.h` needs no rewriting at all,
+  being a `#pragma once` wrapper over the two umbrellas; `gdk/text/hb.h` and
+  `hb-ot.h` are minimal opaque stand-ins for harfbuzz, which Pango's headers
+  only ever mention by pointer. Re-running the two renamers is idempotent
+  (`--check` reports zero), which is the audit trail; the generator reproduces
+  the unrenamed vendored copies and is always followed by them. The cairo
+  renamer gained one rule here (`cairo_font_type_t`→`GdkPaintFontType`, which
+  `pangocairo.h` names) and `gdk/gdkpaint.h` the matching enum.
 * **Upstream's `meson.build` files are imported as reference** but not used;
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's

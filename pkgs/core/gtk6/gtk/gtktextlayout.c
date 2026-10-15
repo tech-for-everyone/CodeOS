@@ -5,7 +5,7 @@
  * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  * Copyright (c) 2000 Red Hat, Inc.
  * Tk->Gtk port by Havoc Pennington
- * Pango support by Owen Taylor
+ * GdkText support by Owen Taylor
  *
  * This file can be used under your choice of two licenses, the LGPL
  * and the original Tk license.
@@ -125,7 +125,7 @@ static void gtk_text_layout_emit_changed           (GtkTextLayout     *layout,
 
 static void gtk_text_layout_invalidate_all (GtkTextLayout *layout);
 
-static PangoAttribute *gtk_text_attr_appearance_new (const GtkTextAppearance *appearance);
+static GdkTextAttribute *gtk_text_attr_appearance_new (const GtkTextAppearance *appearance);
 
 static void gtk_text_layout_after_mark_set_handler     (GtkTextBuffer     *buffer,
                                                         const GtkTextIter *location,
@@ -174,11 +174,11 @@ enum {
   LAST_SIGNAL
 };
 
-#define PIXEL_BOUND(d) (((d) + PANGO_SCALE - 1) / PANGO_SCALE)
+#define PIXEL_BOUND(d) (((d) + GDK_TEXT_SCALE - 1) / GDK_TEXT_SCALE)
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
-PangoAttrType gtk_text_attr_appearance_type = 0;
+GdkTextAttrType gtk_text_attr_appearance_type = 0;
 
 G_DEFINE_TYPE_WITH_PRIVATE (GtkTextLayout, gtk_text_layout, G_TYPE_OBJECT)
 
@@ -197,7 +197,7 @@ gtk_text_layout_dispose (GObject *object)
   g_clear_object (&layout->ltr_context);
   g_clear_object (&layout->rtl_context);
 
-  g_clear_pointer (&layout->preedit_attrs, pango_attr_list_unref);
+  g_clear_pointer (&layout->preedit_attrs, gdk_text_attr_list_unref);
 
   G_OBJECT_CLASS (gtk_text_layout_parent_class)->dispose (object);
 }
@@ -378,8 +378,8 @@ gtk_text_layout_set_default_style (GtkTextLayout     *layout,
 
 void
 gtk_text_layout_set_contexts (GtkTextLayout *layout,
-                              PangoContext  *ltr_context,
-                              PangoContext  *rtl_context)
+                              GdkTextContext  *ltr_context,
+                              GdkTextContext  *rtl_context)
 {
   g_return_if_fail (GTK_IS_TEXT_LAYOUT (layout));
 
@@ -551,9 +551,9 @@ gtk_text_layout_get_cursor_visible (GtkTextLayout *layout)
 
 /**
  * gtk_text_layout_set_preedit_string:
- * @layout: a `PangoLayout`
+ * @layout: a `GdkTextLayout`
  * @preedit_string: a string to display at the insertion point
- * @preedit_attrs: a `PangoAttrList` of attributes that apply to @preedit_string
+ * @preedit_attrs: a `GdkTextAttrList` of attributes that apply to @preedit_string
  * @cursor_pos: position of cursor within preedit string in chars
  *
  * Set the preedit string and attributes. The preedit string is a
@@ -563,7 +563,7 @@ gtk_text_layout_get_cursor_visible (GtkTextLayout *layout)
 void
 gtk_text_layout_set_preedit_string (GtkTextLayout *layout,
 				    const char    *preedit_string,
-				    PangoAttrList *preedit_attrs,
+				    GdkTextAttrList *preedit_attrs,
 				    int            cursor_pos)
 {
   g_return_if_fail (GTK_IS_TEXT_LAYOUT (layout));
@@ -572,13 +572,13 @@ gtk_text_layout_set_preedit_string (GtkTextLayout *layout,
   g_free (layout->preedit_string);
 
   if (layout->preedit_attrs)
-    pango_attr_list_unref (layout->preedit_attrs);
+    gdk_text_attr_list_unref (layout->preedit_attrs);
 
   if (preedit_string)
     {
       layout->preedit_string = g_strdup (preedit_string);
       layout->preedit_len = strlen (layout->preedit_string);
-      pango_attr_list_ref (preedit_attrs);
+      gdk_text_attr_list_ref (preedit_attrs);
       layout->preedit_attrs = preedit_attrs;
 
       cursor_pos = CLAMP (cursor_pos, 0, g_utf8_strlen (layout->preedit_string, -1));
@@ -995,7 +995,7 @@ gtk_text_layout_wrap (GtkTextLayout   *layout,
                       GtkTextLineData *line_data)
 {
   GtkTextLineDisplay *display;
-  PangoRectangle ink_rect, logical_rect;
+  GdkTextRectangle ink_rect, logical_rect;
 
   g_return_val_if_fail (GTK_IS_TEXT_LAYOUT (layout), NULL);
   g_return_val_if_fail (line != NULL, NULL);
@@ -1010,7 +1010,7 @@ gtk_text_layout_wrap (GtkTextLayout   *layout,
   line_data->width = display->width;
   line_data->height = display->height;
   line_data->valid = TRUE;
-  pango_layout_get_pixel_extents (display->layout, &ink_rect, &logical_rect);
+  gdk_text_layout_get_pixel_extents (display->layout, &ink_rect, &logical_rect);
   line_data->top_ink = MAX (0, logical_rect.x - ink_rect.x);
   line_data->bottom_ink = MAX (0, logical_rect.x + logical_rect.width - ink_rect.x - ink_rect.width);
   gtk_text_line_display_unref (display);
@@ -1108,72 +1108,72 @@ totally_invisible_line (GtkTextLayout *layout,
 
 static void
 set_para_values (GtkTextLayout      *layout,
-                 PangoDirection      base_dir,
+                 GdkTextDirection      base_dir,
                  GtkTextAttributes  *style,
                  GtkTextLineDisplay *display)
 {
-  PangoAlignment pango_align = PANGO_ALIGN_LEFT;
-  PangoWrapMode pango_wrap = PANGO_WRAP_WORD;
+  GdkTextAlignment gdk_text_align = GDK_TEXT_ALIGN_LEFT;
+  GdkTextWrapMode gdk_text_wrap = GDK_TEXT_WRAP_WORD;
   int h_margin;
   int h_padding;
 
   switch (base_dir)
     {
     /* If no base direction was found, then use the style direction */
-    case PANGO_DIRECTION_NEUTRAL :
+    case GDK_TEXT_DIRECTION_NEUTRAL :
       display->direction = style->direction;
 
       /* Override the base direction */
       if (display->direction == GTK_TEXT_DIR_RTL)
-        base_dir = PANGO_DIRECTION_RTL;
+        base_dir = GDK_TEXT_DIRECTION_RTL;
       else
-        base_dir = PANGO_DIRECTION_LTR;
+        base_dir = GDK_TEXT_DIRECTION_LTR;
 
       break;
-    case PANGO_DIRECTION_RTL :
+    case GDK_TEXT_DIRECTION_RTL :
       display->direction = GTK_TEXT_DIR_RTL;
       break;
-    case PANGO_DIRECTION_LTR:
-    case PANGO_DIRECTION_TTB_LTR:
-    case PANGO_DIRECTION_TTB_RTL:
-    case PANGO_DIRECTION_WEAK_LTR:
-    case PANGO_DIRECTION_WEAK_RTL:
+    case GDK_TEXT_DIRECTION_LTR:
+    case GDK_TEXT_DIRECTION_TTB_LTR:
+    case GDK_TEXT_DIRECTION_TTB_RTL:
+    case GDK_TEXT_DIRECTION_WEAK_LTR:
+    case GDK_TEXT_DIRECTION_WEAK_RTL:
     default:
       display->direction = GTK_TEXT_DIR_LTR;
       break;
     }
 
   if (display->direction == GTK_TEXT_DIR_RTL)
-    display->layout = pango_layout_new (layout->rtl_context);
+    display->layout = gdk_text_layout_new (layout->rtl_context);
   else
-    display->layout = pango_layout_new (layout->ltr_context);
+    display->layout = gdk_text_layout_new (layout->ltr_context);
 
   switch (style->justification)
     {
     case GTK_JUSTIFY_LEFT:
-      pango_align = (base_dir == PANGO_DIRECTION_LTR) ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT;
+      gdk_text_align = (base_dir == GDK_TEXT_DIRECTION_LTR) ? GDK_TEXT_ALIGN_LEFT : GDK_TEXT_ALIGN_RIGHT;
       break;
     case GTK_JUSTIFY_RIGHT:
-      pango_align = (base_dir == PANGO_DIRECTION_LTR) ? PANGO_ALIGN_RIGHT : PANGO_ALIGN_LEFT;
+      gdk_text_align = (base_dir == GDK_TEXT_DIRECTION_LTR) ? GDK_TEXT_ALIGN_RIGHT : GDK_TEXT_ALIGN_LEFT;
       break;
     case GTK_JUSTIFY_CENTER:
-      pango_align = PANGO_ALIGN_CENTER;
+      gdk_text_align = GDK_TEXT_ALIGN_CENTER;
       break;
     case GTK_JUSTIFY_FILL:
-      pango_align = (base_dir == PANGO_DIRECTION_LTR) ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT;
-      pango_layout_set_justify (display->layout, TRUE);
+      gdk_text_align = (base_dir == GDK_TEXT_DIRECTION_LTR) ? GDK_TEXT_ALIGN_LEFT : GDK_TEXT_ALIGN_RIGHT;
+      gdk_text_layout_set_justify (display->layout, TRUE);
       break;
     default:
       g_assert_not_reached ();
       break;
     }
 
-  pango_layout_set_alignment (display->layout, pango_align);
-  pango_layout_set_spacing (display->layout,
-                            style->pixels_inside_wrap * PANGO_SCALE);
+  gdk_text_layout_set_alignment (display->layout, gdk_text_align);
+  gdk_text_layout_set_spacing (display->layout,
+                            style->pixels_inside_wrap * GDK_TEXT_SCALE);
 
   if (style->tabs)
-    pango_layout_set_tabs (display->layout, style->tabs);
+    gdk_text_layout_set_tabs (display->layout, style->tabs);
 
   display->top_margin = style->pixels_above_lines;
   display->height = style->pixels_above_lines + style->pixels_below_lines;
@@ -1183,20 +1183,20 @@ set_para_values (GtkTextLayout      *layout,
 
   display->x_offset = display->left_margin;
 
-  pango_layout_set_indent (display->layout,
-                           style->indent * PANGO_SCALE);
+  gdk_text_layout_set_indent (display->layout,
+                           style->indent * GDK_TEXT_SCALE);
 
   switch (style->wrap_mode)
     {
     case GTK_WRAP_CHAR:
-      pango_wrap = PANGO_WRAP_CHAR;
+      gdk_text_wrap = GDK_TEXT_WRAP_CHAR;
       break;
     case GTK_WRAP_WORD:
-      pango_wrap = PANGO_WRAP_WORD;
+      gdk_text_wrap = GDK_TEXT_WRAP_WORD;
       break;
 
     case GTK_WRAP_WORD_CHAR:
-      pango_wrap = PANGO_WRAP_WORD_CHAR;
+      gdk_text_wrap = GDK_TEXT_WRAP_WORD_CHAR;
       break;
 
     case GTK_WRAP_NONE:
@@ -1210,8 +1210,8 @@ set_para_values (GtkTextLayout      *layout,
   if (style->wrap_mode != GTK_WRAP_NONE)
     {
       int layout_width = (layout->screen_width - h_margin - h_padding);
-      pango_layout_set_width (display->layout, layout_width * PANGO_SCALE);
-      pango_layout_set_wrap (display->layout, pango_wrap);
+      gdk_text_layout_set_width (display->layout, layout_width * GDK_TEXT_SCALE);
+      gdk_text_layout_set_wrap (display->layout, gdk_text_wrap);
     }
   display->total_width = MAX (layout->screen_width, layout->width) - h_margin - h_padding;
 
@@ -1226,8 +1226,8 @@ set_para_values (GtkTextLayout      *layout,
     }
 }
 
-static PangoAttribute *
-gtk_text_attr_appearance_copy (const PangoAttribute *attr)
+static GdkTextAttribute *
+gtk_text_attr_appearance_copy (const GdkTextAttribute *attr)
 {
   const GtkTextAttrAppearance *appearance_attr = (const GtkTextAttrAppearance *)attr;
 
@@ -1235,7 +1235,7 @@ gtk_text_attr_appearance_copy (const PangoAttribute *attr)
 }
 
 static void
-gtk_text_attr_appearance_destroy (PangoAttribute *attr)
+gtk_text_attr_appearance_destroy (GdkTextAttribute *attr)
 {
   GtkTextAttrAppearance *appearance_attr = (GtkTextAttrAppearance *)attr;
 
@@ -1297,8 +1297,8 @@ strikethrough_equal (const GtkTextAppearance *appearance1,
 }
 
 static gboolean
-gtk_text_attr_appearance_compare (const PangoAttribute *attr1,
-                                  const PangoAttribute *attr2)
+gtk_text_attr_appearance_compare (const GdkTextAttribute *attr1,
+                                  const GdkTextAttribute *attr2)
 {
   const GtkTextAppearance *appearance1 = &((const GtkTextAttrAppearance *)attr1)->appearance;
   const GtkTextAppearance *appearance2 = &((const GtkTextAttrAppearance *)attr2)->appearance;
@@ -1331,10 +1331,10 @@ clamp_rgba (GdkRGBA *rgba)
  *
  * Returns:
  */
-static PangoAttribute *
+static GdkTextAttribute *
 gtk_text_attr_appearance_new (const GtkTextAppearance *appearance)
 {
-  static PangoAttrClass klass = {
+  static GdkTextAttrClass klass = {
     0,
     gtk_text_attr_appearance_copy,
     gtk_text_attr_appearance_destroy,
@@ -1345,7 +1345,7 @@ gtk_text_attr_appearance_new (const GtkTextAppearance *appearance)
 
   if (!klass.type)
     klass.type = gtk_text_attr_appearance_type =
-      pango_attr_type_register (I_("GtkTextAttrAppearance"));
+      gdk_text_attr_type_register (I_("GtkTextAttrAppearance"));
 
   result = g_new (GtkTextAttrAppearance, 1);
   result->attr.klass = &klass;
@@ -1367,94 +1367,94 @@ gtk_text_attr_appearance_new (const GtkTextAppearance *appearance)
   if (appearance->strikethrough_rgba)
     result->appearance.strikethrough_rgba = clamp_rgba (gdk_rgba_copy (appearance->strikethrough_rgba));
 
-  return (PangoAttribute *)result;
+  return (GdkTextAttribute *)result;
 }
 
 static void
 add_generic_attrs (GtkTextLayout      *layout,
                    GtkTextAppearance  *appearance,
                    int                 byte_count,
-                   PangoAttrList      *attrs,
+                   GdkTextAttrList      *attrs,
                    int                 start,
                    gboolean            size_only,
                    gboolean            is_text)
 {
-  PangoAttribute *attr;
+  GdkTextAttribute *attr;
 
-  if (appearance->underline != PANGO_UNDERLINE_NONE)
+  if (appearance->underline != GDK_TEXT_UNDERLINE_NONE)
     {
-      attr = pango_attr_underline_new (appearance->underline);
+      attr = gdk_text_attr_underline_new (appearance->underline);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (appearance->underline_rgba)
     {
-      attr = pango_attr_underline_color_new (appearance->underline_rgba->red * 65535,
+      attr = gdk_text_attr_underline_color_new (appearance->underline_rgba->red * 65535,
                                              appearance->underline_rgba->green * 65535,
                                              appearance->underline_rgba->blue * 65535);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
-  if (appearance->overline != PANGO_OVERLINE_NONE)
+  if (appearance->overline != GDK_TEXT_OVERLINE_NONE)
     {
-      attr = pango_attr_overline_new (appearance->overline);
+      attr = gdk_text_attr_overline_new (appearance->overline);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (appearance->overline_rgba)
     {
-      attr = pango_attr_overline_color_new (appearance->overline_rgba->red * 65535,
+      attr = gdk_text_attr_overline_color_new (appearance->overline_rgba->red * 65535,
                                             appearance->overline_rgba->green * 65535,
                                             appearance->overline_rgba->blue * 65535);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (appearance->strikethrough)
     {
-      attr = pango_attr_strikethrough_new (appearance->strikethrough);
+      attr = gdk_text_attr_strikethrough_new (appearance->strikethrough);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (appearance->strikethrough_rgba)
     {
-      attr = pango_attr_strikethrough_color_new (appearance->strikethrough_rgba->red * 65535,
+      attr = gdk_text_attr_strikethrough_color_new (appearance->strikethrough_rgba->red * 65535,
                                                  appearance->strikethrough_rgba->green * 65535,
                                                  appearance->strikethrough_rgba->blue * 65535);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (appearance->rise != 0)
     {
-      attr = pango_attr_rise_new (appearance->rise);
+      attr = gdk_text_attr_rise_new (appearance->rise);
 
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (!size_only)
@@ -1466,7 +1466,7 @@ add_generic_attrs (GtkTextLayout      *layout,
 
       ((GtkTextAttrAppearance *)attr)->appearance.is_text = is_text;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 }
 
@@ -1474,17 +1474,17 @@ static void
 add_text_attrs (GtkTextLayout      *layout,
                 GtkTextAttributes  *style,
                 int                 byte_count,
-                PangoAttrList      *attrs,
+                GdkTextAttrList      *attrs,
                 int                 start,
                 gboolean            size_only,
-                PangoAttribute    **last_font_attr,
-                PangoAttribute    **last_scale_attr,
-                PangoAttribute    **last_fallback_attr)
+                GdkTextAttribute    **last_font_attr,
+                GdkTextAttribute    **last_scale_attr,
+                GdkTextAttribute    **last_fallback_attr)
 {
-  PangoAttribute *attr;
+  GdkTextAttribute *attr;
 
   if (*last_font_attr &&
-      pango_font_description_equal (style->font, ((PangoAttrFontDesc*)*last_font_attr)->desc) &&
+      gdk_text_font_description_equal (style->font, ((GdkTextAttrFontDesc*)*last_font_attr)->desc) &&
       (*last_font_attr)->end_index >= start)
     {
       (*last_font_attr)->start_index = MIN ((*last_font_attr)->start_index, start);
@@ -1492,16 +1492,16 @@ add_text_attrs (GtkTextLayout      *layout,
     }
   else
     {
-      attr = pango_attr_font_desc_new (style->font);
+      attr = gdk_text_attr_font_desc_new (style->font);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
       *last_font_attr = attr;
     }
 
   if (*last_scale_attr &&
-      style->font_scale == ((PangoAttrFloat*)*last_scale_attr)->value &&
+      style->font_scale == ((GdkTextAttrFloat*)*last_scale_attr)->value &&
       (*last_scale_attr)->end_index >= start)
     {
       (*last_scale_attr)->start_index = MIN ((*last_scale_attr)->start_index, start);
@@ -1509,16 +1509,16 @@ add_text_attrs (GtkTextLayout      *layout,
     }
   else if (style->font_scale != 1.0)
     {
-      attr = pango_attr_scale_new (style->font_scale);
+      attr = gdk_text_attr_scale_new (style->font_scale);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
       *last_scale_attr = attr;
     }
 
   if (*last_fallback_attr &&
-      (!style->no_fallback) == ((PangoAttrInt*)*last_fallback_attr)->value &&
+      (!style->no_fallback) == ((GdkTextAttrInt*)*last_fallback_attr)->value &&
       (*last_fallback_attr)->end_index >= start)
     {
       (*last_fallback_attr)->start_index = MIN ((*last_fallback_attr)->start_index, start);
@@ -1526,96 +1526,96 @@ add_text_attrs (GtkTextLayout      *layout,
     }
   else if (style->no_fallback)
     {
-      attr = pango_attr_fallback_new (!style->no_fallback);
+      attr = gdk_text_attr_fallback_new (!style->no_fallback);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
       *last_fallback_attr = attr;
     }
 
   if (style->letter_spacing != 0)
     {
-      attr = pango_attr_letter_spacing_new (style->letter_spacing);
+      attr = gdk_text_attr_letter_spacing_new (style->letter_spacing);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->line_height != 0.0)
     {
       if (style->line_height_is_absolute)
-        attr = pango_attr_line_height_new_absolute (style->line_height * PANGO_SCALE);
+        attr = gdk_text_attr_line_height_new_absolute (style->line_height * GDK_TEXT_SCALE);
       else
-        attr = pango_attr_line_height_new (style->line_height);
+        attr = gdk_text_attr_line_height_new (style->line_height);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->font_features)
     {
-      attr = pango_attr_font_features_new (style->font_features);
+      attr = gdk_text_attr_font_features_new (style->font_features);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->no_breaks)
     {
-      attr = pango_attr_allow_breaks_new (FALSE);
+      attr = gdk_text_attr_allow_breaks_new (FALSE);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
-  if (style->show_spaces != PANGO_SHOW_NONE)
+  if (style->show_spaces != GDK_TEXT_SHOW_NONE)
     {
-      attr = pango_attr_show_new (style->show_spaces);
+      attr = gdk_text_attr_show_new (style->show_spaces);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->no_hyphens)
     {
-      attr = pango_attr_insert_hyphens_new (FALSE);
+      attr = gdk_text_attr_insert_hyphens_new (FALSE);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
-  if (style->text_transform != PANGO_TEXT_TRANSFORM_NONE)
+  if (style->text_transform != GDK_TEXT_TEXT_TRANSFORM_NONE)
     {
-      attr = pango_attr_text_transform_new (style->text_transform);
+      attr = gdk_text_attr_text_transform_new (style->text_transform);
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->word)
     {
-      attr = pango_attr_word_new ();
+      attr = gdk_text_attr_word_new ();
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 
   if (style->sentence)
     {
-      attr = pango_attr_sentence_new ();
+      attr = gdk_text_attr_sentence_new ();
       attr->start_index = start;
       attr->end_index = start + byte_count;
 
-      pango_attr_list_insert (attrs, attr);
+      gdk_text_attr_list_insert (attrs, attr);
     }
 }
 
@@ -1624,11 +1624,11 @@ add_paintable_attrs (GtkTextLayout      *layout,
                      GtkTextLineDisplay *display,
                      GtkTextAttributes  *style,
                      GtkTextLineSegment *seg,
-                     PangoAttrList      *attrs,
+                     GdkTextAttrList      *attrs,
                      int                 start)
 {
-  PangoAttribute *attr;
-  PangoRectangle logical_rect;
+  GdkTextAttribute *attr;
+  GdkTextRectangle logical_rect;
   GtkTextPaintable *paintable = &seg->body.paintable;
   int width, height;
 
@@ -1647,15 +1647,15 @@ add_paintable_attrs (GtkTextLayout      *layout,
     }
 
   logical_rect.x = 0;
-  logical_rect.y = -height * PANGO_SCALE;
-  logical_rect.width = width * PANGO_SCALE;
-  logical_rect.height = height * PANGO_SCALE;
+  logical_rect.y = -height * GDK_TEXT_SCALE;
+  logical_rect.width = width * GDK_TEXT_SCALE;
+  logical_rect.height = height * GDK_TEXT_SCALE;
 
-  attr = pango_attr_shape_new_with_data (&logical_rect, &logical_rect,
+  attr = gdk_text_attr_shape_new_with_data (&logical_rect, &logical_rect,
 					 paintable->paintable, NULL, NULL);
   attr->start_index = start;
   attr->end_index = start + seg->byte_count;
-  pango_attr_list_insert (attrs, attr);
+  gdk_text_attr_list_insert (attrs, attr);
 }
 
 static void
@@ -1663,11 +1663,11 @@ add_child_attrs (GtkTextLayout      *layout,
                  GtkTextLineDisplay *display,
                  GtkTextAttributes  *style,
                  GtkTextLineSegment *seg,
-                 PangoAttrList      *attrs,
+                 GdkTextAttrList      *attrs,
                  int                 start)
 {
-  PangoAttribute *attr;
-  PangoRectangle logical_rect;
+  GdkTextAttribute *attr;
+  GdkTextRectangle logical_rect;
   int width, height;
   GSList *tmp_list;
   GtkWidget *widget = NULL;
@@ -1715,15 +1715,15 @@ add_child_attrs (GtkTextLayout      *layout,
     }
 
   logical_rect.x = 0;
-  logical_rect.y = -height * PANGO_SCALE;
-  logical_rect.width = width * PANGO_SCALE;
-  logical_rect.height = height * PANGO_SCALE;
+  logical_rect.y = -height * GDK_TEXT_SCALE;
+  logical_rect.width = width * GDK_TEXT_SCALE;
+  logical_rect.height = height * GDK_TEXT_SCALE;
 
-  attr = pango_attr_shape_new_with_data (&logical_rect, &logical_rect,
+  attr = gdk_text_attr_shape_new_with_data (&logical_rect, &logical_rect,
 					 widget, NULL, NULL);
   attr->start_index = start;
   attr->end_index = start + seg->byte_count;
-  pango_attr_list_insert (attrs, attr);
+  gdk_text_attr_list_insert (attrs, attr);
 }
 
 /*
@@ -1749,21 +1749,21 @@ get_block_cursor (GtkTextLayout      *layout,
 		  GdkRectangle       *pos,
 		  gboolean           *cursor_at_line_end)
 {
-  PangoRectangle pango_pos;
+  GdkTextRectangle gdk_text_pos;
 
   if (layout->overwrite_mode &&
       gtk_text_iter_editable (insert_iter, TRUE) &&
       _gtk_text_util_get_block_cursor_location (display->layout,
 						insert_index,
-						&pango_pos,
+						&gdk_text_pos,
     					        cursor_at_line_end))
     {
       if (pos)
 	{
-	  pos->x = PANGO_PIXELS (pango_pos.x);
-	  pos->y = PANGO_PIXELS (pango_pos.y);
-	  pos->width = PANGO_PIXELS (pango_pos.width);
-	  pos->height = PANGO_PIXELS (pango_pos.height);
+	  pos->x = GDK_TEXT_PIXELS (gdk_text_pos.x);
+	  pos->y = GDK_TEXT_PIXELS (gdk_text_pos.y);
+	  pos->width = GDK_TEXT_PIXELS (gdk_text_pos.width);
+	  pos->height = GDK_TEXT_PIXELS (gdk_text_pos.height);
 	}
 
       return TRUE;
@@ -1818,15 +1818,15 @@ add_cursor (GtkTextLayout      *layout,
 }
 
 static gboolean
-is_shape (PangoLayoutRun *run)
+is_shape (GdkTextLayoutRun *run)
 {
   GSList *tmp_list = run->item->analysis.extra_attrs;
 
   while (tmp_list)
     {
-      PangoAttribute *attr = tmp_list->data;
+      GdkTextAttribute *attr = tmp_list->data;
 
-      if (attr->klass->type == PANGO_ATTR_SHAPE)
+      if (attr->klass->type == GDK_TEXT_ATTR_SHAPE)
         return TRUE;
 
       tmp_list = tmp_list->next;
@@ -1839,13 +1839,13 @@ static void
 allocate_child_widgets (GtkTextLayout      *text_layout,
                         GtkTextLineDisplay *display)
 {
-  PangoLayout *layout = display->layout;
-  PangoLayoutIter *run_iter;
+  GdkTextLayout *layout = display->layout;
+  GdkTextLayoutIter *run_iter;
 
-  run_iter = pango_layout_get_iter (layout);
+  run_iter = gdk_text_layout_get_iter (layout);
   do
     {
-      PangoLayoutRun *run = pango_layout_iter_get_run_readonly (run_iter);
+      GdkTextLayoutRun *run = gdk_text_layout_iter_get_run_readonly (run_iter);
 
       if (run && is_shape (run))
         {
@@ -1859,7 +1859,7 @@ allocate_child_widgets (GtkTextLayout      *text_layout,
           /* The pango iterator iterates in visual order.
            * We use the byte index to find the child widget.
            */
-          byte_index = pango_layout_iter_get_index (run_iter);
+          byte_index = gdk_text_layout_iter_get_index (run_iter);
           line_display_index_to_iter (text_layout, display, &text_iter, byte_index, 0);
           anchor = gtk_text_iter_get_child_anchor (&text_iter);
           if (anchor)
@@ -1868,7 +1868,7 @@ allocate_child_widgets (GtkTextLayout      *text_layout,
           for (i = 0; i < n_widgets; i++)
             {
               GtkWidget  *child = widgets[i];
-              PangoRectangle extents;
+              GdkTextRectangle extents;
 
               if (_gtk_anchored_child_get_layout (child) == text_layout)
                 {
@@ -1877,7 +1877,7 @@ allocate_child_widgets (GtkTextLayout      *text_layout,
                    * the widget with respect to the top of the line
                    * and the left side of the buffer
                    */
-                  pango_layout_iter_get_run_extents (run_iter,
+                  gdk_text_layout_iter_get_run_extents (run_iter,
                                                      NULL,
                                                      &extents);
 
@@ -1885,17 +1885,17 @@ allocate_child_widgets (GtkTextLayout      *text_layout,
                                  signals[ALLOCATE_CHILD],
                                  0,
                                  child,
-                                 PANGO_PIXELS (extents.x) + display->x_offset,
-                                 PANGO_PIXELS (extents.y) + display->top_margin);
+                                 GDK_TEXT_PIXELS (extents.x) + display->x_offset,
+                                 GDK_TEXT_PIXELS (extents.y) + display->top_margin);
                 }
             }
 
           g_free (widgets);
         }
     }
-  while (pango_layout_iter_next_run (run_iter));
+  while (gdk_text_layout_iter_next_run (run_iter));
 
-  pango_layout_iter_free (run_iter);
+  gdk_text_layout_iter_free (run_iter);
 }
 
 void
@@ -1907,7 +1907,7 @@ gtk_text_layout_update_children (GtkTextLayout      *text_layout,
 
 static void
 convert_color (GdkRGBA        *result,
-	       PangoAttrColor *attr)
+	       GdkTextAttrColor *attr)
 {
   result->red = attr->color.red / 65535.;
   result->blue = attr->color.blue / 65535.;
@@ -1916,29 +1916,29 @@ convert_color (GdkRGBA        *result,
 }
 
 /* This function is used to convert the preedit string attributes, which are
- * standard PangoAttributes, into the custom attributes used by the text
+ * standard GdkTextAttributes, into the custom attributes used by the text
  * widget and insert them into an attr list with a given offset.
  */
 static void
 add_preedit_attrs (GtkTextLayout     *layout,
 		   GtkTextAttributes *style,
-		   PangoAttrList     *attrs,
+		   GdkTextAttrList     *attrs,
 		   int                offset,
 		   gboolean           size_only)
 {
-  PangoAttrIterator *iter = pango_attr_list_get_iterator (layout->preedit_attrs);
+  GdkTextAttrIterator *iter = gdk_text_attr_list_get_iterator (layout->preedit_attrs);
 
   do
     {
       GtkTextAppearance appearance = style->appearance;
-      PangoFontDescription *font_desc = pango_font_description_copy_static (style->font);
-      PangoAttribute *insert_attr;
+      GdkTextFontDescription *font_desc = gdk_text_font_description_copy_static (style->font);
+      GdkTextAttribute *insert_attr;
       GSList *extra_attrs = NULL;
       GSList *tmp_list;
-      PangoLanguage *language;
+      GdkTextLanguage *language;
       int start, end;
 
-      pango_attr_iterator_range (iter, &start, &end);
+      gdk_text_attr_iterator_range (iter, &start, &end);
 
       if (end == G_MAXINT)
 	end = layout->preedit_len;
@@ -1946,7 +1946,7 @@ add_preedit_attrs (GtkTextLayout     *layout,
       if (end == start)
 	continue;
 
-      pango_attr_iterator_get_font (iter, font_desc, &language, &extra_attrs);
+      gdk_text_attr_iterator_get_font (iter, font_desc, &language, &extra_attrs);
 
       if (appearance.fg_rgba)
 	appearance.fg_rgba = gdk_rgba_copy (appearance.fg_rgba);
@@ -1962,77 +1962,77 @@ add_preedit_attrs (GtkTextLayout     *layout,
       tmp_list = extra_attrs;
       while (tmp_list)
 	{
-	  PangoAttribute *attr = tmp_list->data;
+	  GdkTextAttribute *attr = tmp_list->data;
 	  GdkRGBA rgba;
 
 	  switch ((guint) attr->klass->type)
 	    {
-	    case PANGO_ATTR_FOREGROUND:
-	      convert_color (&rgba, (PangoAttrColor *)attr);
+	    case GDK_TEXT_ATTR_FOREGROUND:
+	      convert_color (&rgba, (GdkTextAttrColor *)attr);
 	      if (appearance.fg_rgba)
 		gdk_rgba_free (appearance.fg_rgba);
 	      appearance.fg_rgba = gdk_rgba_copy (&rgba);
 	      break;
-	    case PANGO_ATTR_BACKGROUND:
-	      convert_color (&rgba, (PangoAttrColor *)attr);
+	    case GDK_TEXT_ATTR_BACKGROUND:
+	      convert_color (&rgba, (GdkTextAttrColor *)attr);
 	      if (appearance.bg_rgba)
 		gdk_rgba_free (appearance.bg_rgba);
 	      appearance.bg_rgba = gdk_rgba_copy (&rgba);
 	      appearance.draw_bg = TRUE;
 	      break;
-	    case PANGO_ATTR_UNDERLINE:
-	      appearance.underline = ((PangoAttrInt *)attr)->value;
+	    case GDK_TEXT_ATTR_UNDERLINE:
+	      appearance.underline = ((GdkTextAttrInt *)attr)->value;
 	      break;
-            case PANGO_ATTR_UNDERLINE_COLOR:
-              convert_color (&rgba, (PangoAttrColor*)attr);
+            case GDK_TEXT_ATTR_UNDERLINE_COLOR:
+              convert_color (&rgba, (GdkTextAttrColor*)attr);
 	      if (appearance.underline_rgba)
 		gdk_rgba_free (appearance.underline_rgba);
 	      appearance.underline_rgba = gdk_rgba_copy (&rgba);
 	      break;
-	    case PANGO_ATTR_OVERLINE:
-	      appearance.overline = ((PangoAttrInt *)attr)->value;
+	    case GDK_TEXT_ATTR_OVERLINE:
+	      appearance.overline = ((GdkTextAttrInt *)attr)->value;
 	      break;
-            case PANGO_ATTR_OVERLINE_COLOR:
-              convert_color (&rgba, (PangoAttrColor*)attr);
+            case GDK_TEXT_ATTR_OVERLINE_COLOR:
+              convert_color (&rgba, (GdkTextAttrColor*)attr);
 	      if (appearance.overline_rgba)
 		gdk_rgba_free (appearance.overline_rgba);
 	      appearance.overline_rgba = gdk_rgba_copy (&rgba);
 	      break;
-	    case PANGO_ATTR_STRIKETHROUGH:
-	      appearance.strikethrough = ((PangoAttrInt *)attr)->value;
+	    case GDK_TEXT_ATTR_STRIKETHROUGH:
+	      appearance.strikethrough = ((GdkTextAttrInt *)attr)->value;
 	      break;
-            case PANGO_ATTR_STRIKETHROUGH_COLOR:
-              convert_color (&rgba, (PangoAttrColor*)attr);
+            case GDK_TEXT_ATTR_STRIKETHROUGH_COLOR:
+              convert_color (&rgba, (GdkTextAttrColor*)attr);
 	      if (appearance.strikethrough_rgba)
 		gdk_rgba_free (appearance.strikethrough_rgba);
 	      appearance.strikethrough_rgba = gdk_rgba_copy (&rgba);
 	      break;
-            case PANGO_ATTR_RISE:
-              appearance.rise = ((PangoAttrInt *)attr)->value;
+            case GDK_TEXT_ATTR_RISE:
+              appearance.rise = ((GdkTextAttrInt *)attr)->value;
               break;
 	    default:
 	      break;
 	    }
 
-	  pango_attribute_destroy (attr);
+	  gdk_text_attribute_destroy (attr);
 	  tmp_list = tmp_list->next;
 	}
 
       g_slist_free (extra_attrs);
 
-      insert_attr = pango_attr_font_desc_new (font_desc);
+      insert_attr = gdk_text_attr_font_desc_new (font_desc);
       insert_attr->start_index = start + offset;
       insert_attr->end_index = end + offset;
 
-      pango_attr_list_insert (attrs, insert_attr);
+      gdk_text_attr_list_insert (attrs, insert_attr);
 
       if (language)
 	{
-	  insert_attr = pango_attr_language_new (language);
+	  insert_attr = gdk_text_attr_language_new (language);
 	  insert_attr->start_index = start + offset;
 	  insert_attr->end_index = end + offset;
 
-	  pango_attr_list_insert (attrs, insert_attr);
+	  gdk_text_attr_list_insert (attrs, insert_attr);
 	}
 
       add_generic_attrs (layout, &appearance, end - start,
@@ -2050,11 +2050,11 @@ add_preedit_attrs (GtkTextLayout     *layout,
       if (appearance.strikethrough_rgba)
 	gdk_rgba_free (appearance.strikethrough_rgba);
 
-      pango_font_description_free (font_desc);
+      gdk_text_font_description_free (font_desc);
     }
-  while (pango_attr_iterator_next (iter));
+  while (gdk_text_attr_iterator_next (iter));
 
-  pango_attr_iterator_destroy (iter);
+  gdk_text_attr_iterator_destroy (iter);
 }
 
 /* Iterate over the line and fill in display->cursors.
@@ -2201,22 +2201,22 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
   GtkTextAttributes *style;
   char *text;
   int text_pixel_width;
-  PangoAttrList *attrs;
+  GdkTextAttrList *attrs;
   int text_allocated, layout_byte_offset;
-  PangoRectangle extents;
+  GdkTextRectangle extents;
   gboolean para_values_set = FALSE;
   GSList *cursor_byte_offsets = NULL;
   GSList *cursor_segs = NULL;
   GSList *tmp_list1, *tmp_list2;
   gboolean saw_widget = FALSE;
-  PangoDirection base_dir;
+  GdkTextDirection base_dir;
   GPtrArray *tags;
   gboolean initial_toggle_segments;
   int h_margin;
   int h_padding;
-  PangoAttribute *last_font_attr = NULL;
-  PangoAttribute *last_scale_attr = NULL;
-  PangoAttribute *last_fallback_attr = NULL;
+  GdkTextAttribute *last_font_attr = NULL;
+  GdkTextAttribute *last_scale_attr = NULL;
+  GdkTextAttribute *last_fallback_attr = NULL;
   GtkTextBTree *btree;
 
   g_return_val_if_fail (line != NULL, NULL);
@@ -2234,20 +2234,20 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
    */
   if (totally_invisible_line (layout, line, &iter))
     {
-      display->layout = pango_layout_new (layout->ltr_context);
+      display->layout = gdk_text_layout_new (layout->ltr_context);
       return g_steal_pointer (&display);
     }
 
   /* Find the bidi base direction */
   base_dir = line->dir_propagated_forward;
-  if (base_dir == PANGO_DIRECTION_NEUTRAL)
+  if (base_dir == GDK_TEXT_DIRECTION_NEUTRAL)
     base_dir = line->dir_propagated_back;
 
   if (line == priv->cursor_line &&
-      line->dir_strong == PANGO_DIRECTION_NEUTRAL)
+      line->dir_strong == GDK_TEXT_DIRECTION_NEUTRAL)
     {
       base_dir = (layout->default_direction == GTK_TEXT_DIR_LTR) ?
-         PANGO_DIRECTION_LTR : PANGO_DIRECTION_RTL;
+         GDK_TEXT_DIRECTION_LTR : GDK_TEXT_DIRECTION_RTL;
     }
 
   btree = _gtk_text_buffer_get_btree (layout->buffer);
@@ -2257,7 +2257,7 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
   text_allocated = _gtk_text_line_byte_count (line);
   text = g_malloc (text_allocated);
 
-  attrs = pango_attr_list_new ();
+  attrs = gdk_text_attr_list_new ();
 
   /* Iterate over segments, creating display chunks for them, and updating the tags array. */
   layout_byte_offset = 0; /* current length of layout text (includes preedit, does not include invisible text) */
@@ -2450,7 +2450,7 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
       release_style (layout, style);
     }
 
-  /* Pango doesn't want the trailing paragraph delimiters */
+  /* GdkText doesn't want the trailing paragraph delimiters */
 
   {
     /* Only one character has type G_UNICODE_PARAGRAPH_SEPARATOR in
@@ -2476,8 +2476,8 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
       }
   }
 
-  pango_layout_set_text (display->layout, text, layout_byte_offset);
-  pango_layout_set_attributes (display->layout, attrs);
+  gdk_text_layout_set_text (display->layout, text, layout_byte_offset);
+  gdk_text_layout_set_attributes (display->layout, attrs);
 
   tmp_list1 = cursor_byte_offsets;
   tmp_list2 = cursor_segs;
@@ -2491,7 +2491,7 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
   g_slist_free (cursor_byte_offsets);
   g_slist_free (cursor_segs);
 
-  pango_layout_get_extents (display->layout, NULL, &extents);
+  gdk_text_layout_get_extents (display->layout, NULL, &extents);
 
   text_pixel_width = PIXEL_BOUND (extents.width);
 
@@ -2499,31 +2499,31 @@ gtk_text_layout_create_display (GtkTextLayout *layout,
   h_padding = layout->left_padding + layout->right_padding;
 
   display->width = text_pixel_width + h_margin + h_padding;
-  display->height += PANGO_PIXELS (extents.height);
+  display->height += GDK_TEXT_PIXELS (extents.height);
 
   /* If we aren't wrapping, we need to do the alignment of each
    * paragraph ourselves.
    */
-  if (pango_layout_get_width (display->layout) < 0)
+  if (gdk_text_layout_get_width (display->layout) < 0)
     {
       int excess = display->total_width - text_pixel_width;
 
-      switch (pango_layout_get_alignment (display->layout))
+      switch (gdk_text_layout_get_alignment (display->layout))
         {
-        case PANGO_ALIGN_LEFT:
+        case GDK_TEXT_ALIGN_LEFT:
         default:
           break;
-        case PANGO_ALIGN_CENTER:
+        case GDK_TEXT_ALIGN_CENTER:
           display->x_offset += excess / 2;
           break;
-        case PANGO_ALIGN_RIGHT:
+        case GDK_TEXT_ALIGN_RIGHT:
           display->x_offset += excess;
           break;
         }
     }
 
   g_free (text);
-  pango_attr_list_unref (attrs);
+  gdk_text_attr_list_unref (attrs);
   if (tags != NULL)
     g_ptr_array_free (tags, TRUE);
 
@@ -2622,7 +2622,7 @@ line_display_index_to_iter (GtkTextLayout      *layout,
   if (_gtk_text_iter_get_text_line (iter) != display->line)
     {
       /* Clamp to end of line - really this clamping should have been done
-       * before here, maybe in Pango, this is a broken band-aid I think
+       * before here, maybe in GdkText, this is a broken band-aid I think
        */
       gtk_text_layout_get_iter_at_line (layout, iter, display->line, 0);
       if (!gtk_text_iter_ends_line (iter))
@@ -2733,11 +2733,11 @@ gtk_text_layout_get_iter_at_position (GtkTextLayout *layout,
     }
   else
     {
-       /* Ignore the "outside" return value from pango. Pango is doing
+       /* Ignore the "outside" return value from pango. GdkText is doing
         * the right thing even if we are outside the layout in the
         * x-direction.
         */
-      inside = pango_layout_xy_to_index (display->layout, x * PANGO_SCALE, y * PANGO_SCALE,
+      inside = gdk_text_layout_xy_to_index (display->layout, x * GDK_TEXT_SCALE, y * GDK_TEXT_SCALE,
                                          &byte_index, trailing);
     }
 
@@ -2777,8 +2777,8 @@ gtk_text_layout_get_cursor_locations (GtkTextLayout  *layout,
   int index;
   GtkTextIter insert_iter;
 
-  PangoRectangle pango_strong_pos;
-  PangoRectangle pango_weak_pos;
+  GdkTextRectangle gdk_text_strong_pos;
+  GdkTextRectangle gdk_text_weak_pos;
 
   g_return_if_fail (layout != NULL);
   g_return_if_fail (iter != NULL);
@@ -2796,24 +2796,24 @@ gtk_text_layout_get_cursor_locations (GtkTextLayout  *layout,
   if (gtk_text_iter_equal (iter, &insert_iter))
     index += layout->preedit_cursor - layout->preedit_len;
 
-  pango_layout_get_cursor_pos (display->layout, index,
-			       strong_pos ? &pango_strong_pos : NULL,
-			       weak_pos ? &pango_weak_pos : NULL);
+  gdk_text_layout_get_cursor_pos (display->layout, index,
+			       strong_pos ? &gdk_text_strong_pos : NULL,
+			       weak_pos ? &gdk_text_weak_pos : NULL);
 
   if (strong_pos)
     {
-      strong_pos->x = display->x_offset + pango_strong_pos.x / PANGO_SCALE;
-      strong_pos->y = line_top + display->top_margin + pango_strong_pos.y / PANGO_SCALE;
+      strong_pos->x = display->x_offset + gdk_text_strong_pos.x / GDK_TEXT_SCALE;
+      strong_pos->y = line_top + display->top_margin + gdk_text_strong_pos.y / GDK_TEXT_SCALE;
       strong_pos->width = 0;
-      strong_pos->height = pango_strong_pos.height / PANGO_SCALE;
+      strong_pos->height = gdk_text_strong_pos.height / GDK_TEXT_SCALE;
     }
 
   if (weak_pos)
     {
-      weak_pos->x = display->x_offset + pango_weak_pos.x / PANGO_SCALE;
-      weak_pos->y = line_top + display->top_margin + pango_weak_pos.y / PANGO_SCALE;
+      weak_pos->x = display->x_offset + gdk_text_weak_pos.x / GDK_TEXT_SCALE;
+      weak_pos->y = line_top + display->top_margin + gdk_text_weak_pos.y / GDK_TEXT_SCALE;
       weak_pos->width = 0;
-      weak_pos->height = pango_weak_pos.height / PANGO_SCALE;
+      weak_pos->height = gdk_text_weak_pos.height / GDK_TEXT_SCALE;
     }
 
   gtk_text_line_display_unref (display);
@@ -2921,7 +2921,7 @@ gtk_text_layout_get_iter_location (GtkTextLayout     *layout,
                                    const GtkTextIter *iter,
                                    GdkRectangle      *rect)
 {
-  PangoRectangle pango_rect;
+  GdkTextRectangle gdk_text_rect;
   GtkTextLine *line;
   GtkTextBTree *tree;
   GtkTextLineDisplay *display;
@@ -2939,16 +2939,16 @@ gtk_text_layout_get_iter_location (GtkTextLayout     *layout,
 
   rect->y = _gtk_text_btree_find_line_top (tree, line, layout);
 
-  x_offset = display->x_offset * PANGO_SCALE;
+  x_offset = display->x_offset * GDK_TEXT_SCALE;
 
   byte_index = gtk_text_iter_get_line_index (iter);
 
-  pango_layout_index_to_pos (display->layout, byte_index, &pango_rect);
+  gdk_text_layout_index_to_pos (display->layout, byte_index, &gdk_text_rect);
 
-  rect->x = PANGO_PIXELS (x_offset + pango_rect.x);
-  rect->y += PANGO_PIXELS (pango_rect.y) + display->top_margin;
-  rect->width = PANGO_PIXELS (pango_rect.width);
-  rect->height = PANGO_PIXELS (pango_rect.height);
+  rect->x = GDK_TEXT_PIXELS (x_offset + gdk_text_rect.x);
+  rect->y += GDK_TEXT_PIXELS (gdk_text_rect.y) + display->top_margin;
+  rect->width = GDK_TEXT_PIXELS (gdk_text_rect.width);
+  rect->height = GDK_TEXT_PIXELS (gdk_text_rect.height);
 
   gtk_text_line_display_unref (display);
 }
@@ -2983,18 +2983,18 @@ find_display_line_below (GtkTextLayout *layout,
   while (line && !found_line)
     {
       GtkTextLineDisplay *display = gtk_text_layout_get_line_display (layout, line, FALSE);
-      PangoLayoutIter *layout_iter;
+      GdkTextLayoutIter *layout_iter;
 
-      layout_iter = pango_layout_get_iter (display->layout);
+      layout_iter = gdk_text_layout_get_iter (display->layout);
 
       line_top += display->top_margin;
 
       do
         {
           int first_y, last_y;
-          PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+          GdkTextLayoutLine *layout_line = gdk_text_layout_iter_get_line_readonly (layout_iter);
 
-          found_byte = pango_layout_line_get_start_index (layout_line);
+          found_byte = gdk_text_layout_line_get_start_index (layout_line);
 
           if (line_top >= y)
             {
@@ -3002,12 +3002,12 @@ find_display_line_below (GtkTextLayout *layout,
               break;
             }
 
-          pango_layout_iter_get_line_yrange (layout_iter, &first_y, &last_y);
-          line_top += (last_y - first_y) / PANGO_SCALE;
+          gdk_text_layout_iter_get_line_yrange (layout_iter, &first_y, &last_y);
+          line_top += (last_y - first_y) / GDK_TEXT_SCALE;
         }
-      while (pango_layout_iter_next_line (layout_iter));
+      while (gdk_text_layout_iter_next_line (layout_iter));
 
-      pango_layout_iter_free (layout_iter);
+      gdk_text_layout_iter_free (layout_iter);
 
       line_top += display->bottom_margin;
       gtk_text_line_display_unref (display);
@@ -3049,40 +3049,40 @@ find_display_line_above (GtkTextLayout *layout,
   while (line && !found_line)
     {
       GtkTextLineDisplay *display = gtk_text_layout_get_line_display (layout, line, FALSE);
-      PangoRectangle logical_rect;
-      PangoLayoutIter *layout_iter;
+      GdkTextRectangle logical_rect;
+      GdkTextLayoutIter *layout_iter;
       int tmp_top;
 
-      layout_iter = pango_layout_get_iter (display->layout);
+      layout_iter = gdk_text_layout_get_iter (display->layout);
 
       line_top -= display->top_margin + display->bottom_margin;
-      pango_layout_iter_get_layout_extents (layout_iter, NULL, &logical_rect);
-      line_top -= logical_rect.height / PANGO_SCALE;
+      gdk_text_layout_iter_get_layout_extents (layout_iter, NULL, &logical_rect);
+      line_top -= logical_rect.height / GDK_TEXT_SCALE;
 
       tmp_top = line_top + display->top_margin;
 
       do
         {
           int first_y, last_y;
-          PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+          GdkTextLayoutLine *layout_line = gdk_text_layout_iter_get_line_readonly (layout_iter);
 
-          found_byte = pango_layout_line_get_start_index (layout_line);
+          found_byte = gdk_text_layout_line_get_start_index (layout_line);
 
-          pango_layout_iter_get_line_yrange (layout_iter, &first_y, &last_y);
+          gdk_text_layout_iter_get_line_yrange (layout_iter, &first_y, &last_y);
 
-          tmp_top -= (last_y - first_y) / PANGO_SCALE;
+          tmp_top -= (last_y - first_y) / GDK_TEXT_SCALE;
 
           if (tmp_top < y)
             {
               found_line = line;
-              pango_layout_iter_free (layout_iter);
+              gdk_text_layout_iter_free (layout_iter);
               gtk_text_line_display_unref (display);
               goto done;
             }
         }
-      while (pango_layout_iter_next_line (layout_iter));
+      while (gdk_text_layout_iter_next_line (layout_iter));
 
-      pango_layout_iter_free (layout_iter);
+      gdk_text_layout_iter_free (layout_iter);
 
       gtk_text_line_display_unref (display);
 
@@ -3159,7 +3159,7 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
   GtkTextLineDisplay *display;
   int line_byte;
   GSList *tmp_list;
-  PangoLayoutLine *layout_line;
+  GdkTextLayoutLine *layout_line;
   GtkTextIter orig;
   gboolean update_byte = FALSE;
 
@@ -3195,15 +3195,15 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
       update_byte = TRUE;
     }
 
-  tmp_list = pango_layout_get_lines_readonly (display->layout);
+  tmp_list = gdk_text_layout_get_lines_readonly (display->layout);
   layout_line = tmp_list->data;
 
   if (update_byte)
     {
-      line_byte = pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line);
+      line_byte = gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line);
     }
 
-  if (line_byte < pango_layout_line_get_length (layout_line) || !tmp_list->next) /* first line of paragraph */
+  if (line_byte < gdk_text_layout_line_get_length (layout_line) || !tmp_list->next) /* first line of paragraph */
     {
       GtkTextLine *prev_line;
 
@@ -3221,11 +3221,11 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
 
           if (display->height > 0)
             {
-              tmp_list = g_slist_last (pango_layout_get_lines_readonly (display->layout));
+              tmp_list = g_slist_last (gdk_text_layout_get_lines_readonly (display->layout));
               layout_line = tmp_list->data;
 
               line_display_index_to_iter (layout, display, iter,
-                                          pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line), 0);
+                                          gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line), 0);
               break;
             }
 
@@ -3234,21 +3234,21 @@ gtk_text_layout_move_iter_to_previous_line (GtkTextLayout *layout,
     }
   else
     {
-      int prev_offset = pango_layout_line_get_start_index (layout_line);
+      int prev_offset = gdk_text_layout_line_get_start_index (layout_line);
 
       tmp_list = tmp_list->next;
       while (tmp_list)
         {
           layout_line = tmp_list->data;
 
-          if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
+          if (line_byte < gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line) ||
               !tmp_list->next)
             {
  	      line_display_index_to_iter (layout, display, iter, prev_offset, 0);
               break;
             }
 
-          prev_offset = pango_layout_line_get_start_index (layout_line);
+          prev_offset = gdk_text_layout_line_get_start_index (layout_line);
           tmp_list = tmp_list->next;
         }
     }
@@ -3307,18 +3307,18 @@ gtk_text_layout_move_iter_to_next_line (GtkTextLayout *layout,
       else
 	line_byte = 0;
 
-      tmp_list = pango_layout_get_lines_readonly (display->layout);
+      tmp_list = gdk_text_layout_get_lines_readonly (display->layout);
       while (tmp_list && !found_after)
         {
-          PangoLayoutLine *layout_line = tmp_list->data;
+          GdkTextLayoutLine *layout_line = tmp_list->data;
 
           if (found)
             {
 	      line_display_index_to_iter (layout, display, iter,
-                                          pango_layout_line_get_start_index (layout_line), 0);
+                                          gdk_text_layout_line_get_start_index (layout_line), 0);
               found_after = TRUE;
             }
-          else if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) || !tmp_list->next)
+          else if (line_byte < gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line) || !tmp_list->next)
             found = TRUE;
 
           tmp_list = tmp_list->next;
@@ -3367,22 +3367,22 @@ gtk_text_layout_move_iter_to_line_end (GtkTextLayout *layout,
   display = gtk_text_layout_get_line_display (layout, line, FALSE);
   line_byte = line_display_iter_to_index (layout, display, iter);
 
-  tmp_list = pango_layout_get_lines_readonly (display->layout);
+  tmp_list = gdk_text_layout_get_lines_readonly (display->layout);
   while (tmp_list)
     {
-      PangoLayoutLine *layout_line = tmp_list->data;
+      GdkTextLayoutLine *layout_line = tmp_list->data;
 
-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) || !tmp_list->next)
+      if (line_byte < gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line) || !tmp_list->next)
         {
  	  line_display_index_to_iter (layout, display, iter,
- 				      direction < 0 ? pango_layout_line_get_start_index (layout_line) : pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line),
+ 				      direction < 0 ? gdk_text_layout_line_get_start_index (layout_line) : gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line),
  				      0);
 
           /* FIXME: As a bad hack, we move back one position when we
 	   * are inside a paragraph to avoid going to next line on a
 	   * forced break not at whitespace. Real fix is to keep track
 	   * of whether marks are at leading or trailing edge?  */
-          if (direction > 0 && pango_layout_line_get_length (layout_line) > 0 &&
+          if (direction > 0 && gdk_text_layout_line_get_length (layout_line) > 0 &&
 	      !gtk_text_iter_ends_line (iter) &&
 	      !_gtk_text_btree_char_is_invisible (iter))
             gtk_text_iter_backward_char (iter);
@@ -3423,12 +3423,12 @@ gtk_text_layout_iter_starts_line (GtkTextLayout       *layout,
   display = gtk_text_layout_get_line_display (layout, line, FALSE);
   line_byte = line_display_iter_to_index (layout, display, iter);
 
-  tmp_list = pango_layout_get_lines_readonly (display->layout);
+  tmp_list = gdk_text_layout_get_lines_readonly (display->layout);
   while (tmp_list)
     {
-      PangoLayoutLine *layout_line = tmp_list->data;
+      GdkTextLayoutLine *layout_line = tmp_list->data;
 
-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
+      if (line_byte < gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line) ||
           !tmp_list->next)
         {
           /* We're located on this line or the para delimiters before
@@ -3436,7 +3436,7 @@ gtk_text_layout_iter_starts_line (GtkTextLayout       *layout,
            */
           gtk_text_line_display_unref (display);
 
-          if (line_byte == pango_layout_line_get_start_index (layout_line))
+          if (line_byte == gdk_text_layout_line_get_start_index (layout_line))
             return TRUE;
           else
             return FALSE;
@@ -3477,7 +3477,7 @@ gtk_text_layout_move_iter_to_x (GtkTextLayout *layout,
   GtkTextLine *line;
   GtkTextLineDisplay *display;
   int line_byte;
-  PangoLayoutIter *layout_iter;
+  GdkTextLayoutIter *layout_iter;
 
   g_return_if_fail (GTK_IS_TEXT_LAYOUT (layout));
   g_return_if_fail (iter != NULL);
@@ -3487,23 +3487,23 @@ gtk_text_layout_move_iter_to_x (GtkTextLayout *layout,
   display = gtk_text_layout_get_line_display (layout, line, FALSE);
   line_byte = line_display_iter_to_index (layout, display, iter);
 
-  layout_iter = pango_layout_get_iter (display->layout);
+  layout_iter = gdk_text_layout_get_iter (display->layout);
 
   do
     {
-      PangoLayoutLine *layout_line = pango_layout_iter_get_line_readonly (layout_iter);
+      GdkTextLayoutLine *layout_line = gdk_text_layout_iter_get_line_readonly (layout_iter);
 
-      if (line_byte < pango_layout_line_get_start_index (layout_line) + pango_layout_line_get_length (layout_line) ||
-          pango_layout_iter_at_last_line (layout_iter))
+      if (line_byte < gdk_text_layout_line_get_start_index (layout_line) + gdk_text_layout_line_get_length (layout_line) ||
+          gdk_text_layout_iter_at_last_line (layout_iter))
         {
-          PangoRectangle logical_rect;
+          GdkTextRectangle logical_rect;
           int byte_index, trailing;
-          int x_offset = display->x_offset * PANGO_SCALE;
+          int x_offset = display->x_offset * GDK_TEXT_SCALE;
 
-          pango_layout_iter_get_line_extents (layout_iter, NULL, &logical_rect);
+          gdk_text_layout_iter_get_line_extents (layout_iter, NULL, &logical_rect);
 
-          pango_layout_line_x_to_index (layout_line,
-                                        x * PANGO_SCALE - x_offset - logical_rect.x,
+          gdk_text_layout_line_x_to_index (layout_line,
+                                        x * GDK_TEXT_SCALE - x_offset - logical_rect.x,
                                         &byte_index, &trailing);
 
  	  line_display_index_to_iter (layout, display, iter, byte_index, trailing);
@@ -3511,9 +3511,9 @@ gtk_text_layout_move_iter_to_x (GtkTextLayout *layout,
           break;
         }
     }
-  while (pango_layout_iter_next_line (layout_iter));
+  while (gdk_text_layout_iter_next_line (layout_iter));
 
-  pango_layout_iter_free (layout_iter);
+  gdk_text_layout_iter_free (layout_iter);
 
   gtk_text_line_display_unref (display);
 }
@@ -3575,12 +3575,12 @@ gtk_text_layout_move_iter_visually (GtkTextLayout *layout,
 
       if (count > 0)
         {
-          pango_layout_move_cursor_visually (display->layout, strong, line_byte, 0, 1, &new_index, &new_trailing);
+          gdk_text_layout_move_cursor_visually (display->layout, strong, line_byte, 0, 1, &new_index, &new_trailing);
           count--;
         }
       else
         {
-          pango_layout_move_cursor_visually (display->layout, strong, line_byte, 0, -1, &new_index, &new_trailing);
+          gdk_text_layout_move_cursor_visually (display->layout, strong, line_byte, 0, -1, &new_index, &new_trailing);
           count++;
         }
 
@@ -3760,7 +3760,7 @@ gtk_text_layout_after_buffer_delete_range (GtkTextBuffer *textbuffer,
 }
 
 static void
-render_para (GskPangoRenderer   *crenderer,
+render_para (GskTextRenderer   *crenderer,
              GtkTextLineDisplay *line_display,
              int                 selection_start_index,
              int                 selection_end_index,
@@ -3768,39 +3768,39 @@ render_para (GskPangoRenderer   *crenderer,
              gboolean            draw_selection_text,
              float               cursor_alpha)
 {
-  PangoLayout *layout = line_display->layout;
+  GdkTextLayout *layout = line_display->layout;
   int byte_offset = 0;
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
   int screen_width;
   gboolean first = TRUE;
 
-  iter = pango_layout_get_iter (layout);
+  iter = gdk_text_layout_get_iter (layout);
   screen_width = line_display->total_width;
 
   do
     {
-      PangoLayoutLine *line = pango_layout_iter_get_line_readonly (iter);
+      GdkTextLayoutLine *line = gdk_text_layout_iter_get_line_readonly (iter);
       int selection_y, selection_height;
       int first_y, last_y;
-      PangoRectangle line_rect;
+      GdkTextRectangle line_rect;
       int baseline;
       gboolean at_last_line;
 
-      pango_layout_iter_get_line_extents (iter, NULL, &line_rect);
-      baseline = pango_layout_iter_get_baseline (iter);
-      pango_layout_iter_get_line_yrange (iter, &first_y, &last_y);
+      gdk_text_layout_iter_get_line_extents (iter, NULL, &line_rect);
+      baseline = gdk_text_layout_iter_get_baseline (iter);
+      gdk_text_layout_iter_get_line_yrange (iter, &first_y, &last_y);
 
       /* Adjust for margins */
 
-      line_rect.x += line_display->x_offset * PANGO_SCALE;
-      line_rect.y += line_display->top_margin * PANGO_SCALE;
-      baseline += line_display->top_margin * PANGO_SCALE;
+      line_rect.x += line_display->x_offset * GDK_TEXT_SCALE;
+      line_rect.y += line_display->top_margin * GDK_TEXT_SCALE;
+      baseline += line_display->top_margin * GDK_TEXT_SCALE;
 
       /* Selection is the height of the line, plus top/bottom
        * margin if we're the first/last line
        */
-      selection_y = PANGO_PIXELS (first_y) + line_display->top_margin;
-      selection_height = PANGO_PIXELS (last_y) - PANGO_PIXELS (first_y);
+      selection_y = GDK_TEXT_PIXELS (first_y) + line_display->top_margin;
+      selection_height = GDK_TEXT_PIXELS (last_y) - GDK_TEXT_PIXELS (first_y);
 
       if (first)
         {
@@ -3809,7 +3809,7 @@ render_para (GskPangoRenderer   *crenderer,
           first = FALSE;
         }
 
-      at_last_line = pango_layout_iter_at_last_line (iter);
+      at_last_line = gdk_text_layout_iter_at_last_line (iter);
       if (at_last_line)
         selection_height += line_display->bottom_margin;
 
@@ -3817,7 +3817,7 @@ render_para (GskPangoRenderer   *crenderer,
        * only do it if the selection is opaque.
        */
       if (selection_start_index < byte_offset &&
-          selection_end_index > pango_layout_line_get_length (line) + byte_offset &&
+          selection_end_index > gdk_text_layout_line_get_length (line) + byte_offset &&
           gdk_color_is_opaque (selection_color))
         {
           gtk_snapshot_add_color (crenderer->snapshot,
@@ -3829,8 +3829,8 @@ render_para (GskPangoRenderer   *crenderer,
 
           if (draw_selection_text)
             {
-              gsk_pango_renderer_set_state (crenderer, GSK_PANGO_RENDERER_SELECTED);
-              pango_renderer_draw_layout_line (PANGO_RENDERER (crenderer),
+              gsk_text_renderer_set_state (crenderer, GSK_PANGO_RENDERER_SELECTED);
+              gdk_text_renderer_draw_layout_line (GDK_TEXT_RENDERER (crenderer),
                                                line,
                                                line_rect.x,
                                                baseline);
@@ -3846,45 +3846,45 @@ render_para (GskPangoRenderer   *crenderer,
                                                             screen_width,
                                                             selection_height));
 
-          gsk_pango_renderer_set_state (crenderer, GSK_PANGO_RENDERER_NORMAL);
-          pango_renderer_draw_layout_line (PANGO_RENDERER (crenderer),
+          gsk_text_renderer_set_state (crenderer, GSK_PANGO_RENDERER_NORMAL);
+          gdk_text_renderer_draw_layout_line (GDK_TEXT_RENDERER (crenderer),
                                            line,
                                            line_rect.x,
                                            baseline);
 
           /* Check if some part of the line is selected; the newline
-           * that is after pango_layout_line_get_length (line) for the last line of the
+           * that is after gdk_text_layout_line_get_length (line) for the last line of the
            * paragraph counts as part of the line for this
            */
-          if ((selection_start_index < byte_offset + pango_layout_line_get_length (line) ||
-               (selection_start_index == byte_offset + pango_layout_line_get_length (line) && pango_layout_iter_at_last_line (iter))) &&
+          if ((selection_start_index < byte_offset + gdk_text_layout_line_get_length (line) ||
+               (selection_start_index == byte_offset + gdk_text_layout_line_get_length (line) && gdk_text_layout_iter_at_last_line (iter))) &&
               selection_end_index > byte_offset)
             {
               int *ranges = NULL;
               int n_ranges, i;
 
-              pango_layout_line_get_x_ranges (line, selection_start_index, selection_end_index, &ranges, &n_ranges);
+              gdk_text_layout_line_get_x_ranges (line, selection_start_index, selection_end_index, &ranges, &n_ranges);
 
-              gsk_pango_renderer_set_state (crenderer, GSK_PANGO_RENDERER_SELECTED);
+              gsk_text_renderer_set_state (crenderer, GSK_PANGO_RENDERER_SELECTED);
 
               for (i = 0; i < n_ranges; i++)
                 {
                   graphene_rect_t bounds;
 
-                  bounds.origin.x = line_display->x_offset + PANGO_PIXELS (ranges[2*i]);
+                  bounds.origin.x = line_display->x_offset + GDK_TEXT_PIXELS (ranges[2*i]);
                   bounds.origin.y = selection_y;
-                  bounds.size.width = PANGO_PIXELS (ranges[2*i + 1]) - PANGO_PIXELS (ranges[2*i]);
+                  bounds.size.width = GDK_TEXT_PIXELS (ranges[2*i + 1]) - GDK_TEXT_PIXELS (ranges[2*i]);
                   bounds.size.height = selection_height;
 
-                  if (bounds.origin.x < PANGO_PIXELS (line_rect.x))
+                  if (bounds.origin.x < GDK_TEXT_PIXELS (line_rect.x))
                     {
-                      bounds.size.width -= PANGO_PIXELS (line_rect.x) - bounds.origin.x;
-                      bounds.origin.x = PANGO_PIXELS (line_rect.x);
+                      bounds.size.width -= GDK_TEXT_PIXELS (line_rect.x) - bounds.origin.x;
+                      bounds.origin.x = GDK_TEXT_PIXELS (line_rect.x);
                     }
 
                   bounds.size.width = MIN (bounds.size.width,
-                                           PANGO_PIXELS (line_rect.x) +
-                                           PANGO_PIXELS (line_rect.width) -
+                                           GDK_TEXT_PIXELS (line_rect.x) +
+                                           GDK_TEXT_PIXELS (line_rect.width) -
                                            bounds.origin.x);
 
                   gtk_snapshot_add_color (crenderer->snapshot, selection_color, &bounds);
@@ -3892,7 +3892,7 @@ render_para (GskPangoRenderer   *crenderer,
                   if (draw_selection_text)
                     {
                       gtk_snapshot_push_clip (crenderer->snapshot, &bounds);
-                      pango_renderer_draw_layout_line (PANGO_RENDERER (crenderer),
+                      gdk_text_renderer_draw_layout_line (GDK_TEXT_RENDERER (crenderer),
                                                        line,
                                                        line_rect.x,
                                                        baseline);
@@ -3903,28 +3903,28 @@ render_para (GskPangoRenderer   *crenderer,
               g_free (ranges);
 
               /* Paint in the ends of the line */
-              if (line_rect.x > line_display->left_margin * PANGO_SCALE &&
+              if (line_rect.x > line_display->left_margin * GDK_TEXT_SCALE &&
                   ((line_display->direction == GTK_TEXT_DIR_LTR && selection_start_index < byte_offset) ||
-                   (line_display->direction == GTK_TEXT_DIR_RTL && selection_end_index > byte_offset + pango_layout_line_get_length (line))))
+                   (line_display->direction == GTK_TEXT_DIR_RTL && selection_end_index > byte_offset + gdk_text_layout_line_get_length (line))))
                 gtk_snapshot_add_color (crenderer->snapshot,
                                         selection_color,
                                         &GRAPHENE_RECT_INIT (line_display->left_margin,
                                                              selection_y,
-                                                             PANGO_PIXELS (line_rect.x) - line_display->left_margin,
+                                                             GDK_TEXT_PIXELS (line_rect.x) - line_display->left_margin,
                                                              selection_height));
 
               if (line_rect.x + line_rect.width <
-                  (screen_width + line_display->left_margin) * PANGO_SCALE &&
-                  ((line_display->direction == GTK_TEXT_DIR_LTR && selection_end_index > byte_offset + pango_layout_line_get_length (line)) ||
+                  (screen_width + line_display->left_margin) * GDK_TEXT_SCALE &&
+                  ((line_display->direction == GTK_TEXT_DIR_LTR && selection_end_index > byte_offset + gdk_text_layout_line_get_length (line)) ||
                    (line_display->direction == GTK_TEXT_DIR_RTL && selection_start_index < byte_offset)))
                 {
                   int nonlayout_width = line_display->left_margin
                                       + screen_width
-                                      - PANGO_PIXELS (line_rect.x)
-                                      - PANGO_PIXELS (line_rect.width);
+                                      - GDK_TEXT_PIXELS (line_rect.x)
+                                      - GDK_TEXT_PIXELS (line_rect.width);
                   gtk_snapshot_add_color (crenderer->snapshot,
                                           selection_color,
-                                          &GRAPHENE_RECT_INIT (PANGO_PIXELS (line_rect.x) + PANGO_PIXELS (line_rect.width),
+                                          &GRAPHENE_RECT_INIT (GDK_TEXT_PIXELS (line_rect.x) + GDK_TEXT_PIXELS (line_rect.width),
                                                                selection_y,
                                                                nonlayout_width,
                                                                selection_height));
@@ -3934,8 +3934,8 @@ render_para (GskPangoRenderer   *crenderer,
                    gtk_widget_has_focus (crenderer->widget) &&
                    cursor_alpha > 0 &&
                    byte_offset <= line_display->insert_index &&
-                   (line_display->insert_index < byte_offset + pango_layout_line_get_length (line) ||
-                    (at_last_line && line_display->insert_index == byte_offset + pango_layout_line_get_length (line))))
+                   (line_display->insert_index < byte_offset + gdk_text_layout_line_get_length (line) ||
+                    (at_last_line && line_display->insert_index == byte_offset + gdk_text_layout_line_get_length (line))))
             {
               GtkCssNode *node;
               GtkCssStyle *style;
@@ -3962,9 +3962,9 @@ render_para (GskPangoRenderer   *crenderer,
               /* draw text under the cursor if any */
               if (!line_display->cursor_at_line_end)
                 {
-                  gsk_pango_renderer_set_state (crenderer, GSK_PANGO_RENDERER_CURSOR);
+                  gsk_text_renderer_set_state (crenderer, GSK_PANGO_RENDERER_CURSOR);
                   gtk_snapshot_push_clip (crenderer->snapshot, &bounds);
-                  pango_renderer_draw_layout_line (PANGO_RENDERER (crenderer),
+                  gdk_text_renderer_draw_layout_line (GDK_TEXT_RENDERER (crenderer),
                                                    line,
                                                    line_rect.x,
                                                    baseline);
@@ -3974,15 +3974,15 @@ render_para (GskPangoRenderer   *crenderer,
             }
         }
 
-      byte_offset += pango_layout_line_get_length (line);
+      byte_offset += gdk_text_layout_line_get_length (line);
     }
-  while (pango_layout_iter_next_line (iter));
+  while (gdk_text_layout_iter_next_line (iter));
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 }
 
 static gboolean
-snapshot_shape (PangoAttrShape         *attr,
+snapshot_shape (GdkTextAttrShape         *attr,
                 GdkSnapshot            *snapshot,
                 double                  width,
                 double                  height)
@@ -4005,7 +4005,7 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
                           float                  cursor_alpha)
 {
   GtkTextLayoutPrivate *priv;
-  GskPangoRenderer *crenderer;
+  GskTextRenderer *crenderer;
   int offset_y;
   GtkTextIter selection_start, selection_end;
   int selection_start_line;
@@ -4048,9 +4048,9 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
 
   cursor_snapshot = NULL;
 
-  crenderer = gsk_pango_renderer_acquire ();
+  crenderer = gsk_text_renderer_acquire ();
 
-  gsk_pango_renderer_set_shape_handler (crenderer, snapshot_shape);
+  gsk_text_renderer_set_shape_handler (crenderer, snapshot_shape);
 
   crenderer->widget = widget;
   crenderer->snapshot = snapshot;
@@ -4149,7 +4149,7 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
             }
 
           if (line_display->node == NULL &&
-              (pango_layout_get_character_count (line_display->layout) > 0 ||
+              (gdk_text_layout_get_character_count (line_display->layout) > 0 ||
                selection_start_index != -1 || selection_end_index != -1 ||
                line_display->has_block_cursor))
             {
@@ -4187,11 +4187,11 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
 
               for (int i = 0; i < line_display->cursors->len; i++)
                 {
-                  PangoDirection dir;
+                  GdkTextDirection dir;
                   CursorPosition cursor;
 
                   cursor = g_array_index (line_display->cursors, CursorPosition, i);
-                  dir = (line_display->direction == GTK_TEXT_DIR_RTL) ? PANGO_DIRECTION_RTL : PANGO_DIRECTION_LTR;
+                  dir = (line_display->direction == GTK_TEXT_DIR_RTL) ? GDK_TEXT_DIRECTION_RTL : GDK_TEXT_DIRECTION_LTR;
 
                   if (cursor.is_insert || cursor.is_selection_bound)
                     gtk_snapshot_push_opacity (cursor_snapshot, cursor_alpha);
@@ -4231,7 +4231,7 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
 
   gdk_color_finish (&crenderer->fg_color);
 
-  gsk_pango_renderer_release (crenderer);
+  gsk_text_renderer_release (crenderer);
 }
 
 int

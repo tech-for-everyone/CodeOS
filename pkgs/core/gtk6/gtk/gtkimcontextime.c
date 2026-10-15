@@ -62,7 +62,7 @@ struct _GtkIMContextIMEPrivate
    *
    * This is necessary because GtkEntry expects the preedit buffer to be
    * cleared before commit() is called, otherwise it leads to an assertion
-   * failure in Pango. However, since we emit the commit() signal while
+   * failure in GdkText. However, since we emit the commit() signal while
    * handling the WM_IME_COMPOSITION message, the IME buffer will be non-empty,
    * so we temporarily set this flag while emitting the appropriate signals.
    *
@@ -96,7 +96,7 @@ static gboolean gtk_im_context_ime_filter_keypress (GtkIMContext   *context,
 static void gtk_im_context_ime_reset               (GtkIMContext   *context);
 static void gtk_im_context_ime_get_preedit_string  (GtkIMContext   *context,
                                                     char          **str,
-                                                    PangoAttrList **attrs,
+                                                    GdkTextAttrList **attrs,
                                                     int            *cursor_pos);
 static void gtk_im_context_ime_focus_in            (GtkIMContext   *context);
 static void gtk_im_context_ime_focus_out           (GtkIMContext   *context);
@@ -505,10 +505,10 @@ get_utf8_preedit_string (GtkIMContextIME *context_ime,
 }
 
 
-static PangoAttrList *
+static GdkTextAttrList *
 get_pango_attr_list (GtkIMContextIME *context_ime, const char *utf8str)
 {
-  PangoAttrList *attrs = pango_attr_list_new ();
+  GdkTextAttrList *attrs = gdk_text_attr_list_new ();
   GdkSurface *surface;
   HWND hwnd;
   HIMC himc;
@@ -528,7 +528,7 @@ get_pango_attr_list (GtkIMContextIME *context_ime, const char *utf8str)
       const char *schr = utf8str, *echr;
       guint16 f_red, f_green, f_blue, b_red, b_green, b_blue;
       glong len, spos = 0, epos, sidx = 0, eidx;
-      PangoAttribute *attr;
+      GdkTextAttribute *attr;
 
       /*
        *  get attributes list of IME.
@@ -556,17 +556,17 @@ get_pango_attr_list (GtkIMContextIME *context_ime, const char *utf8str)
           eidx = echr - utf8str;
 
           /*
-           *  convert attributes list to PangoAttriute.
+           *  convert attributes list to GdkTextAttriute.
            */
           if (*echr == '\0' || buf[spos] != buf[epos])
             {
               switch (buf[spos])
                 {
                 case ATTR_TARGET_CONVERTED:
-                  attr = pango_attr_underline_new (PANGO_UNDERLINE_DOUBLE);
+                  attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_DOUBLE);
                   attr->start_index = sidx;
                   attr->end_index = eidx;
-                  pango_attr_list_change (attrs, attr);
+                  gdk_text_attr_list_change (attrs, attr);
                   f_red = f_green = f_blue = 0;
                   b_red = b_green = b_blue = 0xffff;
                   break;
@@ -579,21 +579,21 @@ get_pango_attr_list (GtkIMContextIME *context_ime, const char *utf8str)
                   b_red = b_green = b_blue = 0x7fff;
                   break;
                 default:        /* ATTR_INPUT,ATTR_CONVERTED,ATTR_FIXEDCONVERTED */
-                  attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+                  attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
                   attr->start_index = sidx;
                   attr->end_index = eidx;
-                  pango_attr_list_change (attrs, attr);
+                  gdk_text_attr_list_change (attrs, attr);
                   f_red = f_green = f_blue = 0;
                   b_red = b_green = b_blue = 0xffff;
                 }
-              attr = pango_attr_foreground_new (f_red, f_green, f_blue);
+              attr = gdk_text_attr_foreground_new (f_red, f_green, f_blue);
               attr->start_index = sidx;
               attr->end_index = eidx;
-              pango_attr_list_change (attrs, attr);
-              attr = pango_attr_background_new (b_red, b_green, b_blue);
+              gdk_text_attr_list_change (attrs, attr);
+              attr = gdk_text_attr_background_new (b_red, b_green, b_blue);
               attr->start_index = sidx;
               attr->end_index = eidx;
-              pango_attr_list_change (attrs, attr);
+              gdk_text_attr_list_change (attrs, attr);
 
               schr = echr;
               spos = epos;
@@ -612,7 +612,7 @@ get_pango_attr_list (GtkIMContextIME *context_ime, const char *utf8str)
 static void
 gtk_im_context_ime_get_preedit_string (GtkIMContext   *context,
                                        char          **str,
-                                       PangoAttrList **attrs,
+                                       GdkTextAttrList **attrs,
                                        int            *cursor_pos)
 {
   char *utf8str = NULL;
@@ -837,10 +837,10 @@ gtk_im_context_ime_set_preedit_font (GtkIMContext *context)
   HKL ime = GetKeyboardLayout (0);
   const char *lang;
   gunichar wc;
-  PangoContext *pango_context;
-  PangoFont *font;
+  GdkTextContext *gdk_text_context;
+  GdkTextFont *font;
   LOGFONTA *logfont;
-  PangoFontDescription *font_desc;
+  GdkTextFontDescription *font_desc;
   GtkCssStyle *style;
   GdkSurface *surface;
 
@@ -861,8 +861,8 @@ gtk_im_context_ime_set_preedit_font (GtkIMContext *context)
     return;
 
   /* set font */
-  pango_context = gtk_widget_get_pango_context (context_ime->client_widget);
-  if (!pango_context)
+  gdk_text_context = gtk_widget_get_pango_context (context_ime->client_widget);
+  if (!gdk_text_context)
     goto ERROR_OUT;
 
   /* Try to make sure we use a font that actually can show the
@@ -904,13 +904,13 @@ gtk_im_context_ime_set_preedit_font (GtkIMContext *context)
       /* We know what language it is. Look for a character, any
        * character, that language needs.
        */
-      PangoLanguage *pango_lang = pango_language_from_string (lang);
-      PangoFontset *fontset =
-        pango_context_load_fontset (pango_context,
+      GdkTextLanguage *gdk_text_lang = gdk_text_language_from_string (lang);
+      GdkTextFontset *fontset =
+        gdk_text_context_load_fontset (gdk_text_context,
 				                            font_desc,
-				                            pango_lang);
+				                            gdk_text_lang);
       gunichar *sample =
-	g_utf8_to_ucs4 (pango_language_get_sample_string (pango_lang),
+	g_utf8_to_ucs4 (gdk_text_language_get_sample_string (gdk_text_lang),
 			-1, NULL, NULL, NULL);
       wc = 0x4E00;		/* In all CJK languages? */
       if (sample != NULL)
@@ -925,16 +925,16 @@ gtk_im_context_ime_set_preedit_font (GtkIMContext *context)
 	      }
 	  g_free (sample);
 	}
-      font = pango_fontset_get_font (fontset, wc);
+      font = gdk_text_fontset_get_font (fontset, wc);
       g_object_unref (fontset);
     }
   else
-    font = pango_context_load_font (pango_context, font_desc);
+    font = gdk_text_context_load_font (gdk_text_context, font_desc);
 
   if (!font)
     goto ERROR_OUT;
 
-  logfont = pango_win32_font_logfont (font);
+  logfont = gdk_text_win32_font_logfont (font);
   if (logfont)
     ImmSetCompositionFontA (himc, logfont);
 

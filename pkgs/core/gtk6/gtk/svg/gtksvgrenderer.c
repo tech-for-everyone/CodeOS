@@ -197,13 +197,13 @@ svg_writing_mode_is_vertical (WritingMode mode)
   return is_vertical[mode];
 }
 
-static PangoFontMap *
+static GdkTextFontMap *
 get_fontmap (GtkSvg *svg)
 {
   if (svg->fontmap)
     return svg->fontmap;
   else
-    return pango_cairo_font_map_get_default ();
+    return gdk_text_cairo_font_map_get_default ();
 }
 
 /* {{{ Gradients */
@@ -3490,9 +3490,9 @@ paint_markers (SvgElement   *shape,
 #define FSI 0x2068
 #define PDI 0x2069
 
-static PangoLayout *
+static GdkTextLayout *
 text_create_layout (SvgElement       *self,
-                    PangoFontMap     *fontmap,
+                    GdkTextFontMap     *fontmap,
                     const char       *text,
                     int               len,
                     WritingMode       wmode,
@@ -3501,65 +3501,65 @@ text_create_layout (SvgElement       *self,
                     gboolean         *is_vertical,
                     double           *rotation)
 {
-  PangoContext *context;
+  GdkTextContext *context;
   UnicodeBidi uni;
-  PangoDirection direction, dir;
-  PangoGravity gravity;
-  PangoFontDescription *font_desc;
-  PangoLayout *layout;
-  PangoFontMetrics *metrics;
+  GdkTextDirection direction, dir;
+  GdkTextGravity gravity;
+  GdkTextFontDescription *font_desc;
+  GdkTextLayout *layout;
+  GdkTextFontMetrics *metrics;
   int ascent, descent;
-  PangoAttrList *attr_list;
-  PangoAttribute *attr;
+  GdkTextAttrList *attr_list;
+  GdkTextAttribute *attr;
   TextDecoration decoration;
   int w,h;
-  PangoLayoutIter *iter;
+  GdkTextLayoutIter *iter;
   double offset;
   SvgValue *font_family;
   DominantBaseline baseline;
   char *text_with_bidi = NULL;
 
-  context = pango_font_map_create_context (fontmap);
-  pango_context_set_language (context, svg_language_get (svg_element_get_current_value (self, SVG_PROPERTY_LANG), 0));
+  context = gdk_text_font_map_create_context (fontmap);
+  gdk_text_context_set_language (context, svg_language_get (svg_element_get_current_value (self, SVG_PROPERTY_LANG), 0));
 
   uni = svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_UNICODE_BIDI));
   dir = direction = svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_DIRECTION));
   switch (wmode)
     {
     case WRITING_MODE_HORIZONTAL_TB:
-      gravity = PANGO_GRAVITY_SOUTH;
+      gravity = GDK_TEXT_GRAVITY_SOUTH;
       break;
     case WRITING_MODE_VERTICAL_LR:
       // See note about having vertical-lr rotate -90° instead, below
     case WRITING_MODE_VERTICAL_RL:
-      gravity = PANGO_GRAVITY_EAST;
+      gravity = GDK_TEXT_GRAVITY_EAST;
       break;
     case WRITING_MODE_LEGACY_LR:
     case WRITING_MODE_LEGACY_LR_TB:
-      direction = PANGO_DIRECTION_LTR;
-      gravity = PANGO_GRAVITY_SOUTH;
+      direction = GDK_TEXT_DIRECTION_LTR;
+      gravity = GDK_TEXT_GRAVITY_SOUTH;
       break;
     case WRITING_MODE_LEGACY_RL:
     case WRITING_MODE_LEGACY_RL_TB:
-      direction = PANGO_DIRECTION_RTL;
-      gravity = PANGO_GRAVITY_SOUTH;
+      direction = GDK_TEXT_DIRECTION_RTL;
+      gravity = GDK_TEXT_GRAVITY_SOUTH;
       break;
     case WRITING_MODE_LEGACY_TB:
     case WRITING_MODE_LEGACY_TB_RL:
-      direction = PANGO_DIRECTION_LTR;
-      gravity = PANGO_GRAVITY_EAST;
+      direction = GDK_TEXT_DIRECTION_LTR;
+      gravity = GDK_TEXT_GRAVITY_EAST;
       break;
     default:
       g_assert_not_reached ();
     }
-  pango_context_set_base_gravity (context, gravity);
+  gdk_text_context_set_base_gravity (context, gravity);
 
   if (uni == UNICODE_BIDI_OVERRIDE || uni == UNICODE_BIDI_EMBED)
-    pango_context_set_base_dir (context, direction);
-  else if (dir != PANGO_DIRECTION_LTR)
-    pango_context_set_base_dir (context, dir);
+    gdk_text_context_set_base_dir (context, direction);
+  else if (dir != GDK_TEXT_DIRECTION_LTR)
+    gdk_text_context_set_base_dir (context, dir);
   else
-    pango_context_set_base_dir (context, direction);
+    gdk_text_context_set_base_dir (context, direction);
 
   if (uni != UNICODE_BIDI_NORMAL)
     {
@@ -3567,21 +3567,21 @@ text_create_layout (SvgElement       *self,
       switch (uni)
         {
         case UNICODE_BIDI_EMBED:
-          g_string_append_unichar (s, dir == PANGO_DIRECTION_LTR ? LRE : RLE);
+          g_string_append_unichar (s, dir == GDK_TEXT_DIRECTION_LTR ? LRE : RLE);
           g_string_append_len (s, text, len);
           g_string_append_unichar (s, PDF);
           len = s->len;
           text_with_bidi = g_string_free_and_steal (s);
           break;
         case UNICODE_BIDI_ISOLATE:
-          g_string_append_unichar (s, dir == PANGO_DIRECTION_LTR ? LRI : RLI);
+          g_string_append_unichar (s, dir == GDK_TEXT_DIRECTION_LTR ? LRI : RLI);
           g_string_append_len (s, text, len);
           g_string_append_unichar (s, PDI);
           len = s->len;
           text_with_bidi = g_string_free_and_steal (s);
           break;
         case UNICODE_BIDI_OVERRIDE:
-          g_string_append_unichar (s, dir == PANGO_DIRECTION_LTR ? LRO : RLO);
+          g_string_append_unichar (s, dir == GDK_TEXT_DIRECTION_LTR ? LRO : RLO);
           g_string_append_len (s, text, len);
           g_string_append_unichar (s, PDF);
           len = s->len;
@@ -3589,7 +3589,7 @@ text_create_layout (SvgElement       *self,
           break;
         case UNICODE_BIDI_ISOLATE_OVERRIDE:
           g_string_append_unichar (s, FSI);
-          g_string_append_unichar (s, dir == PANGO_DIRECTION_LTR ? LRO : RLO);
+          g_string_append_unichar (s, dir == GDK_TEXT_DIRECTION_LTR ? LRO : RLO);
           g_string_append_len (s, text, len);
           g_string_append_unichar (s, PDF);
           g_string_append_unichar (s, PDI);
@@ -3609,7 +3609,7 @@ text_create_layout (SvgElement       *self,
         }
     }
 
-  font_desc = pango_font_description_copy (pango_context_get_font_description (context));
+  font_desc = gdk_text_font_description_copy (gdk_text_context_get_font_description (context));
 
   font_family = svg_element_get_current_value (self, SVG_PROPERTY_FONT_FAMILY);
   if (svg_string_list_get_length (font_family) > 0)
@@ -3622,74 +3622,74 @@ text_create_layout (SvgElement       *self,
             g_string_append_c (s, ',');
           g_string_append (s, svg_string_list_get (font_family, i));
         }
-      pango_font_description_set_family (font_desc, s->str);
+      gdk_text_font_description_set_family (font_desc, s->str);
       g_string_free (s, TRUE);
     }
 
-  pango_font_description_set_style (font_desc, svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_STYLE)));
-  pango_font_description_set_variant (font_desc, svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_VARIANT)));
-  pango_font_description_set_weight (font_desc, (unsigned int) svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_WEIGHT), 1000.));
-  pango_font_description_set_width (font_desc, (unsigned int) svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_WIDTH), 1000.));
+  gdk_text_font_description_set_style (font_desc, svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_STYLE)));
+  gdk_text_font_description_set_variant (font_desc, svg_enum_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_VARIANT)));
+  gdk_text_font_description_set_weight (font_desc, (unsigned int) svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_WEIGHT), 1000.));
+  gdk_text_font_description_set_width (font_desc, (unsigned int) svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_WIDTH), 1000.));
 
-  pango_font_description_set_size (font_desc,
+  gdk_text_font_description_set_size (font_desc,
                                    svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_FONT_SIZE), 1.) *
-                                   PANGO_SCALE / SVG_DEFAULT_DPI * 72);
+                                   GDK_TEXT_SCALE / SVG_DEFAULT_DPI * 72);
 
-  layout = pango_layout_new (context);
-  pango_layout_set_font_description (layout, font_desc);
+  layout = gdk_text_layout_new (context);
+  gdk_text_layout_set_font_description (layout, font_desc);
 
-  metrics = pango_context_get_metrics (context, font_desc, pango_context_get_language (context));
-  ascent = pango_font_metrics_get_ascent (metrics);
-  descent = pango_font_metrics_get_descent (metrics);
+  metrics = gdk_text_context_get_metrics (context, font_desc, gdk_text_context_get_language (context));
+  ascent = gdk_text_font_metrics_get_ascent (metrics);
+  descent = gdk_text_font_metrics_get_descent (metrics);
 
-  pango_font_description_free (font_desc);
+  gdk_text_font_description_free (font_desc);
 
-  attr_list = pango_attr_list_new ();
+  attr_list = gdk_text_attr_list_new ();
 
-  attr = pango_attr_letter_spacing_new (svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_LETTER_SPACING), 1.) * PANGO_SCALE);
+  attr = gdk_text_attr_letter_spacing_new (svg_number_get (svg_element_get_current_value (self, SVG_PROPERTY_LETTER_SPACING), 1.) * GDK_TEXT_SCALE);
   attr->start_index = 0;
   attr->end_index = G_MAXINT;
-  pango_attr_list_insert (attr_list, attr);
+  gdk_text_attr_list_insert (attr_list, attr);
 
   decoration = svg_text_decoration_get (svg_element_get_current_value (self, SVG_PROPERTY_TEXT_DECORATION));
   if (text)
     {
       if (decoration & TEXT_DECORATION_UNDERLINE)
         {
-          attr = pango_attr_underline_new (PANGO_UNDERLINE_SINGLE);
+          attr = gdk_text_attr_underline_new (GDK_TEXT_UNDERLINE_SINGLE);
           attr->start_index = 0;
           attr->end_index = -1;
-          pango_attr_list_insert (attr_list, attr);
+          gdk_text_attr_list_insert (attr_list, attr);
         }
       if (decoration & TEXT_DECORATION_OVERLINE)
         {
-          attr = pango_attr_overline_new (PANGO_OVERLINE_SINGLE);
+          attr = gdk_text_attr_overline_new (GDK_TEXT_OVERLINE_SINGLE);
           attr->start_index = 0;
           attr->end_index = -1;
-          pango_attr_list_insert (attr_list, attr);
+          gdk_text_attr_list_insert (attr_list, attr);
         }
       if (decoration & TEXT_DECORATION_LINE_THROUGH)
         {
-          attr = pango_attr_strikethrough_new (TRUE);
+          attr = gdk_text_attr_strikethrough_new (TRUE);
           attr->start_index = 0;
           attr->end_index = -1;
-          pango_attr_list_insert (attr_list, attr);
+          gdk_text_attr_list_insert (attr_list, attr);
         }
     }
 
-  pango_layout_set_attributes (layout, attr_list);
-  pango_attr_list_unref (attr_list);
+  gdk_text_layout_set_attributes (layout, attr_list);
+  gdk_text_attr_list_unref (attr_list);
 
-  pango_layout_set_text (layout, text_with_bidi ? text_with_bidi : text, len);
+  gdk_text_layout_set_text (layout, text_with_bidi ? text_with_bidi : text, len);
 
-  pango_layout_set_auto_dir (layout, FALSE);
+  gdk_text_layout_set_auto_dir (layout, FALSE);
 
-  pango_layout_set_alignment (layout, (direction == PANGO_DIRECTION_LTR) ? PANGO_ALIGN_LEFT : PANGO_ALIGN_RIGHT);
+  gdk_text_layout_set_alignment (layout, (direction == GDK_TEXT_DIRECTION_LTR) ? GDK_TEXT_ALIGN_LEFT : GDK_TEXT_ALIGN_RIGHT);
 
-  pango_layout_get_size (layout, &w, &h);
-  iter = pango_layout_get_iter (layout);
-  offset = pango_layout_iter_get_baseline (iter) / (double)PANGO_SCALE;
-  pango_layout_iter_free (iter);
+  gdk_text_layout_get_size (layout, &w, &h);
+  iter = gdk_text_layout_get_iter (layout);
+  offset = gdk_text_layout_iter_get_baseline (iter) / (double)GDK_TEXT_SCALE;
+  gdk_text_layout_iter_free (iter);
 
   baseline = svg_enum_get (self->current[SVG_PROPERTY_DOMINANT_BASELINE]);
   switch (baseline)
@@ -3699,40 +3699,40 @@ text_create_layout (SvgElement       *self,
       offset += 0.;
       break;
     case DOMINANT_BASELINE_HANGING:
-      offset -= (ascent - descent) / (double)PANGO_SCALE;
+      offset -= (ascent - descent) / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_MIDDLE:
       // Approximate meanline using strikethrough position and thickness
       // https://mail.gnome.org/archives/gtk-i18n-list/2012-December/msg00046.html
-      offset -= (pango_font_metrics_get_strikethrough_position (metrics) +
-                 pango_font_metrics_get_strikethrough_thickness (metrics) / 2
-                ) / (double)PANGO_SCALE;
+      offset -= (gdk_text_font_metrics_get_strikethrough_position (metrics) +
+                 gdk_text_font_metrics_get_strikethrough_thickness (metrics) / 2
+                ) / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_CENTRAL:
-      offset = .5 * (ascent + descent) / (double)PANGO_SCALE;
+      offset = .5 * (ascent + descent) / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_TEXT_BEFORE_EDGE:
     case DOMINANT_BASELINE_TEXT_BOTTOM:
-      //offset -= ascent / (double)PANGO_SCALE;
+      //offset -= ascent / (double)GDK_TEXT_SCALE;
       // Bit of a klutch, but leads to better results
-      offset -= (2.*ascent - h) / (double)PANGO_SCALE;
+      offset -= (2.*ascent - h) / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_TEXT_AFTER_EDGE:
     case DOMINANT_BASELINE_TEXT_TOP:
-      offset += descent / (double)PANGO_SCALE;
+      offset += descent / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_IDEOGRAPHIC:
       // Approx
-      offset += descent / (double)PANGO_SCALE;
+      offset += descent / (double)GDK_TEXT_SCALE;
       break;
     case DOMINANT_BASELINE_MATHEMATICAL:
       // Approx
-      offset += .5 * (ascent + descent) / (double)PANGO_SCALE;
+      offset += .5 * (ascent + descent) / (double)GDK_TEXT_SCALE;
       break;
     default:
       g_assert_not_reached ();
     }
-  pango_font_metrics_unref (metrics);
+  gdk_text_font_metrics_unref (metrics);
 
   switch (wmode)
     {
@@ -3742,7 +3742,7 @@ text_create_layout (SvgElement       *self,
     case WRITING_MODE_LEGACY_RL:
     case WRITING_MODE_LEGACY_RL_TB:
       *origin = GRAPHENE_POINT_INIT (0., -offset);
-      *bounds = GRAPHENE_RECT_INIT (0., -offset, w / (double)PANGO_SCALE, h / (double)PANGO_SCALE);
+      *bounds = GRAPHENE_RECT_INIT (0., -offset, w / (double)GDK_TEXT_SCALE, h / (double)GDK_TEXT_SCALE);
       *is_vertical = FALSE;
       *rotation = 0.;
       break;
@@ -3756,7 +3756,7 @@ text_create_layout (SvgElement       *self,
     case WRITING_MODE_LEGACY_TB:
     case WRITING_MODE_LEGACY_TB_RL:
       *origin = GRAPHENE_POINT_INIT (offset, 0.);
-      *bounds = GRAPHENE_RECT_INIT (offset - h / (double)PANGO_SCALE, 0., h / (double)PANGO_SCALE, w / (double)PANGO_SCALE);
+      *bounds = GRAPHENE_RECT_INIT (offset - h / (double)GDK_TEXT_SCALE, 0., h / (double)GDK_TEXT_SCALE, w / (double)GDK_TEXT_SCALE);
       *is_vertical = TRUE;
       *rotation = 90.;
       break;
@@ -3870,7 +3870,7 @@ has_text_position (TextOffset *offsets)
 
 static gboolean
 do_generate_layouts (SvgElement             *self,
-                     PangoFontMap           *fontmap,
+                     GdkTextFontMap           *fontmap,
                      XmlSpace                space,
                      WritingMode             wmode,
                      double                 *x,
@@ -3962,9 +3962,9 @@ do_generate_layouts (SvgElement             *self,
             TextChunk chunk0 = { NULL, };
             TextChunk *chunk = NULL;
             int attrs_len;
-            PangoLogAttr *attrs;
+            GdkTextLogAttr *attrs;
             unsigned int text_idx;
-            PangoLanguage *lang;
+            GdkTextLanguage *lang;
 
             lastwasspace = *lastwithspace != NULL;
             text = text_chomp (node->characters.text, space, &lastwasspace);
@@ -3974,8 +3974,8 @@ do_generate_layouts (SvgElement             *self,
 
             lang = svg_language_get (svg_element_get_current_value (self, SVG_PROPERTY_LANG), 0);
             attrs_len = g_utf8_strlen (text, -1) + 1;
-            attrs = g_newa (PangoLogAttr, attrs_len);
-            pango_get_log_attrs (text, strlen (text), -1, lang, attrs, attrs_len);
+            attrs = g_newa (GdkTextLogAttr, attrs_len);
+            gdk_text_get_log_attrs (text, strlen (text), -1, lang, attrs, attrs_len);
 
             ch = text;
             text_idx = 0;
@@ -4010,19 +4010,19 @@ do_generate_layouts (SvgElement             *self,
 
                 if (svg_element_get_element_type (self) == SVG_ELEMENT_TSPAN)
                   {
-                    const PangoFontDescription *font_desc = pango_layout_get_font_description (chunk->layout);
-                    PangoContext *context = pango_layout_get_context (chunk->layout);
-                    PangoFontMetrics *metrics = pango_context_get_metrics (context, font_desc, pango_context_get_language (context));
+                    const GdkTextFontDescription *font_desc = gdk_text_layout_get_font_description (chunk->layout);
+                    GdkTextContext *context = gdk_text_layout_get_context (chunk->layout);
+                    GdkTextFontMetrics *metrics = gdk_text_context_get_metrics (context, font_desc, gdk_text_context_get_language (context));
 
                     SvgValue *bshift = svg_element_get_current_value (self, SVG_PROPERTY_BASELINE_SHIFT);
                     if (svg_value_is_number (bshift))
                       {
-                        baseline_shift = - svg_number_get (bshift, pango_font_metrics_get_height (metrics) / 1024.0);
+                        baseline_shift = - svg_number_get (bshift, gdk_text_font_metrics_get_height (metrics) / 1024.0);
                       }
                     else
                       {
-                        PangoFont *font = pango_context_load_font (context, font_desc);
-                        hb_font_t *hb_font = pango_font_get_hb_font (font);
+                        GdkTextFont *font = gdk_text_context_load_font (context, font_desc);
+                        hb_font_t *hb_font = gdk_text_font_get_hb_font (font);
                         int ofs = 0;
 
                         switch (svg_enum_get (bshift))
@@ -4036,10 +4036,10 @@ do_generate_layouts (SvgElement             *self,
                             baseline_shift = - ofs / 1024.0;
                             break;
                           case BASELINE_SHIFT_TOP:
-                            baseline_shift = pango_font_metrics_get_height (metrics) / 1024.0;
+                            baseline_shift = gdk_text_font_metrics_get_height (metrics) / 1024.0;
                             break;
                           case BASELINE_SHIFT_CENTER:
-                            baseline_shift = 0.5 * pango_font_metrics_get_height (metrics) / 1024.0;
+                            baseline_shift = 0.5 * gdk_text_font_metrics_get_height (metrics) / 1024.0;
                             break;
                           case BASELINE_SHIFT_BOTTOM:
                             baseline_shift = 0;
@@ -4051,7 +4051,7 @@ do_generate_layouts (SvgElement             *self,
                         g_object_unref (font);
                       }
 
-                    pango_font_metrics_unref (metrics);
+                    gdk_text_font_metrics_unref (metrics);
                   }
 
                 if (pos.has_x)
@@ -4111,7 +4111,7 @@ print_chunks (SvgElement *self,
           break;
         case TEXT_NODE_CHARACTERS:
           g_print ("|%s|\n", before ? node->characters.text
-                                    : pango_layout_get_text (node->characters.layout));
+                                    : gdk_text_layout_get_text (node->characters.layout));
           break;
         default:
           g_assert_not_reached ();
@@ -4122,7 +4122,7 @@ print_chunks (SvgElement *self,
 
 static gboolean
 generate_layouts (SvgElement            *self,
-                  PangoFontMap          *fontmap,
+                  GdkTextFontMap          *fontmap,
                   const graphene_rect_t *viewport,
                   graphene_rect_t       *bounds)
 {
@@ -4157,8 +4157,8 @@ generate_layouts (SvgElement            *self,
       /* Remove the leftover final space. Note that we rely on text_chomp
        * only considering single-byte whitespace
        */
-      text = pango_layout_get_text (chunk->layout);
-      pango_layout_set_text (chunk->layout, text, strlen (text) - 1);
+      text = gdk_text_layout_get_text (chunk->layout);
+      gdk_text_layout_set_text (chunk->layout, text, strlen (text) - 1);
     }
 
 #if 0
@@ -4188,15 +4188,15 @@ clear_layouts (SvgElement *self)
     }
 }
 
-static PangoRenderComponent
+static GdkTextRenderComponent
 decoration_to_component (TextDecoration decoration)
 {
   switch (decoration)
     {
-    case TEXT_DECORATION_UNDERLINE: return PANGO_RENDER_COMPONENT_UNDERLINE;
-    case TEXT_DECORATION_OVERLINE: return PANGO_RENDER_COMPONENT_OVERLINE;
-    case TEXT_DECORATION_LINE_THROUGH: return PANGO_RENDER_COMPONENT_STRIKETHROUGH;
-    case TEXT_DECORATION_NONE: return PANGO_RENDER_COMPONENT_NONE;
+    case TEXT_DECORATION_UNDERLINE: return GDK_TEXT_RENDER_COMPONENT_UNDERLINE;
+    case TEXT_DECORATION_OVERLINE: return GDK_TEXT_RENDER_COMPONENT_OVERLINE;
+    case TEXT_DECORATION_LINE_THROUGH: return GDK_TEXT_RENDER_COMPONENT_STRIKETHROUGH;
+    case TEXT_DECORATION_NONE: return GDK_TEXT_RENDER_COMPONENT_NONE;
     default: g_assert_not_reached ();
     }
 }
@@ -4314,27 +4314,27 @@ paint_text_decoration (SvgElement            *self,
 
 static void
 snapshot_add_layout (GtkSnapshot          *snapshot,
-                     PangoLayout          *layout,
+                     GdkTextLayout          *layout,
                      const GdkColor       *color,
-                     PangoRenderComponent  component)
+                     GdkTextRenderComponent  component)
 {
-  GskPangoRenderer *crenderer;
+  GskTextRenderer *crenderer;
 
   g_return_if_fail (snapshot != NULL);
-  g_return_if_fail (PANGO_IS_LAYOUT (layout));
+  g_return_if_fail (GDK_TEXT_IS_LAYOUT (layout));
 
-  crenderer = gsk_pango_renderer_acquire ();
+  crenderer = gsk_text_renderer_acquire ();
 
   crenderer->snapshot = snapshot;
   gdk_color_init_copy (&crenderer->fg_color, color);
 
-  pango_renderer_set_components (PANGO_RENDERER (crenderer), component);
+  gdk_text_renderer_set_components (GDK_TEXT_RENDERER (crenderer), component);
 
-  pango_renderer_draw_layout (PANGO_RENDERER (crenderer), layout, 0, 0);
+  gdk_text_renderer_draw_layout (GDK_TEXT_RENDERER (crenderer), layout, 0, 0);
 
   gdk_color_finish (&crenderer->fg_color);
 
-  gsk_pango_renderer_release (crenderer);
+  gsk_text_renderer_release (crenderer);
 }
 
 static void
@@ -4343,7 +4343,7 @@ fill_text (PaintContext          *context,
            double                 opacity,
            TextChunk             *chunk,
            const graphene_rect_t *bounds,
-           PangoRenderComponent   component)
+           GdkTextRenderComponent   component)
 {
   gtk_snapshot_save (context->snapshot);
 
@@ -4390,7 +4390,7 @@ fill_text_undecorated (SvgElement            *self,
   if (svg_paint_get_kind (paint) == PAINT_NONE)
     return;
 
-  fill_text (context, paint, opacity, chunk, bounds, PANGO_RENDER_COMPONENT_PLAIN_GLYPH);
+  fill_text (context, paint, opacity, chunk, bounds, GDK_TEXT_RENDER_COMPONENT_PLAIN_GLYPH);
 }
 
 static void
@@ -4404,7 +4404,7 @@ paint_text_color_glyphs (SvgElement            *self,
 
   black = svg_paint_new_black ();
 
-  fill_text (context, black, opacity, chunk, bounds, PANGO_RENDER_COMPONENT_COLOR_GLYPH);
+  fill_text (context, black, opacity, chunk, bounds, GDK_TEXT_RENDER_COMPONENT_COLOR_GLYPH);
 
   svg_value_unref (black);
 }
@@ -4422,7 +4422,7 @@ stroke_text_undecorated (SvgElement            *self,
   if (svg_paint_get_kind (paint) == PAINT_NONE)
     return;
 
-  path = svg_pango_layout_to_path (chunk->layout, PANGO_RENDER_COMPONENT_PLAIN_GLYPH);
+  path = svg_pango_layout_to_path (chunk->layout, GDK_TEXT_RENDER_COMPONENT_PLAIN_GLYPH);
   if (!path)
     return;
 
@@ -4480,7 +4480,7 @@ paint_text_chunk (SvgElement            *self,
     {
       SvgValue *paint = svg_paint_new_black ();
       double opacity = 1;
-      fill_text (context, paint, opacity, chunk, bounds, PANGO_RENDER_COMPONENT_ALL);
+      fill_text (context, paint, opacity, chunk, bounds, GDK_TEXT_RENDER_COMPONENT_ALL);
       svg_value_unref (paint);
       return;
     }
@@ -4550,38 +4550,38 @@ paint_text (SvgElement            *self,
 }
 
 static gboolean
-point_in_pango_rect (PangoRectangle         *rect,
+point_in_pango_rect (GdkTextRectangle         *rect,
                      const graphene_point_t *p)
 {
-  pango_extents_to_pixels (rect, NULL);
+  gdk_text_extents_to_pixels (rect, NULL);
   return rect->x <= p->x && p->x <= rect->x + rect->width &&
          rect->y <= p->y && p->y <= rect->y + rect->height;
 }
 
 static gboolean
-point_in_layout (PangoLayout            *layout,
+point_in_layout (GdkTextLayout            *layout,
                  const graphene_point_t *p)
 {
-  PangoLayoutIter *iter;
-  PangoRectangle rect;
+  GdkTextLayoutIter *iter;
+  GdkTextRectangle rect;
 
-  iter = pango_layout_get_iter (layout);
+  iter = gdk_text_layout_get_iter (layout);
   do {
-    pango_layout_iter_get_line_extents (iter, &rect, NULL);
+    gdk_text_layout_iter_get_line_extents (iter, &rect, NULL);
     if (point_in_pango_rect (&rect, p))
       {
         do {
-          pango_layout_iter_get_char_extents (iter, &rect);
+          gdk_text_layout_iter_get_char_extents (iter, &rect);
           if (point_in_pango_rect (&rect, p))
             {
-              pango_layout_iter_free (iter);
+              gdk_text_layout_iter_free (iter);
               return TRUE;
             }
-        } while (pango_layout_iter_next_char (iter));
+        } while (gdk_text_layout_iter_next_char (iter));
       }
-  } while (pango_layout_iter_next_line (iter));
+  } while (gdk_text_layout_iter_next_line (iter));
 
-  pango_layout_iter_free (iter);
+  gdk_text_layout_iter_free (iter);
 
   return FALSE;
 }

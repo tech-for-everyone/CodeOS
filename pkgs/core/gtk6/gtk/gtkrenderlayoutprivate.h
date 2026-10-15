@@ -30,16 +30,16 @@ void            gtk_css_style_snapshot_layout (GtkCssBoxes    *boxes,
                                                GtkSnapshot    *snapshot,
                                                int             x,
                                                int             y,
-                                               PangoLayout    *layout);
+                                               GdkTextLayout    *layout);
 
 void            gtk_css_style_snapshot_caret  (GtkCssBoxes    *boxes,
                                                GdkDisplay     *display,
                                                GtkSnapshot    *snapshot,
                                                int             x,
                                                int             y,
-                                               PangoLayout    *layout,
+                                               GdkTextLayout    *layout,
                                                int             index,
-                                               PangoDirection  direction);
+                                               GdkTextDirection  direction);
 
 
 G_END_DECLS

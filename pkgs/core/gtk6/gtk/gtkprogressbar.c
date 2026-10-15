@@ -255,17 +255,17 @@ gtk_progress_bar_class_init (GtkProgressBarClass *class)
    * The preferred place to ellipsize the string.
    *
    * The text will be ellipsized if the progress bar does not have enough room
-   * to display the entire string, specified as a `PangoEllipsizeMode`.
+   * to display the entire string, specified as a `GdkTextEllipsizeMode`.
    *
    * Note that setting this property to a value other than
-   * %PANGO_ELLIPSIZE_NONE has the side-effect that the progress bar requests
+   * %GDK_TEXT_ELLIPSIZE_NONE has the side-effect that the progress bar requests
    * only enough space to display the ellipsis ("..."). Another means to set a
    * progress bar's width is [method@Gtk.Widget.set_size_request].
    */
   progress_props[PROP_ELLIPSIZE] =
       g_param_spec_enum ("ellipsize", NULL, NULL,
-                         PANGO_TYPE_ELLIPSIZE_MODE,
-                         PANGO_ELLIPSIZE_NONE,
+                         GDK_TEXT_TYPE_ELLIPSIZE_MODE,
+                         GDK_TEXT_ELLIPSIZE_NONE,
                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, progress_props);
@@ -474,7 +474,7 @@ gtk_progress_bar_init (GtkProgressBar *pbar)
   pbar->activity_pos = 0;
   pbar->activity_dir = 1;
   pbar->activity_blocks = 5;
-  pbar->ellipsize = PANGO_ELLIPSIZE_NONE;
+  pbar->ellipsize = GDK_TEXT_ELLIPSIZE_NONE;
   pbar->show_text = FALSE;
 
   pbar->text = NULL;
@@ -1117,7 +1117,7 @@ gtk_progress_bar_get_inverted (GtkProgressBar *pbar)
 /**
  * gtk_progress_bar_set_ellipsize:
  * @pbar: a `GtkProgressBar`
- * @mode: a `PangoEllipsizeMode`
+ * @mode: a `GdkTextEllipsizeMode`
  *
  * Sets the mode used to ellipsize the text.
  *
@@ -1126,13 +1126,13 @@ gtk_progress_bar_get_inverted (GtkProgressBar *pbar)
  */
 void
 gtk_progress_bar_set_ellipsize (GtkProgressBar     *pbar,
-                                PangoEllipsizeMode  mode)
+                                GdkTextEllipsizeMode  mode)
 {
   g_return_if_fail (GTK_IS_PROGRESS_BAR (pbar));
-  g_return_if_fail (mode >= PANGO_ELLIPSIZE_NONE &&
-                    mode <= PANGO_ELLIPSIZE_END);
+  g_return_if_fail (mode >= GDK_TEXT_ELLIPSIZE_NONE &&
+                    mode <= GDK_TEXT_ELLIPSIZE_END);
 
-  if ((PangoEllipsizeMode)pbar->ellipsize == mode)
+  if ((GdkTextEllipsizeMode)pbar->ellipsize == mode)
     return;
 
   pbar->ellipsize = mode;
@@ -1151,12 +1151,12 @@ gtk_progress_bar_set_ellipsize (GtkProgressBar     *pbar,
  *
  * See [method@Gtk.ProgressBar.set_ellipsize].
  *
- * Returns: `PangoEllipsizeMode`
+ * Returns: `GdkTextEllipsizeMode`
  */
-PangoEllipsizeMode
+GdkTextEllipsizeMode
 gtk_progress_bar_get_ellipsize (GtkProgressBar *pbar)
 {
-  g_return_val_if_fail (GTK_IS_PROGRESS_BAR (pbar), PANGO_ELLIPSIZE_NONE);
+  g_return_val_if_fail (GTK_IS_PROGRESS_BAR (pbar), GDK_TEXT_ELLIPSIZE_NONE);
 
   return pbar->ellipsize;
 }
