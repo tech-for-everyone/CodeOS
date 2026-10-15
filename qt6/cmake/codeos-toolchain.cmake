@@ -39,6 +39,11 @@ set(CMAKE_C_STANDARD_LIBRARIES_INIT "-Wl,--start-group -lminc -lcodeos_posixstub
 set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "-Wl,--start-group -lminc -lcodeos_posixstubs -Wl,--end-group")
 set(CMAKE_INSTALL_PREFIX "${CODEOS_SYSROOT}/usr" CACHE PATH "" FORCE)
 
+# Packages (SDL3, ...) are installed under the sysroot's usr/, but a generic
+# cross system has no default CMAKE_SYSTEM_PREFIX_PATH, so find_package() would
+# never look there.  Point it at the sysroot explicitly.
+set(CMAKE_PREFIX_PATH "${CODEOS_SYSROOT}/usr" CACHE PATH "CodeOS sysroot prefix" FORCE)
+
 # Search paths (for find_package / find_library)
 set(CMAKE_FIND_ROOT_PATH "${CODEOS_SYSROOT}")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

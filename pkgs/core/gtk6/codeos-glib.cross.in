@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# CodeOS glib cross-file template — mirrors qt6/cmake/codeos-toolchain.cmake:
+# x86_64-elf toolchain, freestanding, host headers for the C library interfaces
+# that CodeOS has not re-declared yet, and CodeOS's own libc at link time.
+#
+# scripts/build-glib.sh substitutes @HERE@ and @QT_SYSROOT@ and writes the
+# result to build/codeos-glib.cross, so no checkout-specific path is committed.
+#
+# Note the link line: the iconv / frexp / aligned-alloc / statfs / resolver
+# entry points that glib needs now live in CodeOS itself
+# (qt6/posixstubs/src/codeos_compat.c -> libcodeos_posixstubs.a).  The gtk6
+# package no longer carries private link-time shims.
+[binaries]
+c = '@HERE@/toolchain/cc'
+cpp = '@HERE@/toolchain/c++'
+ar = 'x86_64-elf-ar'
+ranlib = 'x86_64-elf-ranlib'
+strip = 'x86_64-elf-strip'
+pkgconfig = 'pkg-config'
+
+[host_machine]
+system = 'linux'
+cpu_family = 'x86_64'
+cpu = 'x86_64'
+endian = 'little'
+
+[properties]
+needs_exe_wrapper = true
+
+[built-in options]
+c_args = ['-ffreestanding', '-mcmodel=large', '-mno-red-zone', '-mno-mmx', '-fno-stack-protector', '-fno-PIC', '-D_GNU_SOURCE', '-D__codeos__', '-D__linux__', '-isystem/usr/include', '-isystem/usr/local/include', '-isystem/usr/lib/gcc/x86_64-pc-linux-gnu/16/include', '-isystem@QT_SYSROOT@/include']
+cpp_args = ['-ffreestanding', '-mcmodel=large', '-mno-red-zone', '-mno-mmx', '-fno-stack-protector', '-fno-PIC', '-D_GNU_SOURCE', '-D__codeos__', '-D__linux__', '-isystem/usr/include', '-isystem/usr/local/include', '-isystem/usr/lib/gcc/x86_64-pc-linux-gnu/16/include', '-isystem@QT_SYSROOT@/include']
+c_link_args = ['-nostdlib', '-mcmodel=large', '-no-pie', '-Wl,--allow-multiple-definition', '-L@QT_SYSROOT@/lib', '-Wl,--start-group', '-lminc', '-lcodeos_posixstubs', '-lQt6BundledPcre2', '-lQt6BundledZLIB', '-Wl,--end-group']
+cpp_link_args = ['-nostdlib', '-mcmodel=large', '-no-pie', '-Wl,--allow-multiple-definition', '-L@QT_SYSROOT@/lib', '-Wl,--start-group', '-lminc', '-lcodeos_posixstubs', '-lQt6BundledPcre2', '-lQt6BundledZLIB', '-Wl,--end-group']

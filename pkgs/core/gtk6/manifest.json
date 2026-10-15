@@ -1,0 +1,12 @@
+{
+  "name": "gtk6",
+  "version": "0.1.0",
+  "description": "GTK6 — the GTK4 widget/API layer backed by the Qt6 engine. Ships the GTK4 widget layer plus a Qt6-backed GDK display backend, GSK renderer and text bridge; glib/gobject/gio and graphene are vendored under subprojects/.",
+  "license": "GPL-3.0-or-later",
+  "type": "source",
+  "category": "Graphics",
+  "dependencies": ["lib-c", "qt6"],
+  "provides": ["gtk4", "gdk", "gsk", "glib", "gobject", "gio", "graphene"],
+  "source": ".",
+  "note": "Toolkit package. The Qt6 platform layer (gdk/qt, gsk/qt, qt/) is freestanding C++ built by Makefile; the vendored glib under subprojects/glib is built for the CodeOS target by scripts/build-glib.sh against the CodeOS sysroot (qt6/sysroot)."
+}

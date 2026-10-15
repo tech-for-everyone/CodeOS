@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-args=()
-for a in "$@"; do
-  [[ "$a" == "-pthread" ]] && continue
-  args+=("$a")
-done
-exec x86_64-elf-g++ "${args[@]}"

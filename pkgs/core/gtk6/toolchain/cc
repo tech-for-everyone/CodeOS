@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# CodeOS GCC driver wrapper for the gtk6 package.
+#
+# meson's `dependency('threads')` unconditionally adds `-pthread` on non-Darwin
+# hosts, but the bare-metal x86_64-elf GCC does not recognise that driver
+# option (there is no pthread runtime to link).  CodeOS provides its own
+# threads through the posixstubs layer, so the flag is simply dropped here.
+# Nothing else is altered: this is a thin pass-through to the cross compiler.
+args=()
+for a in "$@"; do
+    [[ "$a" == "-pthread" ]] && continue
+    args+=("$a")
+done
+exec x86_64-elf-gcc "${args[@]}"

@@ -34,6 +34,7 @@ add_library(codeos_posixstubs STATIC
     posixstubs/src/posixstubs.c
     posixstubs/src/cppstubs.cpp
     posixstubs/src/qt6stubs.c
+    posixstubs/src/codeos_compat.c
     posixstubs/src/setjmp.S
     posixstubs/src/syscall_defs.c
 )

@@ -32,6 +32,8 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: icons icons-25d icons-dedup
 .PHONY: xora-pack xora-inspect xora-unpack xora-install xora-audit xora-all
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
+.PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
+.PHONY: gtk6-all
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -193,6 +195,36 @@ qt6-clean:
 
 clean-qt6:
 	rm -rf qt6/support-build
+
+# ── GTK6 toolkit (GTK4 API on the Qt6 engine) ─────────────────────
+# GTK6 is a first-class package at pkgs/core/gtk6: it ships GTK4's widget
+# layer and public API with the platform subsystems (GDK/GSK/text) rebuilt on
+# Qt6.  Two builds make it up:
+#   - pkgs/core/gtk6/Makefile        the freestanding Qt-backed C++ layer
+#   - pkgs/core/gtk6/scripts/build-glib.sh   the CodeOS port of glib/gobject/gio
+# glib is kept inside the package (pkgs/core/gtk6/subprojects/glib).
+
+gtk6:
+	@printf "$(CYAN)$(BOLD)==> Building gtk6 toolkit (GTK4 on Qt6)...$(RESET)\n"
+	$(MAKE) -C pkgs/core/gtk6 all
+	@printf "$(GREEN)gtk6 toolkit ready$(RESET)\n"
+
+gtk6-glib:
+	@printf "$(CYAN)$(BOLD)==> Building gtk6's glib (CodeOS port)...$(RESET)\n"
+	cd pkgs/core/gtk6 && ./scripts/build-glib.sh
+	@printf "$(GREEN)gtk6 glib ready$(RESET)\n"
+
+gtk6-all: gtk6 gtk6-glib
+	@printf "$(GREEN)gtk6 complete$(RESET)\n"
+
+gtk6-check:
+	@printf "$(CYAN)$(BOLD)==> Checking gtk6...$(RESET)\n"
+	$(MAKE) -C pkgs/core/gtk6 check
+
+gtk6-clean:
+	$(MAKE) -C pkgs/core/gtk6 clean
+	rm -rf pkgs/core/gtk6/build
+	@printf "$(GREEN)gtk6 cleaned$(RESET)\n"
 
 # ── Qt6 Cross-Compilation ────────────────────────────────────────
 # Downloads Qt6 source and cross-compiles it for CodeOS.
