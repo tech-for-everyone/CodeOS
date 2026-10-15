@@ -442,11 +442,15 @@ int ext2_find(const char *path, ext2_dirent_t *ent) {
             if (match && *p) {
                 current_inode = de->inode;
                 found = 1;
-                free(dir_buf);
                 break;
             }
             off += de->rec_len;
         }
+        /* dir_buf is freed exactly once, here, for every way out of the scan
+         * above: the "found the last component" path returns 0 and frees it
+         * itself, and the "descend into this directory" path falls through to
+         * this free.  There used to be a second free(dir_buf) in the descend
+         * branch, which was a double free. */
         free(dir_buf);
         if (!found) return -1;
     }
