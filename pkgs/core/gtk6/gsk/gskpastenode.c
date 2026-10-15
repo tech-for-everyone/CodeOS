@@ -53,8 +53,8 @@ gsk_paste_node_diff (GskRenderNode *node1,
   GskPasteNode *self1 = (GskPasteNode *) node1;
   GskPasteNode *self2 = (GskPasteNode *) node2;
   const GSList *copy;
-  cairo_region_t *sub;
-  cairo_rectangle_int_t bounds;
+  GdkRegion *sub;
+  GdkRectangle bounds;
 
   if (!gsk_rect_equal (&node1->bounds, &node2->bounds) ||
       self1->snap != self2->snap ||
@@ -68,11 +68,11 @@ gsk_paste_node_diff (GskRenderNode *node1,
   if (copy == NULL)
     return;
 
-  sub = cairo_region_copy (copy->data);
+  sub = gdk_region_copy (copy->data);
   gsk_rect_to_cairo_grow (&node1->bounds, &bounds);
-  cairo_region_intersect_rectangle (sub, &bounds);
-  cairo_region_union (data->region, sub);
-  cairo_region_destroy (sub);
+  gdk_region_intersect_rectangle (sub, &bounds);
+  gdk_region_union (data->region, sub);
+  gdk_region_destroy (sub);
 }
 
 static GskRenderNode *

@@ -445,7 +445,7 @@ gsk_rect_to_float (const graphene_rect_t *rect,
 
 static inline void
 gsk_rect_to_cairo_grow (const graphene_rect_t *graphene,
-                        cairo_rectangle_int_t *cairo)
+                        GdkRectangle *cairo)
 {
   cairo->x = floorf (graphene->origin.x);
   cairo->y = floorf (graphene->origin.y);
@@ -470,7 +470,7 @@ gsk_rect_is_integral (const graphene_rect_t *rect)
 
 static inline gboolean G_GNUC_WARN_UNUSED_RESULT
 gsk_rect_to_cairo_exact (const graphene_rect_t *graphene,
-                         cairo_rectangle_int_t *cairo)
+                         GdkRectangle *cairo)
 {
   if (!gsk_rect_is_integral (graphene))
     return FALSE;
@@ -485,7 +485,7 @@ gsk_rect_to_cairo_exact (const graphene_rect_t *graphene,
 
 static inline gboolean G_GNUC_WARN_UNUSED_RESULT
 gsk_rect_to_cairo_shrink (const graphene_rect_t *graphene,
-                          cairo_rectangle_int_t *cairo)
+                          GdkRectangle *cairo)
 {
   cairo->x = ceilf (graphene->origin.x);
   cairo->y = ceilf (graphene->origin.y);

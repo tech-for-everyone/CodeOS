@@ -63,7 +63,7 @@ GdkTexture *            gsk_renderer_render_texture             (GskRenderer    
 GDK_AVAILABLE_IN_ALL
 void                    gsk_renderer_render                     (GskRenderer             *renderer,
                                                                  GskRenderNode           *root,
-                                                                 const cairo_region_t    *region);
+                                                                 const GdkRegion    *region);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskRenderer, g_object_unref)
 

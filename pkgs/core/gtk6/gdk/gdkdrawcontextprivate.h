@@ -42,7 +42,7 @@ struct _GdkDrawContextFrame
 
   guint buffer_width;
   guint buffer_height;
-  cairo_region_t *damage;
+  GdkRegion *damage;
 
   GdkColorState *color_state;
 
@@ -84,7 +84,7 @@ void                    gdk_draw_context_surface_resized        (GdkDrawContext 
 GdkDrawContextFrame *   gdk_draw_context_begin_frame_full       (GdkDrawContext         *context,
                                                                  gpointer                context_data,
                                                                  GskRenderNode          *node,
-                                                                 const cairo_region_t   *region);
+                                                                 const GdkRegion   *region);
 void                    gdk_draw_context_end_frame_full         (GdkDrawContext         *context,
                                                                  gpointer                context_data);
 
@@ -101,9 +101,9 @@ void                    gdk_draw_context_get_buffer_size        (GdkDrawContext 
 
 void                    gdk_draw_context_frame_free             (GdkDrawContextFrame    *frame);
 gboolean                gdk_draw_context_frame_is_complete      (GdkDrawContextFrame    *frame);
-const cairo_region_t *  gdk_draw_context_frame_get_damage       (GdkDrawContextFrame    *frame);
+const GdkRegion *  gdk_draw_context_frame_get_damage       (GdkDrawContextFrame    *frame);
 void                    gdk_draw_context_frame_add_damage       (GdkDrawContextFrame    *frame,
-                                                                 const cairo_region_t   *damage);
+                                                                 const GdkRegion   *damage);
 GdkColorState *         gdk_draw_context_frame_get_color_state  (GdkDrawContextFrame    *frame);
 void                    gdk_draw_context_frame_set_color_state  (GdkDrawContextFrame    *frame,
                                                                  GdkColorState          *color_state);

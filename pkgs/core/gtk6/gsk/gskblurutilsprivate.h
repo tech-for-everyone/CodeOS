@@ -22,7 +22,7 @@
 
 G_BEGIN_DECLS
 
-cairo_region_t *        gsk_render_node_compute_background_blur (GskRenderNode            *node);
+GdkRegion *        gsk_render_node_compute_background_blur (GskRenderNode            *node);
 
 G_END_DECLS
 

@@ -37,8 +37,8 @@
 /* GTK6: cairo.h and pango/pango.h used to be included here.  They are gone --
  * drawing is QPainter and text is QTextLayout (qt/qttext.h), so the only thing
  * gdktypes.h ever took from cairo was cairo_rectangle_int_t, which GDK owns
- * outright now.  The rest of the tree is being moved off them file by file;
- * see PLAN.md "Dependency surgery". */
+ * outright now as GdkRectangle.  The rest of the tree is being moved off them
+ * file by file; see PLAN.md "Dependency surgery". */
 
 /* The system specific file gdkconfig.h contains such configuration
  * settings that are needed not only when compiling GDK (or GTK)
@@ -59,7 +59,7 @@ G_BEGIN_DECLS
 #define GDK_CURRENT_TIME     0L
 
 /* GTK6: GdkRectangle is GDK's own struct, not cairo's.  It has always been
- * layout-identical to cairo_rectangle_int_t, which is why the two were
+ * layout-identical to GdkRectangle, which is why the two were
  * interchangeable; there is no cairo in this tree any more, so the
  * introspection workaround above is now just the definition. */
 struct _GdkRectangle
@@ -164,4 +164,12 @@ struct _GdkKeymapKey
 };
 
 G_END_DECLS
+
+/* GTK6: GdkRegion (gdk/gdkregion.h) replaces GdkRegion.  Pull it in here
+ * so that every translation unit that can see GdkRectangle can also see
+ * GdkRegion, without touching the include list of each of the ~60 files that
+ * used GdkRegion.  The include is at the very end of this header so that
+ * everything gdkregion.h needs is already defined. */
+#include <gdk/gdkregion.h>
+
 

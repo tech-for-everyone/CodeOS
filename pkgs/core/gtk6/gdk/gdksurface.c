@@ -75,8 +75,8 @@ typedef struct _GdkSurfacePrivate GdkSurfacePrivate;
 
 struct _GdkSurfacePrivate
 {
-  cairo_region_t *opaque_region;
-  cairo_rectangle_int_t opaque_rect; /* This is different from the region */
+  GdkRegion *opaque_region;
+  GdkRectangle opaque_rect; /* This is different from the region */
 
   GdkDrawContext *attached_context;
   GskRenderNode *content;
@@ -566,7 +566,7 @@ gdk_surface_real_create_subsurface (GdkSurface *surface)
 
 static void
 gdk_surface_default_set_opaque_region (GdkSurface     *surface,
-                                       cairo_region_t *region)
+                                       GdkRegion *region)
 {
 }
 
@@ -828,14 +828,14 @@ gdk_surface_finalize (GObject *object)
       _gdk_surface_destroy (surface, FALSE);
     }
 
-  g_clear_pointer (&surface->input_region, cairo_region_destroy);
+  g_clear_pointer (&surface->input_region, gdk_region_destroy);
   g_clear_object (&surface->cursor);
   g_clear_pointer (&surface->device_cursor, g_hash_table_destroy);
   g_clear_pointer (&surface->devices_inside, g_list_free);
 
   g_clear_object (&surface->display);
 
-  g_clear_pointer (&priv->opaque_region, cairo_region_destroy);
+  g_clear_pointer (&priv->opaque_region, gdk_region_destroy);
 
   if (surface->parent)
     surface->parent->children = g_list_remove (surface->parent->children, surface);
@@ -1360,7 +1360,7 @@ gdk_surface_paint_on_clock (GdkFrameClock *clock,
                             void          *data)
 {
   GdkSurface *surface = GDK_SURFACE (data);
-  cairo_region_t *expose_region;
+  GdkRegion *expose_region;
 
   g_return_if_fail (GDK_IS_SURFACE (surface));
 
@@ -1384,7 +1384,7 @@ gdk_surface_paint_on_clock (GdkFrameClock *clock,
       g_object_unref (surface);
     }
 
-  cairo_region_destroy (expose_region);
+  gdk_region_destroy (expose_region);
 }
 
 /*
@@ -1403,7 +1403,7 @@ gdk_surface_invalidate_rect (GdkSurface        *surface,
                              const GdkRectangle *rect)
 {
   GdkRectangle surface_rect;
-  cairo_region_t *region;
+  GdkRegion *region;
 
   g_return_if_fail (GDK_IS_SURFACE (surface));
 
@@ -1419,20 +1419,20 @@ gdk_surface_invalidate_rect (GdkSurface        *surface,
       rect = &surface_rect;
     }
 
-  region = cairo_region_create_rectangle (rect);
+  region = gdk_region_create_rectangle (rect);
   gdk_surface_invalidate_region (surface, region);
-  cairo_region_destroy (region);
+  gdk_region_destroy (region);
 }
 
 static void
 impl_surface_add_update_area (GdkSurface     *impl_surface,
-                              cairo_region_t *region)
+                              GdkRegion *region)
 {
   if (impl_surface->update_area)
-    cairo_region_union (impl_surface->update_area, region);
+    gdk_region_union (impl_surface->update_area, region);
   else
     {
-      impl_surface->update_area = cairo_region_copy (region);
+      impl_surface->update_area = gdk_region_copy (region);
       gdk_surface_schedule_update (impl_surface);
     }
 }
@@ -1450,19 +1450,19 @@ impl_surface_add_update_area (GdkSurface     *impl_surface,
 void
 gdk_surface_queue_render (GdkSurface *surface)
 {
-  cairo_region_t *region;
+  GdkRegion *region;
 
   g_return_if_fail (GDK_IS_SURFACE (surface));
 
-  region = cairo_region_create ();
+  region = gdk_region_create ();
   impl_surface_add_update_area (surface, region);
-  cairo_region_destroy (region);
+  gdk_region_destroy (region);
 }
 
 /*
  * gdk_surface_invalidate_region:
  * @surface: a `GdkSurface`
- * @region: a `cairo_region_t`
+ * @region: a `GdkRegion`
  *
  * Adds @region to the update area for @surface.
  *
@@ -1475,17 +1475,17 @@ gdk_surface_queue_render (GdkSurface *surface)
  */
 void
 gdk_surface_invalidate_region (GdkSurface          *surface,
-                               const cairo_region_t *region)
+                               const GdkRegion *region)
 {
-  cairo_region_t *visible_region;
-  cairo_rectangle_int_t r;
+  GdkRegion *visible_region;
+  GdkRectangle r;
 
   g_return_if_fail (GDK_IS_SURFACE (surface));
 
   if (!GDK_SURFACE_IS_MAPPED (surface))
     return;
 
-  if (cairo_region_is_empty (region))
+  if (gdk_region_is_empty (region))
     return;
 
   r.x = 0;
@@ -1493,12 +1493,12 @@ gdk_surface_invalidate_region (GdkSurface          *surface,
   r.width = surface->width;
   r.height = surface->height;
 
-  visible_region = cairo_region_copy (region);
+  visible_region = gdk_region_copy (region);
 
-  cairo_region_intersect_rectangle (visible_region, &r);
+  gdk_region_intersect_rectangle (visible_region, &r);
   impl_surface_add_update_area (surface, visible_region);
 
-  cairo_region_destroy (visible_region);
+  gdk_region_destroy (visible_region);
 }
 
 /*
@@ -1701,7 +1701,7 @@ gdk_surface_hide (GdkSurface *surface)
   GDK_SURFACE_GET_CLASS (surface)->hide (surface);
 
   gdk_surface_set_content (surface, NULL);
-  g_clear_pointer (&surface->update_area, cairo_region_destroy);
+  g_clear_pointer (&surface->update_area, gdk_region_destroy);
 
   surface->popup.rect_anchor = 0;
   surface->popup.surface_anchor = 0;
@@ -2020,21 +2020,21 @@ gdk_surface_get_root_coords (GdkSurface *surface,
  */
 void
 gdk_surface_set_input_region (GdkSurface     *surface,
-                              cairo_region_t *region)
+                              GdkRegion *region)
 {
   g_return_if_fail (GDK_IS_SURFACE (surface));
 
   if (GDK_SURFACE_DESTROYED (surface))
     return;
 
-  if (cairo_region_equal (surface->input_region, region))
+  if (gdk_region_equal (surface->input_region, region))
     return;
 
   if (surface->input_region)
-    cairo_region_destroy (surface->input_region);
+    gdk_region_destroy (surface->input_region);
 
   if (region)
-    surface->input_region = cairo_region_copy (region);
+    surface->input_region = gdk_region_copy (region);
   else
     surface->input_region = NULL;
 
@@ -2491,29 +2491,29 @@ static void
 gdk_surface_update_opaque_region (GdkSurface *self)
 {
   GdkSurfacePrivate *priv = gdk_surface_get_instance_private (self);
-  cairo_region_t *region;
+  GdkRegion *region;
 
   if (priv->opaque_region == NULL)
     {
       if (priv->opaque_rect.width <= 0)
         region = NULL;
       else
-        region = cairo_region_create_rectangle (&priv->opaque_rect);
+        region = gdk_region_create_rectangle (&priv->opaque_rect);
     }
   else
     {
       if (priv->opaque_rect.width <= 0)
-        region = cairo_region_reference (priv->opaque_region);
+        region = gdk_region_reference (priv->opaque_region);
       else
         {
-          region = cairo_region_copy (priv->opaque_region);
-          cairo_region_union_rectangle (region, &priv->opaque_rect);
+          region = gdk_region_copy (priv->opaque_region);
+          gdk_region_union_rectangle (region, &priv->opaque_rect);
         }
     }
 
   GDK_SURFACE_GET_CLASS (self)->set_opaque_region (self, region);
 
-  g_clear_pointer (&region, cairo_region_destroy);
+  g_clear_pointer (&region, gdk_region_destroy);
 }
 
 /**
@@ -2543,20 +2543,20 @@ gdk_surface_update_opaque_region (GdkSurface *self)
  */
 void
 gdk_surface_set_opaque_region (GdkSurface      *surface,
-                               cairo_region_t *region)
+                               GdkRegion *region)
 {
   GdkSurfacePrivate *priv = gdk_surface_get_instance_private (surface);
 
   g_return_if_fail (GDK_IS_SURFACE (surface));
   g_return_if_fail (!GDK_SURFACE_DESTROYED (surface));
 
-  if (cairo_region_equal (priv->opaque_region, region))
+  if (gdk_region_equal (priv->opaque_region, region))
     return;
 
-  g_clear_pointer (&priv->opaque_region, cairo_region_destroy);
+  g_clear_pointer (&priv->opaque_region, gdk_region_destroy);
 
   if (region != NULL)
-    priv->opaque_region = cairo_region_reference (region);
+    priv->opaque_region = gdk_region_reference (region);
 
   gdk_surface_update_opaque_region (surface);
 }
@@ -2567,10 +2567,10 @@ gdk_surface_set_opaque_rect (GdkSurface            *self,
                              const graphene_rect_t *rect)
 {
   GdkSurfacePrivate *priv = gdk_surface_get_instance_private (self);
-  cairo_rectangle_int_t opaque;
+  GdkRectangle opaque;
 
   if (rect == NULL || !gsk_rect_to_cairo_shrink (rect, &opaque))
-    opaque = (cairo_rectangle_int_t) { 0, 0, 0, 0 };
+    opaque = (GdkRectangle) { 0, 0, 0, 0 };
 
   if (gdk_rectangle_equal (&priv->opaque_rect, &opaque))
     return;
@@ -2596,13 +2596,13 @@ gboolean
 gdk_surface_is_opaque (GdkSurface *self)
 {
   GdkSurfacePrivate *priv = gdk_surface_get_instance_private (self);
-  cairo_rectangle_int_t whole = { 0, 0, self->width, self->height };
+  GdkRectangle whole = { 0, 0, self->width, self->height };
 
   if (gdk_rectangle_contains (&priv->opaque_rect, &whole))
     return TRUE;
 
   if (priv->opaque_region &&
-      cairo_region_contains_rectangle (priv->opaque_region, &whole) == CAIRO_REGION_OVERLAP_IN)
+      gdk_region_contains_rectangle (priv->opaque_region, &whole) == GDK_REGION_OVERLAP_IN)
     return TRUE;
 
   return FALSE;

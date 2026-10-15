@@ -581,7 +581,7 @@ gsk_render_node_can_diff (const GskRenderNode *node1,
 }
 
 static void
-rectangle_init_from_graphene (cairo_rectangle_int_t *cairo,
+rectangle_init_from_graphene (GdkRectangle *cairo,
                               const graphene_rect_t *graphene)
 {
   cairo->x = floorf (graphene->origin.x);
@@ -595,12 +595,12 @@ gsk_render_node_diff_impossible (GskRenderNode  *node1,
                                  GskRenderNode  *node2,
                                  GskDiffData    *data)
 {
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
 
   rectangle_init_from_graphene (&rect, &node1->bounds);
-  cairo_region_union_rectangle (data->region, &rect);
+  gdk_region_union_rectangle (data->region, &rect);
   rectangle_init_from_graphene (&rect, &node2->bounds);
-  cairo_region_union_rectangle (data->region, &rect);
+  gdk_region_union_rectangle (data->region, &rect);
 }
 
 /**
@@ -655,20 +655,20 @@ gsk_render_node_diff (GskRenderNode  *node1,
 
   if (debug)
     {
-      cairo_rectangle_int_t extents;
+      GdkRectangle extents;
 
       depth--;
-      cairo_region_get_extents (data->region, &extents);
+      gdk_region_get_extents (data->region, &extents);
       if (extents.width > 0 && extents.height > 0)
         {
           gsize i, n, pixels;
 
           pixels = 0;
-          n = cairo_region_num_rectangles (data->region);
+          n = gdk_region_num_rectangles (data->region);
           for (i = 0; i < n; i++)
             {
-              cairo_rectangle_int_t rect;
-              cairo_region_get_rectangle (data->region, i, &rect);
+              GdkRectangle rect;
+              gdk_region_get_rectangle (data->region, i, &rect);
               pixels += rect.width * rect.height;
             }
           gdk_debug_message ("%*s%zu rects, %zu pixels, bounds %d %d %d %d %s", 2 * depth, "",

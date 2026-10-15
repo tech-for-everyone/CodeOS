@@ -35,7 +35,7 @@ struct _GdkTexture
   GdkTextureChain *chain;  /* lazy, atomic, shared by all chain links */
   GdkTexture *next_texture;  /* no reference, guarded by chain lock */
   GdkTexture *previous_texture;  /* no reference, guarded by chain lock */
-  cairo_region_t *diff_to_previous;  /* guarded by chain lock */
+  GdkRegion *diff_to_previous;  /* guarded by chain lock */
 };
 
 struct _GdkTextureClass {
@@ -64,11 +64,11 @@ GBytes *                gdk_texture_download_bytes      (GdkTexture             
                                                          GdkMemoryLayout        *out_layout);
 void                    gdk_texture_diff                (GdkTexture             *self,
                                                          GdkTexture             *other,
-                                                         cairo_region_t         *region);
+                                                         GdkRegion         *region);
 
 void                    gdk_texture_set_diff            (GdkTexture             *self,
                                                          GdkTexture             *previous,
-                                                         cairo_region_t         *diff);
+                                                         GdkRegion         *diff);
 
 gboolean                gdk_texture_set_render_data     (GdkTexture             *self,
                                                          gpointer                key,

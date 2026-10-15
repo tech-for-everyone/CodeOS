@@ -137,7 +137,7 @@ gdk_memory_layout_try_init (GdkMemoryLayout *self,
 void
 gdk_memory_layout_init_sublayout (GdkMemoryLayout             *self,
                                   const GdkMemoryLayout       *other,
-                                  const cairo_rectangle_int_t *area)
+                                  const GdkRectangle *area)
 {
   gsize plane, n_planes;
 

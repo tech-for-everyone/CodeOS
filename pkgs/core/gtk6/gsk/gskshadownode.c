@@ -116,8 +116,8 @@ gsk_shadow_node_diff (GskRenderNode *node1,
   GskShadowNode *self1 = (GskShadowNode *) node1;
   GskShadowNode *self2 = (GskShadowNode *) node2;
   int top = 0, right = 0, bottom = 0, left = 0;
-  cairo_region_t *sub;
-  cairo_rectangle_int_t rect;
+  GdkRegion *sub;
+  GdkRectangle rect;
   gsize i, n;
 
   if (self1->n_shadows != self2->n_shadows)
@@ -147,20 +147,20 @@ gsk_shadow_node_diff (GskRenderNode *node1,
       left = MAX (left, ceil (clip_radius - shadow1->offset.x));
     }
 
-  sub = cairo_region_create ();
+  sub = gdk_region_create ();
   gsk_render_node_diff (self1->child, self2->child, &(GskDiffData) { sub, data->copies, data->surface });
 
-  n = cairo_region_num_rectangles (sub);
+  n = gdk_region_num_rectangles (sub);
   for (i = 0; i < n; i++)
     {
-      cairo_region_get_rectangle (sub, i, &rect);
+      gdk_region_get_rectangle (sub, i, &rect);
       rect.x -= left;
       rect.y -= top;
       rect.width += left + right;
       rect.height += top + bottom;
-      cairo_region_union_rectangle (data->region, &rect);
+      gdk_region_union_rectangle (data->region, &rect);
     }
-  cairo_region_destroy (sub);
+  gdk_region_destroy (sub);
 }
 
 static void

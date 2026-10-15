@@ -36,7 +36,7 @@ struct _GdkMemoryTextureBuilder
   GdkColorState *color_state;
 
   GdkTexture *update_texture;
-  cairo_region_t *update_region;
+  GdkRegion *update_region;
 };
 
 struct _GdkMemoryTextureBuilderClass
@@ -90,7 +90,7 @@ gdk_memory_texture_builder_dispose (GObject *object)
   g_clear_pointer (&self->color_state, gdk_color_state_unref);
 
   g_clear_object (&self->update_texture);
-  g_clear_pointer (&self->update_region, cairo_region_destroy);
+  g_clear_pointer (&self->update_region, gdk_region_destroy);
 
   G_OBJECT_CLASS (gdk_memory_texture_builder_parent_class)->dispose (object);
 }
@@ -742,7 +742,7 @@ gdk_memory_texture_builder_set_update_texture (GdkMemoryTextureBuilder *self,
  *
  * Since: 4.16
  */
-cairo_region_t *
+GdkRegion *
 gdk_memory_texture_builder_get_update_region (GdkMemoryTextureBuilder *self)
 {
   g_return_val_if_fail (GDK_IS_MEMORY_TEXTURE_BUILDER (self), NULL);
@@ -771,17 +771,17 @@ gdk_memory_texture_builder_get_update_region (GdkMemoryTextureBuilder *self)
  */
 void
 gdk_memory_texture_builder_set_update_region (GdkMemoryTextureBuilder *self,
-                                              cairo_region_t          *region)
+                                              GdkRegion          *region)
 {
   g_return_if_fail (GDK_IS_MEMORY_TEXTURE_BUILDER (self));
 
   if (self->update_region == region)
     return;
 
-  g_clear_pointer (&self->update_region, cairo_region_destroy);
+  g_clear_pointer (&self->update_region, gdk_region_destroy);
 
   if (region)
-    self->update_region = cairo_region_reference (region);
+    self->update_region = gdk_region_reference (region);
 
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_UPDATE_REGION]);
 }

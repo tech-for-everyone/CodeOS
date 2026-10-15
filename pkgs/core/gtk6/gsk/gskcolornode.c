@@ -94,7 +94,7 @@ gsk_color_node_occlusion (GskRenderNode   *node,
                           GskGpuOcclusion *occlusion)
 {
   GskColorNode *self = (GskColorNode *) node;
-  cairo_rectangle_int_t storage;
+  GdkRectangle storage;
   GskGpuRenderPass *result;
 
   if (!gdk_color_is_opaque (&self->color))

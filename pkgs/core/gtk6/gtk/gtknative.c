@@ -133,7 +133,7 @@ surface_layout_cb (GdkSurface *surface,
 
 static gboolean
 surface_render_cb (GdkSurface     *surface,
-                   cairo_region_t *region,
+                   GdkRegion *region,
                    GtkWidget      *widget)
 {
 #ifdef HAVE_ACCESSKIT

@@ -245,30 +245,30 @@ gsk_displacement_node_draw (GskRenderNode *node,
 }
 
 static void
-gdk_cairo_region_grow (cairo_region_t *region,
+gdk_region_grow (GdkRegion *region,
                        int             grow_x,
                        int             grow_y)
 {
-  cairo_region_t *tmp;
+  GdkRegion *tmp;
   guint i, n;
 
-  n = cairo_region_num_rectangles (region);
-  tmp = cairo_region_create ();
+  n = gdk_region_num_rectangles (region);
+  tmp = gdk_region_create ();
 
   for (i = 0; i < n; i++)
     {
-      cairo_rectangle_int_t rect;
-      cairo_region_get_rectangle (region, i, &rect);
+      GdkRectangle rect;
+      gdk_region_get_rectangle (region, i, &rect);
       rect.x -= grow_x;
       rect.y -= grow_y;
       rect.width += 2 * grow_x;
       rect.height += 2 * grow_y;
-      cairo_region_union_rectangle (tmp ,&rect);
+      gdk_region_union_rectangle (tmp ,&rect);
     }
   
-  cairo_region_subtract (region, region);
-  cairo_region_union (region, tmp);
-  cairo_region_destroy (tmp);
+  gdk_region_subtract (region, region);
+  gdk_region_union (region, tmp);
+  gdk_region_destroy (tmp);
 }
 
 static void
@@ -278,7 +278,7 @@ gsk_displacement_node_diff (GskRenderNode *node1,
 {
   GskDisplacementNode *self1 = (GskDisplacementNode *) node1;
   GskDisplacementNode *self2 = (GskDisplacementNode *) node2;
-  cairo_region_t *child_region, *displacement_region;
+  GdkRegion *child_region, *displacement_region;
 
   if (!gsk_rect_equal (&node1->bounds, &node2->bounds) ||
       self1->snap != self2->snap ||
@@ -292,16 +292,16 @@ gsk_displacement_node_diff (GskRenderNode *node1,
       return;
     }
 
-  child_region = cairo_region_create ();
+  child_region = gdk_region_create ();
   gsk_render_node_diff (self1->child, self2->child, &(GskDiffData) { child_region, data->copies, data->surface });
-  displacement_region = cairo_region_create ();
+  displacement_region = gdk_region_create ();
   gsk_render_node_diff (self1->displacement, self2->displacement, &(GskDiffData) { displacement_region, data->copies, data->surface });
-  cairo_region_union (child_region, displacement_region);
-  gdk_cairo_region_grow (child_region, ceilf (self1->max.width), ceilf (self1->max.height));
-  cairo_region_union (data->region, child_region);
+  gdk_region_union (child_region, displacement_region);
+  gdk_region_grow (child_region, ceilf (self1->max.width), ceilf (self1->max.height));
+  gdk_region_union (data->region, child_region);
 
-  cairo_region_destroy (displacement_region);
-  cairo_region_destroy (child_region);
+  gdk_region_destroy (displacement_region);
+  gdk_region_destroy (child_region);
 }
 
 static GskRenderNode **

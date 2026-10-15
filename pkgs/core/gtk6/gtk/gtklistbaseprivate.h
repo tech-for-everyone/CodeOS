@@ -51,9 +51,9 @@ struct _GtkListBaseClass
                                                                  int                     across,
                                                                  int                     along,
                                                                  guint                  *pos,
-                                                                 cairo_rectangle_int_t  *area);
+                                                                 GdkRectangle  *area);
   GtkBitset *          (* get_items_in_rect)                    (GtkListBase            *self,
-                                                                 const cairo_rectangle_int_t *rect);
+                                                                 const GdkRectangle *rect);
   guint                (* move_focus_along)                     (GtkListBase            *self,
                                                                  guint                   pos,
                                                                  int                     steps);

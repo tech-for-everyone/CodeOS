@@ -110,8 +110,8 @@ struct _GtkIMContextWayland
 
   gulong after_layout_id;
 
-  cairo_rectangle_int_t cursor_rect;
-  cairo_rectangle_int_t surface_cursor_rect;
+  GdkRectangle cursor_rect;
+  GdkRectangle surface_cursor_rect;
   guint use_preedit : 1;
 };
 
@@ -444,7 +444,7 @@ static void
 notify_cursor_location (GtkIMContextWayland *context)
 {
   GtkIMContextWaylandGlobal *global;
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
 
   global = gtk_im_context_wayland_get_global (context);
   if (global == NULL)
@@ -623,7 +623,7 @@ static void
 after_layout_cb (GtkIMContext *context)
 {
   GtkIMContextWayland *context_wayland = GTK_IM_CONTEXT_WAYLAND (context);
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   GtkNative *native;
   graphene_point_t p;
   double nx, ny;

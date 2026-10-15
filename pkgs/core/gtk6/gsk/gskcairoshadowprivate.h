@@ -29,7 +29,7 @@ void gsk_cairo_shadow_draw_corner (cairo_t               *cr,
                                    float                  radius,
                                    const GdkColor        *color,
                                    GskCorner              corner,
-                                   cairo_rectangle_int_t *drawn_rect);
+                                   GdkRectangle *drawn_rect);
 
 void gsk_cairo_shadow_draw_side (cairo_t               *cr,
                                  GdkColorState         *ccs,
@@ -39,4 +39,4 @@ void gsk_cairo_shadow_draw_side (cairo_t               *cr,
                                  float                  radius,
                                  const GdkColor        *color,
                                  GskShadowSide          side,
-                                 cairo_rectangle_int_t *drawn_rect);
+                                 GdkRectangle *drawn_rect);

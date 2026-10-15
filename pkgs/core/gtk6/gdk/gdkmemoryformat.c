@@ -7703,7 +7703,7 @@ gdk_memory_mipmap_generic (gpointer data)
           GdkMemoryLayout sub;
           gdk_memory_layout_init_sublayout (&sub,
                                             &mipmap->dest_layout,
-                                            &(cairo_rectangle_int_t) {
+                                            &(GdkRectangle) {
                                                 0,
                                                 y >> mipmap->lod_level, 
                                                 mipmap->dest_layout.width,

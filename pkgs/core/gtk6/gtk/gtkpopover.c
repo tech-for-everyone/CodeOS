@@ -1462,7 +1462,7 @@ gtk_popover_update_shape (GtkPopover *popover)
       GtkCssBoxes content_css_boxes;
       const GskRoundedRect *box;
       cairo_surface_t *cairo_surface;
-      cairo_region_t *region;
+      GdkRegion *region;
       cairo_t *cr;
       graphene_point_t p;
       double native_x, native_y;
@@ -1497,19 +1497,19 @@ gtk_popover_update_shape (GtkPopover *popover)
       cairo_fill (cr);
       cairo_destroy (cr);
 
-      region = gdk_cairo_region_create_from_surface (cairo_surface);
+      region = gdk_region_create_from_surface (cairo_surface);
       cairo_surface_destroy (cairo_surface);
 
       gdk_surface_set_input_region (priv->surface, region);
-      cairo_region_destroy (region);
+      gdk_region_destroy (region);
     }
   else
     {
       GtkCssNode *content_css_node;
       GtkCssStyle *style;
       GtkBorder shadow_width;
-      cairo_rectangle_int_t input_rect;
-      cairo_region_t *region;
+      GdkRectangle input_rect;
+      GdkRegion *region;
 
       content_css_node =
         gtk_widget_get_css_node (GTK_WIDGET (priv->contents_widget));
@@ -1525,9 +1525,9 @@ gtk_popover_update_shape (GtkPopover *popover)
         gdk_surface_get_height (priv->surface) -
         (shadow_width.top + shadow_width.bottom);
 
-      region = cairo_region_create_rectangle (&input_rect);
+      region = gdk_region_create_rectangle (&input_rect);
       gdk_surface_set_input_region (priv->surface, region);
-      cairo_region_destroy (region);
+      gdk_region_destroy (region);
     }
 }
 

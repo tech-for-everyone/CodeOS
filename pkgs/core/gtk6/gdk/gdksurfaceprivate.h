@@ -52,7 +52,7 @@ struct _GdkSurface
 
   GdkGLContext *gl_paint_context;
 
-  cairo_region_t *update_area;
+  GdkRegion *update_area;
   guint update_freeze_count;
   GdkFrameClockPhase pending_phases;
 
@@ -86,7 +86,7 @@ struct _GdkSurface
   GdkCursor *cursor;
   GHashTable *device_cursor;
 
-  cairo_region_t *input_region;
+  GdkRegion *input_region;
 
   GList *devices_inside;
 
@@ -126,7 +126,7 @@ struct _GdkSurfaceClass
                                          double          *y,
                                          GdkModifierType *mask);
   void         (* set_input_region)     (GdkSurface      *surface,
-                                         cairo_region_t  *shape_region);
+                                         GdkRegion  *shape_region);
 
   /* Called to do the windowing system specific part of gdk_surface_destroy(),
    *
@@ -163,7 +163,7 @@ struct _GdkSurfaceClass
                                            GdkDrawContextFrame  *frame);
 
   void         (* set_opaque_region)      (GdkSurface      *surface,
-                                           cairo_region_t *region);
+                                           GdkRegion *region);
   void         (* request_layout)         (GdkSurface     *surface);
   gboolean     (* compute_size)           (GdkSurface     *surface);
 
@@ -267,7 +267,7 @@ void       _gdk_surface_destroy           (GdkSurface           *surface,
 void       gdk_surface_invalidate_rect    (GdkSurface            *surface,
                                            const GdkRectangle    *rect);
 void       gdk_surface_invalidate_region  (GdkSurface            *surface,
-                                           const cairo_region_t  *region);
+                                           const GdkRegion  *region);
 void       _gdk_surface_update_size       (GdkSurface            *surface);
 void       gdk_surface_set_opaque_rect    (GdkSurface            *self,
                                            const graphene_rect_t *rect);

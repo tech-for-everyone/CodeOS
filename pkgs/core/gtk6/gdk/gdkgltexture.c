@@ -278,12 +278,12 @@ gdk_gl_texture_new_from_builder (GdkGLTextureBuilder *builder,
   update_texture = gdk_gl_texture_builder_get_update_texture (builder);
   if (update_texture)
     {
-      cairo_region_t *update_region = gdk_gl_texture_builder_get_update_region (builder);
+      GdkRegion *update_region = gdk_gl_texture_builder_get_update_region (builder);
       if (update_region)
         {
-          update_region = cairo_region_copy (update_region);
-          cairo_region_intersect_rectangle (update_region,
-                                            &(cairo_rectangle_int_t) {
+          update_region = gdk_region_copy (update_region);
+          gdk_region_intersect_rectangle (update_region,
+                                            &(GdkRectangle) {
                                               0, 0,
                                               update_texture->width, update_texture->height
                                             });

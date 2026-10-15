@@ -1467,8 +1467,8 @@ gtk_label_snapshot (GtkWidget   *widget,
   if (info->selection_anchor != info->selection_end)
     {
       int range[2];
-      cairo_region_t *range_clip;
-      cairo_rectangle_int_t clip_rect;
+      GdkRegion *range_clip;
+      GdkRectangle clip_rect;
       int i;
 
       range[0] = MIN (info->selection_anchor, info->selection_end);
@@ -1478,9 +1478,9 @@ gtk_label_snapshot (GtkWidget   *widget,
       gtk_css_boxes_init_border_box (&boxes, style, 0, 0, width, height);
 
       range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
-      for (i = 0; i < cairo_region_num_rectangles (range_clip); i++)
+      for (i = 0; i < gdk_region_num_rectangles (range_clip); i++)
         {
-          cairo_region_get_rectangle (range_clip, i, &clip_rect);
+          gdk_region_get_rectangle (range_clip, i, &clip_rect);
 
           gtk_snapshot_push_clip (snapshot, &GRAPHENE_RECT_FROM_RECT (&clip_rect));
           gtk_css_style_snapshot_background (&boxes, snapshot);
@@ -1488,15 +1488,15 @@ gtk_label_snapshot (GtkWidget   *widget,
           gtk_snapshot_pop (snapshot);
         }
 
-      cairo_region_destroy (range_clip);
+      gdk_region_destroy (range_clip);
     }
   else
     {
       GtkLabelLink *focus_link;
       GtkLabelLink *active_link;
       int range[2];
-      cairo_region_t *range_clip;
-      cairo_rectangle_int_t clip_rect;
+      GdkRegion *range_clip;
+      GdkRectangle clip_rect;
       int i;
       GdkRectangle rect;
 
@@ -1527,9 +1527,9 @@ gtk_label_snapshot (GtkWidget   *widget,
           gtk_css_boxes_init_border_box (&boxes, style, 0, 0, width, height);
 
           range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
-          for (i = 0; i < cairo_region_num_rectangles (range_clip); i++)
+          for (i = 0; i < gdk_region_num_rectangles (range_clip); i++)
             {
-              cairo_region_get_rectangle (range_clip, i, &clip_rect);
+              gdk_region_get_rectangle (range_clip, i, &clip_rect);
 
               gtk_snapshot_push_clip (snapshot, &GRAPHENE_RECT_FROM_RECT (&clip_rect));
               gtk_css_style_snapshot_background (&boxes, snapshot);
@@ -1537,7 +1537,7 @@ gtk_label_snapshot (GtkWidget   *widget,
               gtk_snapshot_pop (snapshot);
             }
 
-          cairo_region_destroy (range_clip);
+          gdk_region_destroy (range_clip);
         }
 
       if (focus_link && gtk_widget_has_visible_focus (widget))
@@ -1548,12 +1548,12 @@ gtk_label_snapshot (GtkWidget   *widget,
           style = gtk_css_node_get_style (focus_link->cssnode);
 
           range_clip = gdk_pango_layout_get_clip_region (self->layout, lx, ly, range, 1);
-          cairo_region_get_extents (range_clip, &rect);
+          gdk_region_get_extents (range_clip, &rect);
 
           gtk_css_boxes_init_border_box (&boxes, style, rect.x, rect.y, rect.width, rect.height);
           gtk_css_style_snapshot_outline (&boxes, snapshot);
 
-          cairo_region_destroy (range_clip);
+          gdk_region_destroy (range_clip);
         }
     }
 }
@@ -6466,8 +6466,8 @@ gtk_label_accessible_text_get_extents (GtkAccessibleText *self,
   PangoLayout *layout;
   const char *text;
   float lx, ly;
-  cairo_region_t *range_clip;
-  cairo_rectangle_int_t clip_rect;
+  GdkRegion *range_clip;
+  GdkRectangle clip_rect;
   int range[2];
 
   text = label->text;
@@ -6478,8 +6478,8 @@ gtk_label_accessible_text_get_extents (GtkAccessibleText *self,
   range[1] = g_utf8_pointer_to_offset (text, text + end);
 
   range_clip = gdk_pango_layout_get_clip_region (layout, lx, ly, range, 1);
-  cairo_region_get_extents (range_clip, &clip_rect);
-  cairo_region_destroy (range_clip);
+  gdk_region_get_extents (range_clip, &clip_rect);
+  gdk_region_destroy (range_clip);
 
   extents->origin.x = clip_rect.x;
   extents->origin.y = clip_rect.y;

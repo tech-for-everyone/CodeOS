@@ -153,7 +153,7 @@ gtk_list_base_get_position_from_allocation (GtkListBase           *self,
                                             int                    across,
                                             int                    along,
                                             guint                 *pos,
-                                            cairo_rectangle_int_t *area)
+                                            GdkRectangle *area)
 {
   return GTK_LIST_BASE_GET_CLASS (self)->get_position_from_allocation (self, across, along, pos, area);
 }
@@ -197,7 +197,7 @@ gtk_list_base_adjustment_value_changed_cb (GtkAdjustment *adjustment,
                                            GtkListBase   *self)
 {
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
-  cairo_rectangle_int_t area, cell_area;
+  GdkRectangle area, cell_area;
   int along, across, total_size;
   double align_across, align_along;
   GtkPackType side_across, side_along;
@@ -1122,7 +1122,7 @@ gtk_list_base_move_cursor_page_up (GtkWidget *widget,
   GtkListBase *self = GTK_LIST_BASE (widget);
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
   gboolean select, modify, extend;
-  cairo_rectangle_int_t area, new_area;
+  GdkRectangle area, new_area;
   int page_size;
   guint pos, new_pos;
 
@@ -1163,7 +1163,7 @@ gtk_list_base_move_cursor_page_down (GtkWidget *widget,
   GtkListBase *self = GTK_LIST_BASE (widget);
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
   gboolean select, modify, extend;
-  cairo_rectangle_int_t area, new_area;
+  GdkRectangle area, new_area;
   int page_size, end;
   guint pos, new_pos;
 
@@ -1784,7 +1784,7 @@ gtk_list_base_start_rubberband (GtkListBase *self,
                                 double       y)
 {
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
-  cairo_rectangle_int_t item_area;
+  GdkRectangle item_area;
   int list_x, list_y;
   guint pos;
 

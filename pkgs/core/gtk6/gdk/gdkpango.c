@@ -30,7 +30,7 @@
  * region which contains the given ranges, i.e. if you draw with the
  * region as clip, only the given ranges are drawn.
  */
-static cairo_region_t*
+static GdkRegion*
 layout_iter_get_line_clip_region (PangoLayoutIter *iter,
 				  int              x_origin,
 				  int              y_origin,
@@ -38,14 +38,14 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
 				  int              n_ranges)
 {
   PangoLayoutLine *line;
-  cairo_region_t *clip_region;
+  GdkRegion *clip_region;
   PangoRectangle logical_rect;
   int baseline;
   int i;
 
   line = pango_layout_iter_get_line_readonly (iter);
 
-  clip_region = cairo_region_create ();
+  clip_region = gdk_region_create ();
 
   pango_layout_iter_get_line_extents (iter, NULL, &logical_rect);
   baseline = pango_layout_iter_get_baseline (iter);
@@ -79,7 +79,7 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
           rect.width = PANGO_PIXELS (pixel_ranges[2*j + 1] - logical_rect.x) - x_off;
           rect.height = PANGO_PIXELS (baseline - logical_rect.y + logical_rect.height) - y_off;
 
-          cairo_region_union_rectangle (clip_region, &rect);
+          gdk_region_union_rectangle (clip_region, &rect);
         }
 
       g_free (pixel_ranges);
@@ -115,14 +115,14 @@ layout_iter_get_line_clip_region (PangoLayoutIter *iter,
  *
  * Returns: a clip region containing the given ranges
  */
-cairo_region_t*
+GdkRegion*
 gdk_pango_layout_line_get_clip_region (PangoLayoutLine *line,
                                        int              x_origin,
                                        int              y_origin,
                                        const int       *index_ranges,
                                        int              n_ranges)
 {
-  cairo_region_t *clip_region;
+  GdkRegion *clip_region;
   PangoLayoutIter *iter;
 
   g_return_val_if_fail (line != NULL, NULL);
@@ -160,7 +160,7 @@ gdk_pango_layout_line_get_clip_region (PangoLayoutLine *line,
  *
  * Returns: a clip region containing the given ranges
  */
-cairo_region_t*
+GdkRegion*
 gdk_pango_layout_get_clip_region (PangoLayout *layout,
                                   int          x_origin,
                                   int          y_origin,
@@ -168,19 +168,19 @@ gdk_pango_layout_get_clip_region (PangoLayout *layout,
                                   int          n_ranges)
 {
   PangoLayoutIter *iter;
-  cairo_region_t *clip_region;
+  GdkRegion *clip_region;
 
   g_return_val_if_fail (PANGO_IS_LAYOUT (layout), NULL);
   g_return_val_if_fail (index_ranges != NULL, NULL);
 
-  clip_region = cairo_region_create ();
+  clip_region = gdk_region_create ();
 
   iter = pango_layout_get_iter (layout);
 
   do
     {
       PangoRectangle logical_rect;
-      cairo_region_t *line_region;
+      GdkRegion *line_region;
       int baseline;
 
       pango_layout_iter_get_line_extents (iter, NULL, &logical_rect);
@@ -192,8 +192,8 @@ gdk_pango_layout_get_clip_region (PangoLayout *layout,
 						     index_ranges,
 						     n_ranges);
 
-      cairo_region_union (clip_region, line_region);
-      cairo_region_destroy (line_region);
+      gdk_region_union (clip_region, line_region);
+      gdk_region_destroy (line_region);
     }
   while (pango_layout_iter_next_line (iter));
 

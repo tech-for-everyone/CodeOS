@@ -59,7 +59,7 @@ void          gdk_surface_hide                  (GdkSurface     *surface);
 
 GDK_AVAILABLE_IN_ALL
 void          gdk_surface_set_input_region      (GdkSurface     *surface,
-                                                 cairo_region_t *region);
+                                                 GdkRegion *region);
 
 GDK_AVAILABLE_IN_ALL
 gboolean      gdk_surface_get_mapped   (GdkSurface *surface);
@@ -120,7 +120,7 @@ GdkFrameClock* gdk_surface_get_frame_clock      (GdkSurface     *surface);
 
 GDK_DEPRECATED_IN_4_16
 void       gdk_surface_set_opaque_region        (GdkSurface      *surface,
-                                                 cairo_region_t *region);
+                                                 GdkRegion *region);
 
 GDK_DEPRECATED_IN_4_18
 GdkCairoContext *gdk_surface_create_cairo_context(GdkSurface    *surface);

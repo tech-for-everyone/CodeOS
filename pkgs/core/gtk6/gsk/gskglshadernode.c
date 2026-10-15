@@ -86,12 +86,12 @@ gsk_gl_shader_node_diff (GskRenderNode *node1,
       g_bytes_compare (self1->args, self2->args) == 0 &&
       self1->n_children == self2->n_children)
     {
-      cairo_region_t *child_region = cairo_region_create();
+      GdkRegion *child_region = gdk_region_create();
       for (guint i = 0; i < self1->n_children; i++)
         gsk_render_node_diff (self1->children[i], self2->children[i], &(GskDiffData) { child_region, data->copies, data->surface });
-      if (!cairo_region_is_empty (child_region))
+      if (!gdk_region_is_empty (child_region))
         gsk_render_node_diff_impossible (node1, node2, data);
-      cairo_region_destroy (child_region);
+      gdk_region_destroy (child_region);
     }
   else
     {

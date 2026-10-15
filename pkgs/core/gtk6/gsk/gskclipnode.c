@@ -85,15 +85,15 @@ gsk_clip_node_diff (GskRenderNode *node1,
   if (gsk_rect_equal (&self1->clip, &self2->clip) &&
       self1->snap == self2->snap)
     {
-      cairo_region_t *save;
-      cairo_rectangle_int_t clip_rect;
+      GdkRegion *save;
+      GdkRectangle clip_rect;
 
-      save = cairo_region_copy (data->region);
+      save = gdk_region_copy (data->region);
       gsk_render_node_diff (self1->child, self2->child, data);
       gsk_rect_to_cairo_grow (&self1->clip, &clip_rect);
-      cairo_region_intersect_rectangle (data->region, &clip_rect);
-      cairo_region_union (data->region, save);
-      cairo_region_destroy (save);
+      gdk_region_intersect_rectangle (data->region, &clip_rect);
+      gdk_region_union (data->region, save);
+      gdk_region_destroy (save);
     }
   else
     {
@@ -166,7 +166,7 @@ gsk_clip_node_occlusion (GskRenderNode   *node,
                          GskGpuOcclusion *occlusion)
 {
   GskClipNode *self = (GskClipNode *) node;
-  cairo_rectangle_int_t storage;
+  GdkRectangle storage;
   GskGpuRenderPass *result;
 
   if (!gsk_gpu_occlusion_push_clip (occlusion, &self->clip, self->snap, &storage))

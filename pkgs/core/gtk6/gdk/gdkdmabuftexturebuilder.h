@@ -113,10 +113,10 @@ void                     gdk_dmabuf_texture_builder_set_update_texture (GdkDmabu
                                                                         GdkTexture               *texture);
 
 GDK_AVAILABLE_IN_4_14
-cairo_region_t *         gdk_dmabuf_texture_builder_get_update_region (GdkDmabufTextureBuilder   *self) G_GNUC_PURE;
+GdkRegion *         gdk_dmabuf_texture_builder_get_update_region (GdkDmabufTextureBuilder   *self) G_GNUC_PURE;
 GDK_AVAILABLE_IN_4_14
 void                     gdk_dmabuf_texture_builder_set_update_region (GdkDmabufTextureBuilder   *self,
-                                                                       cairo_region_t            *region);
+                                                                       GdkRegion            *region);
 
 GDK_AVAILABLE_IN_4_14
 GdkTexture *             gdk_dmabuf_texture_builder_build            (GdkDmabufTextureBuilder    *self,

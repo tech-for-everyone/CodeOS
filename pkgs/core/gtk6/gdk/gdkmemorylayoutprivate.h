@@ -57,7 +57,7 @@ gboolean                gdk_memory_layout_try_init              (GdkMemoryLayout
                                                                  gsize                           align);
 void                    gdk_memory_layout_init_sublayout        (GdkMemoryLayout                *self,
                                                                  const GdkMemoryLayout          *other,
-                                                                 const cairo_rectangle_int_t    *area);
+                                                                 const GdkRectangle    *area);
 
 gboolean                gdk_memory_layout_is_valid              (const GdkMemoryLayout          *self,
                                                                  GError                        **error);

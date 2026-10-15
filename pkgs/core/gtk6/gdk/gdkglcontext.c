@@ -209,7 +209,7 @@ static void
 gdk_gl_context_clear_old_updated_area (GdkGLContext *context)
 {
   for (unsigned int i = 0; i < GDK_GL_MAX_TRACKED_BUFFERS; i++)
-    g_clear_pointer (&context->old_updated_area[i], cairo_region_destroy);
+    g_clear_pointer (&context->old_updated_area[i], gdk_region_destroy);
 }
 
 static void
@@ -485,7 +485,7 @@ gdk_gl_context_default_realize (GdkGLContext  *context,
 
 #undef N_EGL_ATTRS
 
-static cairo_region_t *
+static GdkRegion *
 gdk_gl_context_real_get_damage (GdkGLContext *context)
 {
   GdkDrawContext *draw_context = GDK_DRAW_CONTEXT (context);
@@ -503,7 +503,7 @@ gdk_gl_context_real_get_damage (GdkGLContext *context)
 
       if (buffer_age > 0 && buffer_age <= GDK_GL_MAX_TRACKED_BUFFERS)
         {
-          cairo_region_t *damage = cairo_region_create ();
+          GdkRegion *damage = gdk_region_create ();
           int i;
 
           for (i = 0; i < buffer_age - 1; i++)
@@ -511,14 +511,14 @@ gdk_gl_context_real_get_damage (GdkGLContext *context)
               if (context->old_updated_area[i] == NULL)
                 {
                   gdk_draw_context_get_buffer_size (draw_context, &buffer_width, &buffer_height);
-                  cairo_region_create_rectangle (&(GdkRectangle) {
+                  gdk_region_create_rectangle (&(GdkRectangle) {
                                                      0, 0,
                                                      buffer_width,
                                                      buffer_height
                                                  });
                   break;
                 }
-              cairo_region_union (damage, context->old_updated_area[i]);
+              gdk_region_union (damage, context->old_updated_area[i]);
             }
 
           return damage;
@@ -527,7 +527,7 @@ gdk_gl_context_real_get_damage (GdkGLContext *context)
 #endif
 
   gdk_draw_context_get_buffer_size (draw_context, &buffer_width, &buffer_height);
-  return cairo_region_create_rectangle (&(GdkRectangle) {
+  return gdk_region_create_rectangle (&(GdkRectangle) {
                                             0, 0,
                                             buffer_width,
                                             buffer_height
@@ -722,7 +722,7 @@ gdk_gl_context_real_begin_frame (GdkDrawContext      *draw_context,
   GdkColorState *color_state;
   GskRenderNode *content;
   GdkMemoryDepth depth;
-  cairo_region_t *damage;
+  GdkRegion *damage;
   guint ww, wh;
   int i;
 
@@ -747,12 +747,12 @@ gdk_gl_context_real_begin_frame (GdkDrawContext      *draw_context,
 #endif
 
   damage = GDK_GL_CONTEXT_GET_CLASS (context)->get_damage (context);
-  g_clear_pointer (&context->old_updated_area[GDK_GL_MAX_TRACKED_BUFFERS - 1], cairo_region_destroy);
+  g_clear_pointer (&context->old_updated_area[GDK_GL_MAX_TRACKED_BUFFERS - 1], gdk_region_destroy);
   for (i = GDK_GL_MAX_TRACKED_BUFFERS - 1; i > 0; i--)
     {
       context->old_updated_area[i] = context->old_updated_area[i - 1];
     }
-  context->old_updated_area[0] = cairo_region_copy (gdk_draw_context_frame_get_damage (frame));
+  context->old_updated_area[0] = gdk_region_copy (gdk_draw_context_frame_get_damage (frame));
   gdk_draw_context_frame_add_damage (frame, damage);
 
   gdk_draw_context_get_buffer_size (draw_context, &ww, &wh);
@@ -912,7 +912,7 @@ gdk_gl_context_real_end_frame (GdkDrawContext      *draw_context,
   GdkDisplay *display = gdk_surface_get_display (surface);
   G_GNUC_UNUSED gint64 begin_time = GDK_PROFILER_CURRENT_TIME;
   guint buffer_width, buffer_height;
-  const cairo_region_t *painted;
+  const GdkRegion *painted;
 
   if (priv->egl_context == NULL)
     return;
@@ -923,15 +923,15 @@ gdk_gl_context_real_end_frame (GdkDrawContext      *draw_context,
 
   painted = gdk_draw_context_frame_get_damage (frame);
   if (priv->eglSwapBuffersWithDamage &&
-      cairo_region_contains_rectangle (painted,
-                                       &(cairo_rectangle_int_t) {
+      gdk_region_contains_rectangle (painted,
+                                       &(GdkRectangle) {
                                            0, 0,
                                            buffer_width, buffer_height
-                                       }) != CAIRO_REGION_OVERLAP_IN)
+                                       }) != GDK_REGION_OVERLAP_IN)
     {
       EGLint stack_rects[4 * 4]; /* 4 rects */
       EGLint *heap_rects = NULL;
-      int i, j, n_rects = cairo_region_num_rectangles (painted);
+      int i, j, n_rects = gdk_region_num_rectangles (painted);
       EGLint *rects;
 
       if (n_rects < G_N_ELEMENTS (stack_rects) / 4)
@@ -941,9 +941,9 @@ gdk_gl_context_real_end_frame (GdkDrawContext      *draw_context,
 
       for (i = 0, j = 0; i < n_rects; i++)
         {
-          cairo_rectangle_int_t rect;
+          GdkRectangle rect;
 
-          cairo_region_get_rectangle (painted, i, &rect);
+          gdk_region_get_rectangle (painted, i, &rect);
           rects[j++] = rect.x;
           rects[j++] = buffer_height - rect.height - rect.y;
           rects[j++] = rect.width;

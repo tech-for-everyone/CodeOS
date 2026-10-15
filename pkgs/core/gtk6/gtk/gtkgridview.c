@@ -550,7 +550,7 @@ gtk_grid_view_get_position_from_allocation (GtkListBase           *base,
                                             int                    x,
                                             int                    y,
                                             guint                 *position,
-                                            cairo_rectangle_int_t *area)
+                                            GdkRectangle *area)
 {
   GtkGridView *self = GTK_GRID_VIEW (base);
   GtkListTile *tile;

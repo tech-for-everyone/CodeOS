@@ -128,7 +128,7 @@ gsk_texture_scale_node_diff (GskRenderNode *node1,
 {
   GskTextureScaleNode *self1 = (GskTextureScaleNode *) node1;
   GskTextureScaleNode *self2 = (GskTextureScaleNode *) node2;
-  cairo_region_t *sub;
+  GdkRegion *sub;
 
   if (!gsk_rect_equal (&node1->bounds, &node2->bounds) ||
       self1->snap != self2->snap ||
@@ -143,15 +143,15 @@ gsk_texture_scale_node_diff (GskRenderNode *node1,
   if (self1->texture == self2->texture)
     return;
 
-  sub = cairo_region_create ();
+  sub = gdk_region_create ();
   gdk_texture_diff (self1->texture, self2->texture, sub);
-  gdk_cairo_region_union_affine (data->region,
+  gdk_region_union_affine (data->region,
                                  sub,
                                  node1->bounds.size.width / gdk_texture_get_width (self1->texture),
                                  node1->bounds.size.height / gdk_texture_get_height (self1->texture),
                                  node1->bounds.origin.x,
                                  node1->bounds.origin.y);
-  cairo_region_destroy (sub);
+  gdk_region_destroy (sub);
 }
 
 static GskRenderNode *

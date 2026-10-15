@@ -111,7 +111,7 @@ gsk_renderer_real_render_texture (GskRenderer           *self,
 static void
 gsk_renderer_real_render (GskRenderer          *self,
                           GskRenderNode        *root,
-                          const cairo_region_t *region)
+                          const GdkRegion *region)
 {
   GSK_RENDERER_WARN_NOT_IMPLEMENTED_METHOD (self, render);
 }
@@ -417,7 +417,7 @@ gsk_renderer_render_texture (GskRenderer           *renderer,
  * gsk_renderer_render:
  * @renderer: a realized renderer
  * @root: the render node to render
- * @region: (nullable): the `cairo_region_t` that must be redrawn or `NULL`
+ * @region: (nullable): the `GdkRegion` that must be redrawn or `NULL`
  *   for the whole surface
  *
  * Renders the scene graph, described by a tree of `GskRenderNode` instances
@@ -436,11 +436,11 @@ gsk_renderer_render_texture (GskRenderer           *renderer,
 void
 gsk_renderer_render (GskRenderer          *renderer,
                      GskRenderNode        *root,
-                     const cairo_region_t *region)
+                     const GdkRegion *region)
 {
   GskRendererPrivate *priv = gsk_renderer_get_instance_private (renderer);
   GskRendererClass *renderer_class;
-  cairo_region_t *clip;
+  GdkRegion *clip;
   GskOffload *offload;
 
   g_return_if_fail (GSK_IS_RENDERER (renderer));
@@ -452,7 +452,7 @@ gsk_renderer_render (GskRenderer          *renderer,
 
   renderer_class = GSK_RENDERER_GET_CLASS (renderer);
 
-  clip = cairo_region_copy (region);
+  clip = gdk_region_copy (region);
 
   if (renderer_class->supports_offload && gdk_has_feature (GDK_FEATURE_OFFLOAD))
     offload = gsk_offload_new (priv->surface, root, clip);
@@ -461,7 +461,7 @@ gsk_renderer_render (GskRenderer          *renderer,
 
   if (region == NULL || priv->prev_node == NULL || GSK_RENDERER_DEBUG_CHECK (renderer, FULL_REDRAW))
     {
-      cairo_region_union_rectangle (clip,
+      gdk_region_union_rectangle (clip,
                                     &(GdkRectangle) {
                                         0, 0,
                                         gdk_surface_get_width (priv->surface),
@@ -476,7 +476,7 @@ gsk_renderer_render (GskRenderer          *renderer,
   renderer_class->render (renderer, root, clip);
 
   g_clear_pointer (&priv->prev_node, gsk_render_node_unref);
-  cairo_region_destroy (clip);
+  gdk_region_destroy (clip);
   g_clear_pointer (&offload, gsk_offload_free);
   priv->prev_node = gsk_render_node_ref (root);
 }

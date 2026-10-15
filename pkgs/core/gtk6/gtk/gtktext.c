@@ -3113,7 +3113,7 @@ gtk_text_show_magnifier (GtkText *self,
 {
   GtkTextPrivate *priv = gtk_text_get_instance_private (self);
   const int text_height = gtk_widget_get_height (GTK_WIDGET (self));
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
 
   gtk_text_ensure_magnifier (self);
 
@@ -4873,8 +4873,8 @@ gtk_text_draw_text (GtkText     *self,
       const char *text = pango_layout_get_text (layout);
       int start_index = g_utf8_offset_to_pointer (text, priv->selection_bound) - text;
       int end_index = g_utf8_offset_to_pointer (text, priv->current_pos) - text;
-      cairo_region_t *clip;
-      cairo_rectangle_int_t clip_extents;
+      GdkRegion *clip;
+      GdkRectangle clip_extents;
       int range[2];
       int width, height;
 
@@ -4887,7 +4887,7 @@ gtk_text_draw_text (GtkText     *self,
       style = gtk_css_node_get_style (priv->selection_node);
 
       clip = gdk_pango_layout_get_clip_region (layout, x, y, range, 1);
-      cairo_region_get_extents (clip, &clip_extents);
+      gdk_region_get_extents (clip, &clip_extents);
 
       gtk_css_boxes_init_border_box (&boxes, style, 0, 0, width, height);
       gtk_snapshot_push_clip (snapshot, &GRAPHENE_RECT_FROM_RECT (&clip_extents));
@@ -4895,7 +4895,7 @@ gtk_text_draw_text (GtkText     *self,
       gtk_css_style_snapshot_layout (&boxes, snapshot, x, y, layout);
       gtk_snapshot_pop (snapshot);
 
-      cairo_region_destroy (clip);
+      gdk_region_destroy (clip);
     }
 }
 
@@ -6516,7 +6516,7 @@ gtk_text_selection_bubble_popup_show (gpointer user_data)
   GtkTextPrivate *priv = gtk_text_get_instance_private (self);
   const int text_width = gtk_widget_get_width (GTK_WIDGET (self));
   const int text_height = gtk_widget_get_height (GTK_WIDGET (self));
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   graphene_point_t p;
   gboolean has_selection;
   int start_x, end_x;
@@ -7857,8 +7857,8 @@ gtk_text_accessible_text_get_extents (GtkAccessibleText *self,
   unsigned int length;
   int lx, ly;
   int range[2];
-  cairo_region_t *range_clip;
-  cairo_rectangle_int_t clip_rect;
+  GdkRegion *range_clip;
+  GdkRectangle clip_rect;
 
   buffer = get_buffer (GTK_TEXT (self));
   length = gtk_entry_buffer_get_length (buffer);
@@ -7873,8 +7873,8 @@ gtk_text_accessible_text_get_extents (GtkAccessibleText *self,
   range[1] = g_utf8_pointer_to_offset (text, text + end);
 
   range_clip = gdk_pango_layout_get_clip_region (layout, lx, ly, range, 1);
-  cairo_region_get_extents (range_clip, &clip_rect);
-  cairo_region_destroy (range_clip);
+  gdk_region_get_extents (range_clip, &clip_rect);
+  gdk_region_destroy (range_clip);
 
   extents->origin.x = clip_rect.x;
   extents->origin.y = clip_rect.y;

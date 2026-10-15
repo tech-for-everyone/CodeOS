@@ -154,7 +154,7 @@ gsk_cairo_renderer_render_texture (GskRenderer           *renderer,
 static void
 gsk_cairo_renderer_render (GskRenderer          *renderer,
                            GskRenderNode        *root,
-                           const cairo_region_t *region)
+                           const GdkRegion *region)
 {
   GskCairoRenderer *self = GSK_CAIRO_RENDERER (renderer);
   GdkDrawContext *draw_context;

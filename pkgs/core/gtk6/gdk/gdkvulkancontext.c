@@ -113,7 +113,7 @@ struct _GdkVulkanContextPrivate {
 
   guint n_images;
   VkImage *images;
-  cairo_region_t **regions;
+  GdkRegion **regions;
 
   GdkVulkanPresent presents[MAX_PRESENTS];
   gsize latest_present;
@@ -552,7 +552,7 @@ gdk_vulkan_context_check_swapchain (GdkVulkanContext  *context,
       gdk_vulkan_context_unref_swapchain (context, priv->swapchain);
       for (i = 0; i < priv->n_images; i++)
         {
-          cairo_region_destroy (priv->regions[i]);
+          gdk_region_destroy (priv->regions[i]);
         }
       g_clear_pointer (&priv->regions, g_free);
       g_clear_pointer (&priv->images, g_free);
@@ -572,10 +572,10 @@ gdk_vulkan_context_check_swapchain (GdkVulkanContext  *context,
                                              priv->swapchain,
                                              &priv->n_images,
                                              priv->images);
-      priv->regions = g_new (cairo_region_t *, priv->n_images);
+      priv->regions = g_new (GdkRegion *, priv->n_images);
       for (i = 0; i < priv->n_images; i++)
         {
-          priv->regions[i] = cairo_region_create_rectangle (&(cairo_rectangle_int_t) {
+          priv->regions[i] = gdk_region_create_rectangle (&(GdkRectangle) {
                                                                 0, 0,
                                                                 size.width,
                                                                 size.height
@@ -1059,7 +1059,7 @@ gdk_vulkan_context_begin_frame (GdkDrawContext      *draw_context,
   VkResult acquire_result;
   VkSemaphore draw_semaphore;
   GdkVulkanPresent *present;
-  const cairo_region_t *region;
+  const GdkRegion *region;
   guint i;
 
   g_assert (context_data != NULL);
@@ -1098,7 +1098,7 @@ gdk_vulkan_context_begin_frame (GdkDrawContext      *draw_context,
   region = gdk_draw_context_frame_get_damage (frame);
   for (i = 0; i < priv->n_images; i++)
     {
-      cairo_region_union (priv->regions[i], region);
+      gdk_region_union (priv->regions[i], region);
     }
 
   present = gdk_vulkan_context_start_present (context);
@@ -1197,7 +1197,7 @@ gdk_vulkan_context_end_frame (GdkDrawContext      *draw_context,
 
   if (gdk_vulkan_context_has_feature (context, GDK_VULKAN_FEATURE_INCREMENTAL_PRESENT))
     {
-      const cairo_region_t *painted;
+      const GdkRegion *painted;
 
       present_regions = (VkPresentRegionsKHR) {
           .sType = VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR,
@@ -1208,14 +1208,14 @@ gdk_vulkan_context_end_frame (GdkDrawContext      *draw_context,
       pNext = &present_regions;
 
       painted = gdk_draw_context_frame_get_damage (frame);
-      present_region.rectangleCount = cairo_region_num_rectangles (painted);
+      present_region.rectangleCount = gdk_region_num_rectangles (painted);
       present_region.pRectangles = g_alloca (sizeof (VkRectLayerKHR) * present_region.rectangleCount);
 
       for (int i = 0; i < present_region.rectangleCount; i++)
         {
-          cairo_rectangle_int_t r;
+          GdkRectangle r;
 
-          cairo_region_get_rectangle (painted, i, &r);
+          gdk_region_get_rectangle (painted, i, &r);
 
           ((VkRectLayerKHR *) present_region.pRectangles)[i] = (VkRectLayerKHR) {
               .offset.x = r.x,
@@ -1245,8 +1245,8 @@ gdk_vulkan_context_end_frame (GdkDrawContext      *draw_context,
 
   gdk_vulkan_context_frame_add_completion (vframe);
 
-  cairo_region_destroy (priv->regions[present->image_index]);
-  priv->regions[present->image_index] = cairo_region_create ();
+  gdk_region_destroy (priv->regions[present->image_index]);
+  priv->regions[present->image_index] = gdk_region_create ();
 }
 
 static void
@@ -1475,7 +1475,7 @@ gdk_vulkan_context_surface_detach (GdkDrawContext *context)
 
   for (i = 0; i < priv->n_images; i++)
     {
-      cairo_region_destroy (priv->regions[i]);
+      gdk_region_destroy (priv->regions[i]);
     }
   g_clear_pointer (&priv->regions, g_free);
   g_clear_pointer (&priv->images, g_free);

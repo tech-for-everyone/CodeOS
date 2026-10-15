@@ -141,7 +141,7 @@ static void
 after_layout_cb (GtkIMContext *context)
 {
   GtkIMContextIME *context_ime = GTK_IM_CONTEXT_IME (context);
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   GtkNative *native;
   graphene_point_t p;
   double nx, ny;

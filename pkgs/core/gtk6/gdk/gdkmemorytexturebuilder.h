@@ -93,10 +93,10 @@ void                            gdk_memory_texture_builder_set_update_texture   
                                                                                  GdkTexture                     *texture);
 
 GDK_AVAILABLE_IN_4_16
-cairo_region_t *                gdk_memory_texture_builder_get_update_region    (GdkMemoryTextureBuilder        *self) G_GNUC_PURE;
+GdkRegion *                gdk_memory_texture_builder_get_update_region    (GdkMemoryTextureBuilder        *self) G_GNUC_PURE;
 GDK_AVAILABLE_IN_4_16
 void                            gdk_memory_texture_builder_set_update_region    (GdkMemoryTextureBuilder        *self,
-                                                                                 cairo_region_t                 *region);
+                                                                                 GdkRegion                 *region);
 
 GDK_AVAILABLE_IN_4_16
 GdkTexture *                    gdk_memory_texture_builder_build                (GdkMemoryTextureBuilder        *self);

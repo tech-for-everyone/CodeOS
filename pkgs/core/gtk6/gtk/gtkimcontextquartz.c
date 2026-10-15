@@ -83,7 +83,7 @@ static void
 after_layout_cb (GtkIMContext *context)
 {
   GtkIMContextQuartz *qc = GTK_IM_CONTEXT_QUARTZ (context);
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   GdkSurface *surface;
   GtkNative *native;
   graphene_point_t p;

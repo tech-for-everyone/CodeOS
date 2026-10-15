@@ -51,7 +51,7 @@ struct _GskRendererClass
                                                                  const graphene_rect_t  *viewport);
   void                 (* render)                               (GskRenderer            *renderer,
                                                                  GskRenderNode          *root,
-                                                                 const cairo_region_t   *invalid);
+                                                                 const GdkRegion   *invalid);
 };
 
 GskRenderer *           gsk_renderer_new_for_surface_full       (GdkSurface             *surface,

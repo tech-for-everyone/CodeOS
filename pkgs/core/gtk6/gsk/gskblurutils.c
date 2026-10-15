@@ -33,15 +33,15 @@
 typedef struct {
   GskGpuTransform transform;
   /* these are in device pixels */
-  cairo_region_t *unblurred_bg;
-  cairo_region_t *blurred_bg;
+  GdkRegion *unblurred_bg;
+  GdkRegion *blurred_bg;
 } Render;
 
 static void
 render_clear (Render *render)
 {
-  g_clear_pointer (&render->unblurred_bg, cairo_region_destroy);
-  g_clear_pointer (&render->blurred_bg, cairo_region_destroy);
+  g_clear_pointer (&render->unblurred_bg, gdk_region_destroy);
+  g_clear_pointer (&render->blurred_bg, gdk_region_destroy);
 }
 
 static void
@@ -51,54 +51,54 @@ render_copy (Render *dest,
   dest->transform = src->transform;
 
   if (src->unblurred_bg)
-    dest->unblurred_bg = cairo_region_copy (src->unblurred_bg);
+    dest->unblurred_bg = gdk_region_copy (src->unblurred_bg);
   else
     dest->unblurred_bg = NULL;
 
   if (src->blurred_bg)
-    dest->blurred_bg = cairo_region_copy (src->blurred_bg);
+    dest->blurred_bg = gdk_region_copy (src->blurred_bg);
   else
     dest->blurred_bg = NULL;
 }
 
 static void
 render_clip_region (Render               *render,
-                    const cairo_region_t *region)
+                    const GdkRegion *region)
 {
   if (render->unblurred_bg)
-    cairo_region_intersect (render->unblurred_bg, region);
+    gdk_region_intersect (render->unblurred_bg, region);
   if (render->blurred_bg)
-    cairo_region_intersect (render->blurred_bg, region);
+    gdk_region_intersect (render->blurred_bg, region);
 }
 
 static void
 render_clip_rect (Render                *render,
-                  cairo_rectangle_int_t *rect)
+                  GdkRectangle *rect)
 {
   if (render->unblurred_bg)
-    cairo_region_intersect_rectangle (render->unblurred_bg, rect);
+    gdk_region_intersect_rectangle (render->unblurred_bg, rect);
   if (render->blurred_bg)
-    cairo_region_intersect_rectangle (render->blurred_bg, rect);
+    gdk_region_intersect_rectangle (render->blurred_bg, rect);
 }
 
 static void
 render_subtract_region (Render               *render,
-                        const cairo_region_t *region)
+                        const GdkRegion *region)
 {
   if (render->unblurred_bg)
-    cairo_region_subtract (render->unblurred_bg, region);
+    gdk_region_subtract (render->unblurred_bg, region);
   if (render->blurred_bg)
-    cairo_region_subtract (render->blurred_bg, region);
+    gdk_region_subtract (render->blurred_bg, region);
 }
 
 static void
 render_subtract_rect (Render                *render,
-                      cairo_rectangle_int_t *rect)
+                      GdkRectangle *rect)
 {
   if (render->unblurred_bg)
-    cairo_region_subtract_rectangle (render->unblurred_bg, rect);
+    gdk_region_subtract_rectangle (render->unblurred_bg, rect);
   if (render->blurred_bg)
-    cairo_region_subtract_rectangle (render->blurred_bg, rect);
+    gdk_region_subtract_rectangle (render->blurred_bg, rect);
 }
 
 static void
@@ -108,20 +108,20 @@ render_merge (Render *render,
   if (child->unblurred_bg)
     {
       if (render->unblurred_bg)
-        cairo_region_union (render->unblurred_bg, child->unblurred_bg);
+        gdk_region_union (render->unblurred_bg, child->unblurred_bg);
       else
-        render->unblurred_bg = cairo_region_copy (child->unblurred_bg);
+        render->unblurred_bg = gdk_region_copy (child->unblurred_bg);
       if (render->blurred_bg)
-        cairo_region_subtract (render->blurred_bg, child->unblurred_bg);
+        gdk_region_subtract (render->blurred_bg, child->unblurred_bg);
     }
   if (child->blurred_bg)
     {
       if (render->unblurred_bg)
-        cairo_region_subtract (render->unblurred_bg, child->blurred_bg);
+        gdk_region_subtract (render->unblurred_bg, child->blurred_bg);
       if (render->blurred_bg)
-        cairo_region_union (render->blurred_bg, child->blurred_bg);
+        gdk_region_union (render->blurred_bg, child->blurred_bg);
       else
-        render->blurred_bg = cairo_region_copy (child->blurred_bg);
+        render->blurred_bg = gdk_region_copy (child->blurred_bg);
     }
 }
 
@@ -134,19 +134,19 @@ render_merge (Render *render,
  *
  * Creates region for the given bitmap.
  *
- * Returns: (transfer full): a #cairo_region_t
+ * Returns: (transfer full): a #GdkRegion
  */
-static cairo_region_t *
+static GdkRegion *
 region_create_from_bitmap (const guchar *data,
                            gsize         width,
                            gsize         height,
                            gsize         stride)
 {
-  cairo_region_t *region;
+  GdkRegion *region;
   GdkRectangle rect;
   gsize x, y;
 
-  region = cairo_region_create ();
+  region = gdk_region_create ();
 
   for (y = 0; y < height; y++)
     {
@@ -176,7 +176,7 @@ region_create_from_bitmap (const guchar *data,
               rect.y = y;
               rect.height = 1;
 
-              cairo_region_union_rectangle (region, &rect);
+              gdk_region_union_rectangle (region, &rect);
             }
         }
       data += stride;
@@ -200,9 +200,9 @@ render_clipped_with_cairo (Render                *render,
 {
   cairo_surface_t *bitmap;
   cairo_t *cr;
-  cairo_region_t *region;
+  GdkRegion *region;
   graphene_rect_t transformed;
-  cairo_rectangle_int_t clip;
+  GdkRectangle clip;
   cairo_matrix_t matrix;
   Render child_render;
 
@@ -227,22 +227,22 @@ render_clipped_with_cairo (Render                *render,
                                       cairo_image_surface_get_stride (bitmap));
   cairo_surface_destroy (bitmap);
 
-  cairo_region_translate (region, clip.x, clip.y);
+  GdkRegionranslate (region, clip.x, clip.y);
 
   render_clip_region (&child_render, region);
   render_subtract_region (render, region);
   render_merge (render, &child_render);
   render_clear (&child_render);
-  cairo_region_destroy (region);
+  gdk_region_destroy (region);
 }
 
-static cairo_region_t *
+static GdkRegion *
 region_create_for_rounded_rect (const GskRoundedRect *rect)
 {
   cairo_surface_t *surface;
   cairo_t *cr;
-  cairo_rectangle_int_t clip;
-  cairo_region_t *result;
+  GdkRectangle clip;
+  GdkRegion *result;
 
   gsk_rect_to_cairo_grow (&rect->bounds, &clip);
   surface = cairo_image_surface_create (CAIRO_FORMAT_A1, clip.width, clip.height);
@@ -259,7 +259,7 @@ region_create_for_rounded_rect (const GskRoundedRect *rect)
                                       cairo_image_surface_get_stride (surface));
   cairo_surface_destroy (surface);
 
-  cairo_region_translate (result, clip.x, clip.y);
+  GdkRegionranslate (result, clip.x, clip.y);
 
   return result;
 }
@@ -298,8 +298,8 @@ compute_copy_node_blur (GskRenderNode *node,
 {
   Render copy_render = {
     .transform = GSK_GPU_TRANSFORM_IDENTITY,
-    .unblurred_bg = render->unblurred_bg ? cairo_region_copy (render->unblurred_bg) : NULL,
-    .blurred_bg = render->blurred_bg ? cairo_region_copy (render->blurred_bg) : NULL,
+    .unblurred_bg = render->unblurred_bg ? gdk_region_copy (render->unblurred_bg) : NULL,
+    .blurred_bg = render->blurred_bg ? gdk_region_copy (render->blurred_bg) : NULL,
   };
   GSList copy = { &copy_render, copies };
 
@@ -316,7 +316,7 @@ compute_paste_node_blur (GskRenderNode *node,
   GSList *copy;
   Render paste;
   graphene_rect_t bounds;
-  cairo_rectangle_int_t clip;
+  GdkRectangle clip;
 
   copy = g_slist_nth (copies, gsk_paste_node_get_depth (node));
   if (copy == NULL)
@@ -355,8 +355,8 @@ compute_blur_node_blur (GskRenderNode *node,
         {
           if (child_render.blurred_bg)
             {
-              cairo_region_union (child_render.blurred_bg, child_render.unblurred_bg);
-              g_clear_pointer (&child_render.unblurred_bg, cairo_region_destroy);
+              gdk_region_union (child_render.blurred_bg, child_render.unblurred_bg);
+              g_clear_pointer (&child_render.unblurred_bg, gdk_region_destroy);
             }
           else
             {
@@ -393,7 +393,7 @@ compute_clip_node_blur (GskRenderNode *node,
 {
   Render child_render;
   graphene_rect_t transformed;
-  cairo_rectangle_int_t clip;
+  GdkRectangle clip;
 
   render_copy (&child_render, render);
   compute_background_blur (gsk_clip_node_get_child (node), &child_render, copies);
@@ -418,7 +418,7 @@ compute_rounded_clip_node_blur (GskRenderNode *node,
 {
   Render child_render;
   GskRoundedRect transformed;
-  cairo_region_t *clip;
+  GdkRegion *clip;
 
   render_copy (&child_render, render);
   compute_background_blur (gsk_rounded_clip_node_get_child (node), &child_render, copies);
@@ -437,7 +437,7 @@ compute_rounded_clip_node_blur (GskRenderNode *node,
   render_subtract_region (render, clip);
   render_merge (render, &child_render);
   render_clear (&child_render);
-  cairo_region_destroy (clip);
+  gdk_region_destroy (clip);
 }
 
 static void
@@ -606,22 +606,22 @@ compute_background_blur (GskRenderNode *node,
   }
 }
 
-cairo_region_t *
+GdkRegion *
 gsk_render_node_compute_background_blur (GskRenderNode *node)
 {
   Render render;
   graphene_rect_t bounds;
-  cairo_rectangle_int_t cairo_bounds;
+  GdkRectangle cairo_bounds;
 
   gsk_render_node_get_bounds (node, &bounds);
   gsk_rect_to_cairo_grow (&bounds, &cairo_bounds);
   render.transform = GSK_GPU_TRANSFORM_IDENTITY;
   render.blurred_bg = NULL;
-  render.unblurred_bg = cairo_region_create_rectangle (&cairo_bounds);
+  render.unblurred_bg = gdk_region_create_rectangle (&cairo_bounds);
 
   compute_background_blur (node, &render, NULL);
 
-  cairo_region_destroy (render.unblurred_bg);
+  gdk_region_destroy (render.unblurred_bg);
   
   return render.blurred_bg;
 }

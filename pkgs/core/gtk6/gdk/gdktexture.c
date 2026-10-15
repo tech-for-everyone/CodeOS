@@ -348,7 +348,7 @@ gdk_texture_dispose (GObject *object)
 
       if (self->next_texture && self->previous_texture)
         {
-          cairo_region_union (self->next_texture->diff_to_previous,
+          gdk_region_union (self->next_texture->diff_to_previous,
                               self->diff_to_previous);
           self->next_texture->previous_texture = self->previous_texture;
           self->previous_texture->next_texture = self->next_texture;
@@ -360,7 +360,7 @@ gdk_texture_dispose (GObject *object)
 
       self->next_texture = NULL;
       self->previous_texture = NULL;
-      g_clear_pointer (&self->diff_to_previous, cairo_region_destroy);
+      g_clear_pointer (&self->diff_to_previous, gdk_region_destroy);
 
       g_mutex_unlock (&self->chain->lock);
 
@@ -872,20 +872,20 @@ gdk_texture_has_ancestor (GdkTexture *self,
 static void
 gdk_texture_diff_from_known_ancestor (GdkTexture     *self,
                                       GdkTexture     *ancestor,
-                                      cairo_region_t *region)
+                                      GdkRegion *region)
 {
   GdkTexture *texture;
 
   for (texture = self; texture != ancestor; texture = texture->previous_texture)
-    cairo_region_union (region, texture->diff_to_previous);
+    gdk_region_union (region, texture->diff_to_previous);
 }
 
 void
 gdk_texture_diff (GdkTexture     *self,
                   GdkTexture     *other,
-                  cairo_region_t *region)
+                  GdkRegion *region)
 {
-  cairo_rectangle_int_t fill = {
+  GdkRectangle fill = {
     .x = 0,
     .y = 0,
     .width = MAX (self->width, other->width),
@@ -899,7 +899,7 @@ gdk_texture_diff (GdkTexture     *self,
   chain = g_atomic_pointer_get (&self->chain);
   if (chain == NULL || chain != g_atomic_pointer_get (&other->chain))
     {
-      cairo_region_union_rectangle (region, &fill);
+      gdk_region_union_rectangle (region, &fill);
       return;
     }
 
@@ -909,14 +909,14 @@ gdk_texture_diff (GdkTexture     *self,
   else if (gdk_texture_has_ancestor (other, self))
     gdk_texture_diff_from_known_ancestor (other, self, region);
   else
-    cairo_region_union_rectangle (region, &fill);
+    gdk_region_union_rectangle (region, &fill);
   g_mutex_unlock (&chain->lock);
 }
 
 void
 gdk_texture_set_diff (GdkTexture     *self,
                       GdkTexture     *previous,
-                      cairo_region_t *diff)
+                      GdkRegion *diff)
 {
   g_assert (self->diff_to_previous == NULL);
   g_assert (self->chain == NULL);
@@ -937,7 +937,7 @@ gdk_texture_set_diff (GdkTexture     *self,
   if (previous->next_texture)
     {
       previous->next_texture->previous_texture = NULL;
-      g_clear_pointer (&previous->next_texture->diff_to_previous, cairo_region_destroy);
+      g_clear_pointer (&previous->next_texture->diff_to_previous, gdk_region_destroy);
     }
   previous->next_texture = self;
   self->previous_texture = previous;

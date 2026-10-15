@@ -156,8 +156,8 @@ gtk_list_item_change_get_header (GtkListItemChange *change)
 }
 
 static void
-potentially_empty_rectangle_union (cairo_rectangle_int_t       *self,
-                                   const cairo_rectangle_int_t *area)
+potentially_empty_rectangle_union (GdkRectangle       *self,
+                                   const GdkRectangle *area)
 {
   if (area->width <= 0 || area->height <= 0)
     return;
@@ -466,7 +466,7 @@ gtk_list_tile_get_footer (GtkListItemManager *self,
 
 /* This computes Manhattan distance */
 static int
-rectangle_distance (const cairo_rectangle_int_t *rect,
+rectangle_distance (const GdkRectangle *rect,
                     int                          x,
                     int                          y)
 {
@@ -671,9 +671,9 @@ gtk_list_tile_get_previous_skip (GtkListTile *tile)
 void
 gtk_list_tile_set_area (GtkListItemManager          *self,
                         GtkListTile                 *tile,
-                        const cairo_rectangle_int_t *area)
+                        const GdkRectangle *area)
 {
-  cairo_rectangle_int_t empty_area = { 0, 0, 0, 0 };
+  GdkRectangle empty_area = { 0, 0, 0, 0 };
 
   if (!area)
     area = &empty_area;

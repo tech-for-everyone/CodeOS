@@ -125,7 +125,7 @@ gdk_memory_texture_new_from_layout (GBytes                *bytes,
                                     const GdkMemoryLayout *layout,
                                     GdkColorState         *color_state,
                                     GdkTexture            *update_texture,
-                                    const cairo_region_t  *update_region)
+                                    const GdkRegion  *update_region)
 {
   GdkMemoryTexture *self;
   GdkTexture *texture;
@@ -146,9 +146,9 @@ gdk_memory_texture_new_from_layout (GBytes                *bytes,
     {
       if (update_region)
         {
-          cairo_region_t *copy_region = cairo_region_copy (update_region);
-          cairo_region_intersect_rectangle (copy_region,
-                                            &(cairo_rectangle_int_t) {
+          GdkRegion *copy_region = gdk_region_copy (update_region);
+          gdk_region_intersect_rectangle (copy_region,
+                                            &(GdkRectangle) {
                                               0, 0,
                                               update_texture->width, update_texture->height
                                             });
@@ -218,7 +218,7 @@ gdk_memory_texture_new_subtexture (GdkMemoryTexture  *source,
 
   gdk_memory_layout_init_sublayout (&sublayout,
                                     &source->layout,
-                                    &(cairo_rectangle_int_t) { x, y, width, height});
+                                    &(GdkRectangle) { x, y, width, height});
 
   return gdk_memory_texture_new_from_layout (source->bytes,
                                              &sublayout,

@@ -382,7 +382,7 @@ gtk_list_view_get_position_from_allocation (GtkListBase           *base,
                                             int                    x,
                                             int                    y,
                                             guint                 *pos,
-                                            cairo_rectangle_int_t *area)
+                                            GdkRectangle *area)
 {
   GtkListView *self = GTK_LIST_VIEW (base);
   GtkListTile *tile;
@@ -430,10 +430,10 @@ gtk_list_view_get_position_from_allocation (GtkListBase           *base,
 
 static GtkBitset *
 gtk_list_view_get_items_in_rect (GtkListBase                 *base,
-                                 const cairo_rectangle_int_t *rect)
+                                 const GdkRectangle *rect)
 {
   guint first, last;
-  cairo_rectangle_int_t area;
+  GdkRectangle area;
   GtkBitset *result;
 
   result = gtk_bitset_new_empty ();

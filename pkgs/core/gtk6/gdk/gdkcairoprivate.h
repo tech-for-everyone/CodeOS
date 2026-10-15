@@ -147,45 +147,6 @@ gdk_cairo_surface_convert_color_state (cairo_surface_t *surface,
   cairo_surface_mark_dirty (surface);
 }
 
-static inline cairo_region_t *
-gdk_cairo_region_scale_grow (const cairo_region_t *region,
-                             double                scale_x,
-                             double                scale_y)
-{
-  cairo_region_t *result;
-
-  result = cairo_region_create ();
-  for (int i = 0; i < cairo_region_num_rectangles (region); i++)
-    {
-      cairo_rectangle_int_t rect;
-      cairo_region_get_rectangle (region, i, &rect);
-      cairo_region_union_rectangle (result, &(cairo_rectangle_int_t) {
-                                      .x = (int) floor (rect.x * scale_x),
-                                      .y = (int) floor (rect.y * scale_y),
-                                      .width = (int) ceil ((rect.x + rect.width) * scale_x) - floor (rect.x * scale_x),
-                                      .height = (int) ceil ((rect.y + rect.height) * scale_y) - floor (rect.y * scale_y),
-                                    });
-    }
-
-  return result;
-}
-
-static inline char *
-gdk_cairo_region_to_debug_string (const cairo_region_t *region)
-{
-  GString *string;
-  cairo_rectangle_int_t extents;
-
-  cairo_region_get_extents (region, &extents);
-
-  string = g_string_new (NULL);
-  g_string_append_printf (string, "{ %d, %d, %d, %d } (%d rects)",
-                          extents.x, extents.y, extents.width, extents.height,
-                          cairo_region_num_rectangles (region));
-
-  return g_string_free (string, FALSE);
-}
-
 static inline gboolean
 gdk_cairo_is_all_clipped (cairo_t *cr)
 {
@@ -304,44 +265,6 @@ gdk_cairo_create_similar_surface (cairo_t               *cr,
                                    - bounds->origin.y * yscale);
 
   return surface;
-}
-
-static inline void
-gdk_cairo_region_union_affine (cairo_region_t       *region,
-                               const cairo_region_t *sub,
-                               float                 scale_x,
-                               float                 scale_y,
-                               float                 offset_x,
-                               float                 offset_y)
-{
-  cairo_rectangle_int_t rect;
-  int i;
-
-  for (i = 0; i < cairo_region_num_rectangles (sub); i++)
-    {
-      cairo_region_get_rectangle (sub, i, &rect);
-      gdk_rectangle_transform_affine (&rect, scale_x, scale_y, offset_x, offset_y, &rect);
-      cairo_region_union_rectangle (region, &rect);
-    }
-}
-
-/*
- * gdk_cairo_region_is_rectangle:
- * @region: a cairo region
- *
- * Checks if the region can be represented by a rectangle.
- * 
- * This rectangle can be queried with cairo_region_get_extents().
- *
- * FIXME: Should this return TRUE or FALSE for an empty region?
- * Currently I have no use case, so it returns whatever.
- *
- * Returns: true if the region is a rectangle.
- **/
-static inline gboolean
-gdk_cairo_region_is_rectangle (cairo_region_t *region)
-{
-  return cairo_region_num_rectangles (region) == 1;
 }
 
 /*

@@ -33,21 +33,21 @@
 
 
 static void
-region_union_region_affine (cairo_region_t       *region,
-                            const cairo_region_t *sub,
+region_union_region_affine (GdkRegion       *region,
+                            const GdkRegion *sub,
                             float                 scale_x,
                             float                 scale_y,
                             float                 offset_x,
                             float                 offset_y)
 {
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   int i;
   
-  for (i = 0; i < cairo_region_num_rectangles (sub); i++)
+  for (i = 0; i < gdk_region_num_rectangles (sub); i++)
     {
-      cairo_region_get_rectangle (sub, i, &rect);
+      gdk_region_get_rectangle (sub, i, &rect);
       gdk_rectangle_transform_affine (&rect, scale_x, scale_y, offset_x, offset_y, &rect);
-      cairo_region_union_rectangle (region, &rect);
+      gdk_region_union_rectangle (region, &rect);
     }
 }
 
@@ -153,9 +153,9 @@ gsk_transform_node_diff (GskRenderNode *node1,
         gsk_transform_to_translate (self1->transform, &dx, &dy);
         if (floorf (dx) == dx && floorf (dy) == dy)
           {
-            cairo_region_translate (data->region, -dx, -dy);
+            GdkRegionranslate (data->region, -dx, -dy);
             gsk_render_node_diff (self1->child, self2->child, data);
-            cairo_region_translate (data->region, dx, dy);
+            GdkRegionranslate (data->region, dx, dy);
             break;
           }
       }
@@ -163,16 +163,16 @@ gsk_transform_node_diff (GskRenderNode *node1,
 
     case GSK_TRANSFORM_CATEGORY_2D_AFFINE:
       {
-        cairo_region_t *sub;
+        GdkRegion *sub;
         float scale_x, scale_y, dx, dy;
         gsk_transform_to_affine (self1->transform, &scale_x, &scale_y, &dx, &dy);
-        sub = cairo_region_create ();
+        sub = gdk_region_create ();
         if (gsk_render_node_get_copy_mode (node1) != GSK_COPY_NONE ||
             gsk_render_node_get_copy_mode (node2) != GSK_COPY_NONE)
           region_union_region_affine (sub, data->region, 1.0f / scale_x, 1.0f / scale_y, - dx / scale_x, - dy / scale_y);
         gsk_render_node_diff (self1->child, self2->child, &(GskDiffData) { sub, data->copies, data->surface });
         region_union_region_affine (data->region, sub, scale_x, scale_y, dx, dy);
-        cairo_region_destroy (sub);
+        gdk_region_destroy (sub);
       }
       break;
 

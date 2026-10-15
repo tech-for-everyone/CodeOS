@@ -263,11 +263,30 @@ The port itself is not done. What it needs:
   before the `gdk.h` umbrella was cleaned up the first error for ~399 files was
   `gdk/deprecated/gdkpixbuf.h`; removing it dropped that to 2 and the first
   error became `unknown type name 'cairo_region_t'` (410 files, from
-  `gdk/gdkdrawcontext.h`), then `cairo_t` (43, `gdkcairocontext.h`), `cairo.h`
-  (26), `PangoDirection` (23), `cairo_rectangle_int_t` (20),
-  `gdk-pixbuf/gdk-pixbuf.h` (6). So the OK count stays at 50 while the wall
-  moves one header deeper; it only rises once the public umbrella is
-  cairo/pango-free.
+  `gdk/gdkdrawcontext.h`). With the region type ported (below) that wall is gone
+  and the ledger reads **52/620**, blocked next by `cairo_t` (443 files, first
+  declared in `gdk/gdkcairocontext.h`), then `cairo.h` (26), `PangoDirection`
+  (24), `cairo_format_t` (23), `gdk-pixbuf/gdk-pixbuf.h` (10). So the OK count
+  climbs slowly while the wall moves one header deeper; it only rises once the
+  public umbrella is cairo/pango-free, and `cairo_t` is the drawing bridge
+  (`gdk/qt`, `gsk/qt`) rather than a header rename.
+* **The region type is ported: `cairo_region_t` is gone.** GDK's region was
+  cairo's, and 410 of the 620 files stopped on it. It is the one piece of the
+  surgery that needs nothing from Qt — a region is integer rectangle arithmetic
+  — so GDK now owns it: `gdk/gdkregion.{h,c}` defines `GdkRegion` (a sorted,
+  non-overlapping rectangle list, the representation cairo used) and the
+  `gdk_region_*()` API, with the functions named after the cairo ones they
+  replace so the port was a mechanical rename of `cairo_region_t` → `GdkRegion`,
+  `cairo_region_*` → `gdk_region_*`, `cairo_rectangle_int_t` → `GdkRectangle`
+  across 81 files. `gdkregion.h` is pulled in from the end of `gdktypes.h`, so
+  every unit that can see `GdkRectangle` also sees `GdkRegion` without touching
+  the include list of each file. The three region helpers that lived in
+  `gdkcairoprivate.h` (`scale_grow`, `to_debug_string`, `union_affine`) moved
+  with it, since they were only named `gdk_cairo_region_*()` for their argument
+  type. The only `cairo_region` left is `gdk_cairo_region()` — the drawing call
+  that sets a cairo clip — which belongs to the drawing bridge. Verified by
+  `tests/gdkregion.c` (compile-only probe over every signature) and a negative
+  control: a TU naming `cairo_region_t` now fails with `unknown type name`.
 * **The dropped libraries are woven through the kept files**, so removing them
   is per-file surgery rather than a directory delete. The whole public-header
   dependency is small and enumerated: cairo needs 14 types + 34 functions in
@@ -278,9 +297,9 @@ The port itself is not done. What it needs:
   `gdk.h` no longer pulls in `<gdk/gdkcairo.h>`, `<gdk/gdkpango.h>` or
   `<gdk/deprecated/gdkpixbuf.h>`. Those three headers still exist for the `.c`
   files that implement them and get removed as their call sites are ported; the
-  next wall is `cairo_region_t` (see the ledger bullet). The replacements are
-  already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during
-  the bring-up.
+  next walls are `cairo_t` and `PangoDirection`. The replacements are already
+  prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during the
+  bring-up.
 * **Upstream's `meson.build` files are imported as reference** but not used;
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's

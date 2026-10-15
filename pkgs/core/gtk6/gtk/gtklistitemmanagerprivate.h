@@ -60,7 +60,7 @@ struct _GtkListTile
   GtkWidget *widget;
   guint n_items;
   /* area occupied by tile. May be empty if tile has no allocation */
-  cairo_rectangle_int_t area;
+  GdkRectangle area;
 };
 
 struct _GtkListTileAugment
@@ -71,7 +71,7 @@ struct _GtkListTileAugment
   guint has_footer :1;
 
   /* union of all areas of tile and children */
-  cairo_rectangle_int_t area;
+  GdkRectangle area;
 };
 
 
@@ -114,7 +114,7 @@ gpointer                gtk_list_tile_get_augment               (GtkListItemMana
                                                                  GtkListTile            *tile);
 void                    gtk_list_tile_set_area                  (GtkListItemManager     *self,
                                                                  GtkListTile            *tile,
-                                                                 const cairo_rectangle_int_t *area);
+                                                                 const GdkRectangle *area);
 void                    gtk_list_tile_set_area_position         (GtkListItemManager     *self,
                                                                  GtkListTile            *tile,
                                                                  int                     x,

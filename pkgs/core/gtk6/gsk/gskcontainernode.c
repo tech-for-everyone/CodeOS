@@ -86,7 +86,7 @@ gsk_container_node_keep_func (gconstpointer elem1, gconstpointer elem2, gpointer
   GskDiffData *data = user_data;
 
   gsk_render_node_diff ((GskRenderNode *) elem1, (GskRenderNode *) elem2, data);
-  if (cairo_region_num_rectangles (data->region) > MAX_RECTS_IN_DIFF)
+  if (gdk_region_num_rectangles (data->region) > MAX_RECTS_IN_DIFF)
     return GSK_DIFF_ABORTED;
 
   return GSK_DIFF_OK;
@@ -97,11 +97,11 @@ gsk_container_node_change_func (gconstpointer elem, gsize idx, gpointer user_dat
 {
   const GskRenderNode *node = elem;
   GskDiffData *data = user_data;
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
 
   gsk_rect_to_cairo_grow (&node->bounds, &rect);
-  cairo_region_union_rectangle (data->region, &rect);
-  if (cairo_region_num_rectangles (data->region) > MAX_RECTS_IN_DIFF)
+  gdk_region_union_rectangle (data->region, &rect);
+  if (gdk_region_num_rectangles (data->region) > MAX_RECTS_IN_DIFF)
     return GSK_DIFF_ABORTED;
 
   return GSK_DIFF_OK;

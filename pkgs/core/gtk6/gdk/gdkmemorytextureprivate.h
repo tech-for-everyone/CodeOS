@@ -40,7 +40,7 @@ GdkTexture *            gdk_memory_texture_new_from_layout       (GBytes        
                                                                   const GdkMemoryLayout *layout,
                                                                   GdkColorState         *color_state,
                                                                   GdkTexture            *update_texture,
-                                                                  const cairo_region_t  *update_region);
+                                                                  const GdkRegion  *update_region);
 
 GBytes *                gdk_memory_texture_get_bytes             (GdkMemoryTexture      *self);
 const GdkMemoryLayout * gdk_memory_texture_get_layout            (GdkMemoryTexture      *self);

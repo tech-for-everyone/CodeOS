@@ -327,7 +327,7 @@ gdk_draw_context_get_surface (GdkDrawContext *context)
 
 static GdkDrawContextFrame *
 gdk_draw_context_frame_new (GdkDrawContext *self,
-                            cairo_region_t *damage)
+                            GdkRegion *damage)
 {
   const gsize align = 2 * sizeof (gpointer);
   GdkDrawContextClass *klass;
@@ -383,7 +383,7 @@ gdk_draw_context_frame_free (GdkDrawContextFrame *frame)
   clock = gdk_surface_get_frame_clock (gdk_draw_context_get_surface (self));
   gdk_frame_clock_remove_frame (clock, frame);
 
-  cairo_region_destroy (frame->damage);
+  gdk_region_destroy (frame->damage);
   gdk_color_state_unref (frame->color_state);
   g_object_unref (frame->context);
   g_free (frame);
@@ -425,7 +425,7 @@ gdk_draw_context_frame_free (GdkDrawContextFrame *frame)
  */
 void
 gdk_draw_context_begin_frame (GdkDrawContext       *context,
-                              const cairo_region_t *region)
+                              const GdkRegion *region)
 {
   GdkDrawContextPrivate *priv = gdk_draw_context_get_instance_private (context);
 
@@ -463,7 +463,7 @@ GdkDrawContextFrame *
 gdk_draw_context_begin_frame_full (GdkDrawContext        *context,
                                    gpointer               context_data,
                                    GskRenderNode         *node,
-                                   const cairo_region_t  *region)
+                                   const GdkRegion  *region)
 {
   GdkDrawContextPrivate *priv = gdk_draw_context_get_instance_private (context);
   double scale;
@@ -521,7 +521,7 @@ gdk_draw_context_begin_frame_full (GdkDrawContext        *context,
 
   scale = gdk_surface_get_scale (priv->surface);
   priv->current_frame = gdk_draw_context_frame_new (context,
-                                                    gdk_cairo_region_scale_grow (region, scale, scale));
+                                                    gdk_region_scale_grow (region, scale, scale));
 
   GDK_DRAW_CONTEXT_GET_CLASS (context)->begin_frame (context,
                                                      priv->current_frame,
@@ -535,16 +535,16 @@ gdk_draw_context_begin_frame_full (GdkDrawContext        *context,
 
 #ifdef HAVE_SYSPROF
 static gint64
-region_get_pixels (const cairo_region_t *region)
+region_get_pixels (const GdkRegion *region)
 {
   int i, n;
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   gint64 pixels = 0;
 
-  n = cairo_region_num_rectangles (region);
+  n = gdk_region_num_rectangles (region);
   for (i = 0; i < n; i++)
     {
-      cairo_region_get_rectangle (region, i, &rect);
+      gdk_region_get_rectangle (region, i, &rect);
       pixels += rect.width * rect.height;
     }
 
@@ -643,7 +643,7 @@ gdk_draw_context_end_frame (GdkDrawContext *context)
  * Deprecated: 4.16: Drawing directly to the surface is no longer recommended.
  *   Use `GskRenderNode` and `GskRenderer`.
  */
-const cairo_region_t *
+const GdkRegion *
 gdk_draw_context_get_frame_region (GdkDrawContext *self)
 {
   return NULL;
@@ -789,7 +789,7 @@ gdk_draw_context_detach (GdkDrawContext *self)
  *
  * Returns: (nullable) the frame's current damage
  **/
-const cairo_region_t *
+const GdkRegion *
 gdk_draw_context_frame_get_damage (GdkDrawContextFrame *frame)
 {
   return frame->damage;
@@ -810,14 +810,14 @@ gdk_draw_context_frame_get_damage (GdkDrawContextFrame *frame)
  **/
 void
 gdk_draw_context_frame_add_damage (GdkDrawContextFrame  *frame,
-                                   const cairo_region_t *damage)
+                                   const GdkRegion *damage)
 {
-  cairo_region_union (frame->damage, damage);
+  gdk_region_union (frame->damage, damage);
 
   /* During resizes damage tracking can get out of sync sometimes.
    * But damage tracking backends require accurate damage */
-  cairo_region_intersect_rectangle (frame->damage,
-                                    &(cairo_rectangle_int_t) {
+  gdk_region_intersect_rectangle (frame->damage,
+                                    &(GdkRectangle) {
                                       0, 0,
                                       frame->buffer_width, frame->buffer_height
                                     });

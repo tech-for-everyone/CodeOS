@@ -101,15 +101,15 @@ gsk_fill_node_diff (GskRenderNode *node1,
 
   if (self1->path == self2->path)
     {
-      cairo_region_t *save;
-      cairo_rectangle_int_t clip_rect;
+      GdkRegion *save;
+      GdkRectangle clip_rect;
 
-      save = cairo_region_copy (data->region);
+      save = gdk_region_copy (data->region);
       gsk_render_node_diff (self1->child, self2->child, data);
       gsk_rect_to_cairo_grow (&node1->bounds, &clip_rect);
-      cairo_region_intersect_rectangle (data->region, &clip_rect);
-      cairo_region_union (data->region, save);
-      cairo_region_destroy (save);
+      gdk_region_intersect_rectangle (data->region, &clip_rect);
+      gdk_region_union (data->region, save);
+      gdk_region_destroy (save);
     }
   else
     {

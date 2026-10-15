@@ -154,7 +154,7 @@ GTK4_GEN_OBJ := $(patsubst %.c,build/obj/gtk4/%.o,$(GTK4_GEN_SRCS))
 
 # Compile-only probes for the surgery: each adds a public header that upstream
 # dragged cairo/pango in through.  They are never linked or run.
-GTK4_PROBES := tests/gdktypes.c
+GTK4_PROBES := tests/gdktypes.c tests/gdkregion.c
 
 
 .PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-ledger gtk4-clean

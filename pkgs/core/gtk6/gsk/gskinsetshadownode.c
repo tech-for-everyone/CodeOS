@@ -100,8 +100,8 @@ gsk_inset_shadow_node_draw (GskRenderNode *node,
     }
   else
     {
-      cairo_region_t *remaining;
-      cairo_rectangle_int_t r;
+      GdkRegion *remaining;
+      GdkRectangle r;
       int i;
 
       /* For the blurred case we divide the rendering into 9 parts,
@@ -116,7 +116,7 @@ gsk_inset_shadow_node_draw (GskRenderNode *node,
        * reach, but computing that is a bit tricky since the
        * rounded corners are on the "inside" of it. */
       gsk_rect_to_cairo_grow (&clip_box.bounds, &r);
-      remaining = cairo_region_create_rectangle (&r);
+      remaining = gdk_region_create_rectangle (&r);
 
       /* First do the corners of box */
       for (i = 0; i < 4; i++)
@@ -129,7 +129,7 @@ gsk_inset_shadow_node_draw (GskRenderNode *node,
           cairo_restore (cr);
 
           /* We drew the region, remove it from remaining */
-          cairo_region_subtract_rectangle (remaining, &r);
+          gdk_region_subtract_rectangle (remaining, &r);
         }
 
       /* Then the sides */
@@ -143,7 +143,7 @@ gsk_inset_shadow_node_draw (GskRenderNode *node,
           cairo_restore (cr);
 
           /* We drew the region, remove it from remaining */
-          cairo_region_subtract_rectangle (remaining, &r);
+          gdk_region_subtract_rectangle (remaining, &r);
         }
 
       /* Then the rest, which needs no blurring */
@@ -154,7 +154,7 @@ gsk_inset_shadow_node_draw (GskRenderNode *node,
       gsk_cairo_shadow_draw (cr, data->ccs, TRUE, &box, &clip_box, blur_radius, &self->color, GSK_BLUR_NONE);
       cairo_restore (cr);
 
-      cairo_region_destroy (remaining);
+      gdk_region_destroy (remaining);
     }
 
   cairo_restore (cr);

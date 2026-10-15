@@ -64,7 +64,7 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
                               float                  radius,
                               const GdkColor        *color,
                               GskCorner              corner,
-                              cairo_rectangle_int_t *drawn_rect)
+                              GdkRectangle *drawn_rect)
 {
   float clip_radius;
   int x1, x2, x3, y1, y2, y3, x, y;
@@ -205,7 +205,7 @@ gsk_cairo_shadow_draw_side (cairo_t               *cr,
                             float                  radius,
                             const GdkColor        *color,
                             GskShadowSide           side,
-                            cairo_rectangle_int_t *drawn_rect)
+                            GdkRectangle *drawn_rect)
 {
   GskBlurFlags blur_flags = GSK_BLUR_REPEAT;
   double clip_radius;

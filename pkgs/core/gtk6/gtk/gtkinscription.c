@@ -1527,8 +1527,8 @@ gtk_inscription_accessible_text_get_extents (GtkAccessibleText *self,
   PangoLayout *layout;
   const char *text;
   float lx, ly;
-  cairo_region_t *range_clip;
-  cairo_rectangle_int_t clip_rect;
+  GdkRegion *range_clip;
+  GdkRectangle clip_rect;
   int range[2];
 
   layout = inscription->layout;
@@ -1539,8 +1539,8 @@ gtk_inscription_accessible_text_get_extents (GtkAccessibleText *self,
   range[1] = g_utf8_pointer_to_offset (text, text + end);
 
   range_clip = gdk_pango_layout_get_clip_region (layout, lx, ly, range, 1);
-  cairo_region_get_extents (range_clip, &clip_rect);
-  cairo_region_destroy (range_clip);
+  gdk_region_get_extents (range_clip, &clip_rect);
+  gdk_region_destroy (range_clip);
 
   extents->origin.x = clip_rect.x;
   extents->origin.y = clip_rect.y;

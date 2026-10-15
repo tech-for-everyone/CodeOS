@@ -4233,10 +4233,10 @@ update_realized_window_properties (GtkWindow *window)
 
   if (rect.width > 0 && rect.height > 0)
     {
-      cairo_region_t *region = cairo_region_create_rectangle (&rect);
+      GdkRegion *region = gdk_region_create_rectangle (&rect);
 
       gdk_surface_set_input_region (priv->surface, region);
-      cairo_region_destroy (region);
+      gdk_region_destroy (region);
     }
 }
 

@@ -89,10 +89,10 @@ void                    gdk_gl_texture_builder_set_update_texture (GdkGLTextureB
                                                                  GdkTexture             *texture);
 
 GDK_AVAILABLE_IN_4_12
-cairo_region_t *        gdk_gl_texture_builder_get_update_region (GdkGLTextureBuilder   *self) G_GNUC_PURE;
+GdkRegion *        gdk_gl_texture_builder_get_update_region (GdkGLTextureBuilder   *self) G_GNUC_PURE;
 GDK_AVAILABLE_IN_4_12
 void                    gdk_gl_texture_builder_set_update_region (GdkGLTextureBuilder   *self,
-                                                                 cairo_region_t         *region);
+                                                                 GdkRegion         *region);
 
 GDK_AVAILABLE_IN_4_12
 GdkTexture *            gdk_gl_texture_builder_build            (GdkGLTextureBuilder    *self,

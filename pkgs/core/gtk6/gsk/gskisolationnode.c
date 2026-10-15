@@ -101,7 +101,7 @@ gsk_isolation_node_diff (GskRenderNode *node1,
     }
 
   if (gsk_isolation_node_is_isolating (self1, GSK_ISOLATION_BACKGROUND))
-    child_data.region = cairo_region_create ();
+    child_data.region = gdk_region_create ();
   else
     child_data.region = data->region;
 
@@ -114,8 +114,8 @@ gsk_isolation_node_diff (GskRenderNode *node1,
 
   if (gsk_isolation_node_is_isolating (self1, GSK_ISOLATION_BACKGROUND))
     {
-      cairo_region_union (data->region, child_data.region);
-      cairo_region_destroy (child_data.region);
+      gdk_region_union (data->region, child_data.region);
+      gdk_region_destroy (child_data.region);
     }
 }
 

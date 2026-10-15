@@ -250,26 +250,26 @@ gsk_blur_node_diff (GskRenderNode *node1,
 
   if (gsk_size_equal (&self1->sigma, &self2->sigma))
     {
-      cairo_rectangle_int_t rect;
-      cairo_region_t *sub;
+      GdkRectangle rect;
+      GdkRegion *sub;
       int i, n;
       graphene_size_t padding;
 
       gsk_blur_node_get_padding (&self1->sigma, &padding);
-      sub = cairo_region_create ();
+      sub = gdk_region_create ();
       gsk_render_node_diff (self1->child, self2->child, &(GskDiffData) { sub, data->copies, data->surface });
 
-      n = cairo_region_num_rectangles (sub);
+      n = gdk_region_num_rectangles (sub);
       for (i = 0; i < n; i++)
         {
-          cairo_region_get_rectangle (sub, i, &rect);
+          gdk_region_get_rectangle (sub, i, &rect);
           rect.x -= ceilf (padding.width);
           rect.y -= ceilf (padding.height);
           rect.width += 2 * ceilf (padding.width);
           rect.height += 2 * ceilf (padding.height);
-          cairo_region_union_rectangle (data->region, &rect);
+          gdk_region_union_rectangle (data->region, &rect);
         }
-      cairo_region_destroy (sub);
+      gdk_region_destroy (sub);
     }
   else
     {

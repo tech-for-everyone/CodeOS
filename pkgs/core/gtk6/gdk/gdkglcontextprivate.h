@@ -81,7 +81,7 @@ struct _GdkGLContext
   GdkDrawContext parent_instance;
 
   /* We store the old drawn areas to support buffer-age optimizations */
-  cairo_region_t *old_updated_area[GDK_GL_MAX_TRACKED_BUFFERS];
+  GdkRegion *old_updated_area[GDK_GL_MAX_TRACKED_BUFFERS];
 };
 
 struct _GdkGLContextClass
@@ -97,7 +97,7 @@ struct _GdkGLContextClass
                                                                  gboolean               surfaceless);
   gboolean              (* clear_current)                       (GdkGLContext          *context);
   gboolean              (* is_current)                          (GdkGLContext          *context);
-  cairo_region_t *      (* get_damage)                          (GdkGLContext          *context);
+  GdkRegion *      (* get_damage)                          (GdkGLContext          *context);
 
   gboolean              (* is_shared)                           (GdkGLContext          *self,
                                                                  GdkGLContext          *other);

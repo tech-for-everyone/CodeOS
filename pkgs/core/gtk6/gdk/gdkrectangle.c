@@ -38,14 +38,14 @@
  * Represents a rectangle.
  *
  * `GdkRectangle` is identical to `cairo_rectangle_t`. Together with Cairo’s
- * `cairo_region_t` data type, these are the central types for representing
+ * `GdkRegion` data type, these are the central types for representing
  * sets of pixels.
  *
  * The intersection of two rectangles can be computed with
  * [method@Gdk.Rectangle.intersect]; to find the union of two rectangles use
  * [method@Gdk.Rectangle.union].
  *
- * The `cairo_region_t` type provided by Cairo is usually used for managing
+ * The `GdkRegion` type is usually used for managing
  * non-rectangular clipping of graphical operations.
  *
  * The Graphene library has a number of other data types for regions and
@@ -203,7 +203,7 @@ gdk_rectangle_value_transform_rect (const GValue *src_value, GValue *dest_value)
 }
 
 /* Allow GValue transformation between the identical structs
- * cairo_rectangle_int_t and GdkRectangle.
+ * GdkRectangle and GdkRectangle.
  */
 static void
 gdk_rectangle_register_value_transform_funcs (GType gtype_gdk_rectangle)

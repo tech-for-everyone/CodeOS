@@ -40,13 +40,13 @@ GdkSurface *            gdk_draw_context_get_surface            (GdkDrawContext 
 
 GDK_DEPRECATED_IN_4_16
 void                    gdk_draw_context_begin_frame            (GdkDrawContext         *context,
-                                                                 const cairo_region_t   *region);
+                                                                 const GdkRegion   *region);
 GDK_DEPRECATED_IN_4_16
 void                    gdk_draw_context_end_frame              (GdkDrawContext         *context);
 
 GDK_DEPRECATED_IN_4_16
 gboolean                gdk_draw_context_is_in_frame            (GdkDrawContext         *context);
 GDK_DEPRECATED_IN_4_16
-const cairo_region_t *  gdk_draw_context_get_frame_region       (GdkDrawContext         *context);
+const GdkRegion *  gdk_draw_context_get_frame_region       (GdkDrawContext         *context);
 
 G_END_DECLS

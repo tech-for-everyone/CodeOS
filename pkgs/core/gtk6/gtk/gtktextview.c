@@ -5387,7 +5387,7 @@ gtk_text_view_show_magnifier (GtkTextView *text_view,
                               int          x,
                               int          y)
 {
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   GtkTextViewPrivate *priv;
   GtkRequisition req;
 
@@ -9424,9 +9424,9 @@ gtk_text_view_popup_menu (GtkWidget  *widget,
 
 static void
 gtk_text_view_get_selection_rect (GtkTextView           *text_view,
-				  cairo_rectangle_int_t *rect)
+				  GdkRectangle *rect)
 {
-  cairo_rectangle_int_t rect_cursor, rect_bound;
+  GdkRectangle rect_cursor, rect_bound;
   GtkTextIter cursor, bound;
   GtkTextBuffer *buffer;
   int x1, y1, x2, y2;
@@ -9536,7 +9536,7 @@ gtk_text_view_selection_bubble_popup_show (gpointer user_data)
 {
   GtkTextView *text_view = user_data;
   GtkTextViewPrivate *priv = text_view->priv;
-  cairo_rectangle_int_t rect;
+  GdkRectangle rect;
   GtkWidget *box;
   GtkWidget *toolbar;
   GMenuModel *model;
@@ -10906,31 +10906,31 @@ gtk_text_view_accessible_text_get_extents (GtkAccessibleText *self,
 {
   GtkTextBuffer *buffer;
   GtkTextIter start_iter, end_iter;
-  cairo_region_t *region;
+  GdkRegion *region;
   GdkRectangle rect;
 
   buffer = get_buffer (GTK_TEXT_VIEW (self));
   gtk_text_buffer_get_iter_at_offset (buffer, &start_iter, start);
   gtk_text_buffer_get_iter_at_offset (buffer, &end_iter, end);
 
-  region = cairo_region_create ();
+  region = gdk_region_create ();
   do
     {
       gtk_text_view_get_iter_location (GTK_TEXT_VIEW (self), &start_iter, &rect);
-      cairo_region_union_rectangle (region, &rect);
+      gdk_region_union_rectangle (region, &rect);
 
       gtk_text_iter_forward_to_line_end (&start_iter);
       gtk_text_iter_order (&start_iter, &end_iter);
 
       gtk_text_view_get_iter_location (GTK_TEXT_VIEW (self), &end_iter, &rect);
-      cairo_region_union_rectangle (region, &rect);
+      gdk_region_union_rectangle (region, &rect);
 
       gtk_text_iter_forward_line (&start_iter);
     }
   while (gtk_text_iter_compare (&start_iter, &end_iter) < 0);
 
-  cairo_region_get_extents (region, &rect);
-  cairo_region_destroy (region);
+  gdk_region_get_extents (region, &rect);
+  gdk_region_destroy (region);
 
   gtk_text_view_buffer_to_window_coords (GTK_TEXT_VIEW (self),
                                          GTK_TEXT_WINDOW_TEXT,

@@ -868,7 +868,7 @@ complex_clip:
 GskOffload *
 gsk_offload_new (GdkSurface     *surface,
                  GskRenderNode  *root,
-                 cairo_region_t *diff)
+                 GdkRegion *diff)
 {
   GskOffload *self;
 
@@ -947,17 +947,17 @@ gsk_offload_new (GdkSurface     *surface,
           (info->is_offloaded && !gsk_rect_equal (&bounds, &old_bounds)))
         {
           /* We changed things, need to invalidate everything */
-          cairo_rectangle_int_t rect;
+          GdkRectangle rect;
 
           if (info->is_offloaded)
             {
               gsk_rect_to_cairo_grow (&bounds, &rect);
-              cairo_region_union_rectangle (diff, &rect);
+              gdk_region_union_rectangle (diff, &rect);
             }
           if (info->was_offloaded)
             {
               gsk_rect_to_cairo_grow (&old_bounds, &rect);
-              cairo_region_union_rectangle (diff, &rect);
+              gdk_region_union_rectangle (diff, &rect);
             }
         }
 
