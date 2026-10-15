@@ -138,8 +138,10 @@ GTK4_CFLAGS = \
     -I$(GLIB_SYSROOT)/include/glib \
     -I$(GLIB_SYSROOT)/include/gmodule \
     -I$(GLIB_SYSROOT)/include/graphene-1.0 \
+    -I$(GLIB_SYSROOT)/lib/graphene-1.0/include \
     -I$(GLIB_BUILD) -I$(GLIB_BUILD)/glib \
-    -I$(GTK4_GEN) -I$(HERE) \
+    -I$(GTK4_GEN) -I$(GTK4_GEN)/gdk -I$(GTK4_GEN)/gtk -I$(GTK4_GEN)/gsk \
+    -I$(HERE) \
     -I$(HERE)/gdk -I$(HERE)/gsk -I$(HERE)/gtk \
     -I$(HERE)/gtk/css -I$(HERE)/gtk/svg
 
@@ -155,7 +157,7 @@ GTK4_GEN_OBJ := $(patsubst %.c,build/obj/gtk4/%.o,$(GTK4_GEN_SRCS))
 GTK4_PROBES := tests/gdktypes.c
 
 
-.PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-clean
+.PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-ledger gtk4-clean
 
 all: $(LIB)
 
@@ -206,6 +208,10 @@ gtk4-check: gtk4-headers gtk4-generated $(GTK4_PROBES:%.c=build/obj/gtk4/%.o)
 build/obj/gtk4/tests/%.o: tests/%.c
 	@mkdir -p $(dir $@)
 	$(GTK4_CC) $(GTK4_CFLAGS) -c $< -o $@
+
+gtk4-ledger: gtk4-headers
+	GTK4_CC='$(GTK4_CC)' GTK4_CFLAGS='$(GTK4_CFLAGS)' \
+	    $(HERE)/scripts/gtk4-ledger.sh
 
 gtk4-clean:
 	rm -rf $(GTK4_GEN) build/obj/gtk4

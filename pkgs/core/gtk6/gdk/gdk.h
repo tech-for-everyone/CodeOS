@@ -27,7 +27,6 @@
 #define __GDK_H_INSIDE__
 
 #include <gdk/gdkapplaunchcontext.h>
-#include <gdk/gdkcairo.h>
 #include <gdk/gdkcairocontext.h>
 #include <gdk/gdkcicpparams.h>
 #include <gdk/gdkclipboard.h>
@@ -66,8 +65,9 @@
 #include <gdk/gdkmemorytexturebuilder.h>
 #include <gdk/gdkmonitor.h>
 #include <gdk/gdkpaintable.h>
-#include <gdk/gdkpango.h>
-#include <gdk/deprecated/gdkpixbuf.h>
+/* GTK6: <gdk/gdkpango.h> and <gdk/deprecated/gdkpixbuf.h> used to be here.
+ * Text is QTextLayout (qt/qttext.h) and images are QImage, so both APIs are
+ * being removed rather than shimmed; see PLAN.md "Dependency surgery". */
 #include <gdk/gdkpopup.h>
 #include <gdk/gdkpopuplayout.h>
 #include <gdk/gdkrectangle.h>

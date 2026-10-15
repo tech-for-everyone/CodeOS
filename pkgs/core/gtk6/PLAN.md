@@ -152,9 +152,18 @@ generates into `build/glib/gobject/`.
    drift: the previous hand-staging had silently dropped `glib/deprecated/`,
    which `glib.h` includes unconditionally, so nothing that included glib could
    compile. Staged: 487 headers, 6 archives, 7 `.pc` files.
-3. **graphene** — DONE: `sysroot/usr/lib/libgraphene-1.0.a`,
-   `sysroot/usr/include/graphene-1.0/` and
-   `sysroot/usr/lib/pkgconfig/graphene-1.0.pc` are staged.
+3. **graphene** — PARTLY STALE. `sysroot/usr/{include,lib/graphene-1.0/include}/`
+   and `sysroot/usr/lib/{libgraphene-1.0.a,pkgconfig/graphene-1.0.pc}` are
+   present, and the compile side works once `-I sysroot/usr/lib/graphene-1.0/
+   include` is on the path (that is where `graphene-config.h` is installed, and
+   the C flags now carry it). But the archive itself is not reproducible: it was
+   built by an earlier session against the **deleted** `pkgs/core/gtk6/deps`
+   toolchain (`build/graphene/meson-logs/meson-log.txt` still names
+   `deps/bin/cc` and links `-lminc -liconv -lmathshim`), and its members are
+   **PIC** — `ar p … | readelf -r` shows `_GLOBAL_OFFSET_TABLE_` relocations,
+   which the freestanding contract (`-fno-PIC`) rules out.  graphene needs the
+   same treatment glib got: a `scripts/build-graphene.sh` cross-build with
+   `codeos-glib.cross`-style flags, and staging folded into a script.
    `graphene-gobject-1.0.pc` is still wanted.
 
 Then Phases 2–6 (`gdk/qt`, `gsk/qt`, text bridge, widgets, prune) can start.
@@ -243,13 +252,33 @@ The port itself is not done. What it needs:
   `gtktypebuiltins.c`, `gtkprivatetypebuiltins.c`, `gtksvgenumtypes.c`)
   `#include` every public header of their library, so they only compile once
   the cairo/pango/gdk-pixbuf surgery below is done.
+* **The port is measured, not guessed.** `scripts/gtk4-ledger.sh` (package
+  target `gtk4-ledger`) compiles every imported `gdk|gsk|gtk` `.c` outside
+  `*/tests/*` with `-fsyntax-only` under the target flags and writes
+  `build/gtk4-ledger.txt` (`OK <file>` / `FAIL <file> :: <reason>`), printing
+  `N/M` plus the top blockers. It never links, so a missing `cairo_*` or
+  `pango_*` shows up as a compile error naming the call site — which is exactly
+  the file-by-file work item. First run, after the `gdktypes.h` surgery:
+  **50/619**. The blockers are a stack and each surgery exposes the next layer:
+  before the `gdk.h` umbrella was cleaned up the first error for ~399 files was
+  `gdk/deprecated/gdkpixbuf.h`; removing it dropped that to 2 and the first
+  error became `unknown type name 'cairo_region_t'` (410 files, from
+  `gdk/gdkdrawcontext.h`), then `cairo_t` (43, `gdkcairocontext.h`), `cairo.h`
+  (26), `PangoDirection` (23), `cairo_rectangle_int_t` (20),
+  `gdk-pixbuf/gdk-pixbuf.h` (6). So the OK count stays at 50 while the wall
+  moves one header deeper; it only rises once the public umbrella is
+  cairo/pango-free.
 * **The dropped libraries are woven through the kept files**, so removing them
   is per-file surgery rather than a directory delete. The whole public-header
   dependency is small and enumerated: cairo needs 14 types + 34 functions in
   the headers alone, pango ~40 types, gdk-pixbuf just `GdkPixbuf`. The root is
   `gdk/gdktypes.h` (it includes `<cairo.h>` and `<pango/pango.h>`, and aliases
-  `GdkRectangle` to `cairo_rectangle_int_t`), so editing it is the first
-  surgery and `gdkcairo.h`/`gdkpango.h` are the next. The replacements are
+  `GdkRectangle` to `cairo_rectangle_int_t`); it and the `gdk/gdk.h` umbrella
+  are now both clean — `gdktypes.h` gives `GdkRectangle` its own definition, and
+  `gdk.h` no longer pulls in `<gdk/gdkcairo.h>`, `<gdk/gdkpango.h>` or
+  `<gdk/deprecated/gdkpixbuf.h>`. Those three headers still exist for the `.c`
+  files that implement them and get removed as their call sites are ported; the
+  next wall is `cairo_region_t` (see the ledger bullet). The replacements are
   already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during
   the bring-up.
 * **Upstream's `meson.build` files are imported as reference** but not used;
