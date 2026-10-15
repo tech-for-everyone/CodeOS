@@ -33,8 +33,12 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <gio/gio.h>
-#include <cairo.h>
-#include <pango/pango.h>
+
+/* GTK6: cairo.h and pango/pango.h used to be included here.  They are gone --
+ * drawing is QPainter and text is QTextLayout (qt/qttext.h), so the only thing
+ * gdktypes.h ever took from cairo was cairo_rectangle_int_t, which GDK owns
+ * outright now.  The rest of the tree is being moved off them file by file;
+ * see PLAN.md "Dependency surgery". */
 
 /* The system specific file gdkconfig.h contains such configuration
  * settings that are needed not only when compiling GDK (or GTK)
@@ -54,23 +58,16 @@ G_BEGIN_DECLS
  */
 #define GDK_CURRENT_TIME     0L
 
-#ifdef __GI_SCANNER__
-/* The introspection scanner is currently unable to lookup how
- * cairo_rectangle_int_t is actually defined. This prevents
- * introspection data for the GdkRectangle type to include fields
- * descriptions. To workaround this issue, we define it with the same
- * content as cairo_rectangle_int_t, but only under the introspection
- * define.
- */
+/* GTK6: GdkRectangle is GDK's own struct, not cairo's.  It has always been
+ * layout-identical to cairo_rectangle_int_t, which is why the two were
+ * interchangeable; there is no cairo in this tree any more, so the
+ * introspection workaround above is now just the definition. */
 struct _GdkRectangle
 {
     int x, y;
     int width, height;
 };
 typedef struct _GdkRectangle          GdkRectangle;
-#else
-typedef cairo_rectangle_int_t         GdkRectangle;
-#endif
 
 /* Forward declarations of commonly used types */
 typedef struct _GdkRGBA               GdkRGBA;

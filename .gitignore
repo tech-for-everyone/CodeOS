@@ -15,3 +15,9 @@ kernel/disk.img
 codeos-1*.iso
 codeos-1*.bin
 disk.img
+
+# Pristine upstream GTK4 checkout, used as the source for
+# pkgs/core/gtk6/scripts/import-gtk4.sh.  Reference only: the imported (and
+# pruned) result is what lives in pkgs/core/gtk6/, and nothing builds from here.
+/gtk4/
+

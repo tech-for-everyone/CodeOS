@@ -68,3 +68,6 @@ ls -lh build/glib/glib/libglib-2.0.a \
        build/glib/subprojects/pcre2-10.46/libpcre2-8.a \
        build/glib/subprojects/libffi-3.5.2/src/libffi.a \
        build/glib/subprojects/zlib-1.3.1/libz.a
+
+# ── 3. Stage headers + libraries into gtk6/sysroot ──────────────────────
+"$HERE/scripts/stage-glib.sh"

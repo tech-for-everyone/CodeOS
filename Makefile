@@ -33,7 +33,7 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: xora-pack xora-inspect xora-unpack xora-install xora-audit xora-all
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
-.PHONY: gtk6-all
+.PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -216,6 +216,14 @@ gtk6-glib:
 
 gtk6-all: gtk6 gtk6-glib
 	@printf "$(GREEN)gtk6 complete$(RESET)\n"
+
+gtk6-gtk4:
+	@printf "$(CYAN)$(BOLD)==> Generating the GTK4 headers (phase 5)...$(RESET)\n"
+	$(MAKE) -C pkgs/core/gtk6 gtk4-generated
+	@printf "$(GREEN)gtk6 GTK4 generated headers ready$(RESET)\n"
+
+gtk6-gtk4-check:
+	$(MAKE) -C pkgs/core/gtk6 gtk4-check
 
 gtk6-check:
 	@printf "$(CYAN)$(BOLD)==> Checking gtk6...$(RESET)\n"

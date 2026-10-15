@@ -140,13 +140,18 @@ generates into `build/glib/gobject/`.
    `subprojects/pcre2-10.46/libpcre2-8.a`,
    `subprojects/libffi-3.5.2/src/libffi.a`, `subprojects/zlib-1.3.1/libz.a`.
    Nothing is taken from the host.
-2. **Stage glib into `gtk6/sysroot/`.** DONE for headers and libs:
-   `sysroot/usr/include/glib/` (128 headers) and
-   `sysroot/usr/lib/lib{glib,gobject,gio,gmodule,gthread}-2.0.a` are staged, and
-   `build/glib/glib/glibconfig.h` is on the include path. Still wanted:
-   `glib-2.0.pc`/`gobject-2.0.pc`/`gio-2.0.pc` so a consumer can ask for glib as
-   a *target* dependency, and a script that reproduces the staging (today the
-   copy is manual).
+2. **Stage glib into `gtk6/sysroot/`.** DONE, and reproducible:
+   `scripts/build-glib.sh` now ends by running `scripts/stage-glib.sh`, which
+   copies the source headers *with their layout* (`glib/`, `glib/deprecated/`,
+   `gobject/`, `gio/`, `gmodule/`), overlays the generated headers from
+   `build/glib/*/` (`glibconfig.h`, `gvisibility.h`, `gversionmacros.h`,
+   `glib-enumtypes.h`, `gioenumtypes.h`, `gmoduleconf.h`, …), installs the five
+   archives, and rewrites the `meson-private/*.pc` files into
+   `sysroot/usr/lib/pkgconfig/` with the sysroot as `prefix` — so a consumer can
+   ask for glib as a *target* dependency. There is no manual copy left to
+   drift: the previous hand-staging had silently dropped `glib/deprecated/`,
+   which `glib.h` includes unconditionally, so nothing that included glib could
+   compile. Staged: 487 headers, 6 archives, 7 `.pc` files.
 3. **graphene** — DONE: `sysroot/usr/lib/libgraphene-1.0.a`,
    `sysroot/usr/include/graphene-1.0/` and
    `sysroot/usr/lib/pkgconfig/graphene-1.0.pc` are staged.
@@ -212,23 +217,47 @@ The import is additive — upstream files land next to gtk6's own `gdk/qt`,
 
 The port itself is not done. What it needs:
 
-* **Generated headers do not exist yet.** Upstream produces `gdkconfig.h`,
-  `gdk/gdkenumtypes.[ch]`, `gtk/gtktypebuiltins.[ch]`,
-  `gtk/gtkprivatetypebuiltins.[ch]`, `gsk/gskenumtypes.[ch]`, the
-  `*.c`/`*.h` from `*.template` (the `.template` files are imported), and the
-  gleaned enums/marshalers/resources with the host's `glib-mkenums`/
-  `glib-genmarshal`/`glib-compile-resources`. Nothing in the import compiles
-  without them, so this is the first build task.
+* **Generated headers: DONE.** `scripts/gen-gtk4-headers.py` reproduces
+  upstream's meson generators with the *target-built* glib tools in
+  `build/glib/`: `glib-mkenums` (via `gnome.mkenums_simple` and the explicit
+  `*.template` files) for `gdk/gdkenumtypes.[ch]`, `gsk/gskenumtypes.[ch]`,
+  `gtk/gtktypebuiltins.[ch]`, `gtk/gtkprivatetypebuiltins.[ch]`,
+  `gtk/css/gtkcssenumtypes.[ch]`, `gtk/svg/gtksvgenumtypes.[ch]`;
+  `glib-genmarshal` for `gdk/gdkmarshalers.[ch]` and `gtk/gtkmarshalers.[ch]`;
+  `configure_file` for `config.h`, `gdk/gdkconfig.h`, `gtk/gtkconfig.h`; the
+  version macros from `build-aux/meson/gen-visibility-macros.py` (GTK's own
+  generator, imported by `scripts/import-gtk4.sh`); and GTK's own
+  `gtk/gentypefuncs.py` for `gtk/gtktypefuncs.inc`. The file lists are read
+  straight out of the imported `meson.build` files, so they track the prune
+  list. `make gtk4-headers` regenerates; `make gtk4-check` regenerates and
+  compiles what can compile.
+  Decisions recorded in the script: `GDK_RENDERING_CAIRO=1`,
+  GL/Vulkan off, all `GDK_WINDOWING_*` off, `GTK_ACCESSIBILITY_ATSPI=0`.
+  Deferred: the `.gresource` bundles (`gdkresources.c`, `gskresources.c`,
+  `gtkresources.c` — they need `sassc`-built theme CSS) and the
+  `gdbus-codegen` outputs (`gtkdbus*`).
+* **The generated C that has no dropped-library dependency compiles on the
+  target** — `gdk/gdkmarshalers.c`, `gtk/gtkmarshalers.c`,
+  `gtk/css/gtkcssenumtypes.c` — which is what `make gtk4-check` asserts. The
+  other generated bodies (`gdkenumtypes.c`, `gskenumtypes.c`,
+  `gtktypebuiltins.c`, `gtkprivatetypebuiltins.c`, `gtksvgenumtypes.c`)
+  `#include` every public header of their library, so they only compile once
+  the cairo/pango/gdk-pixbuf surgery below is done.
 * **The dropped libraries are woven through the kept files**, so removing them
-  is per-file surgery rather than a directory delete: every `gdk/*.c` includes
-  `<cairo-gobject.h>`, and `gtk/*.c` uses pango (text), cairo (drawing) and
-  gdk-pixbuf (images). The replacements are already prototyped
-  (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during the bring-up.
+  is per-file surgery rather than a directory delete. The whole public-header
+  dependency is small and enumerated: cairo needs 14 types + 34 functions in
+  the headers alone, pango ~40 types, gdk-pixbuf just `GdkPixbuf`. The root is
+  `gdk/gdktypes.h` (it includes `<cairo.h>` and `<pango/pango.h>`, and aliases
+  `GdkRectangle` to `cairo_rectangle_int_t`), so editing it is the first
+  surgery and `gdkcairo.h`/`gdkpango.h` are the next. The replacements are
+  already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during
+  the bring-up.
 * **Upstream's `meson.build` files are imported as reference** but not used;
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's
   `LGPL-2.1-or-later`; the glib tree was swept to `GPL-3.0-or-later` and the
   GTK4 trees should be swept the same way once the file list settles.
 
-`make -C pkgs/core/gtk6 check` still builds only the three Qt modules.
+`make -C pkgs/core/gtk6 check` still builds only the three Qt modules and the
+compile-only fixture; `make gtk4-check` is the phase-5 gate.
 

@@ -17,6 +17,10 @@
 # ones the plan's surgery table calls for at import time (phase 6 prunes
 # further once the core links).
 #
+# Alongside the three trees it imports build-aux/meson/gen-visibility-macros.py:
+# GTK's own generator for gdkversionmacros.h / gdk-visibility.h, which
+# scripts/gen-gtk4-headers.py re-runs when it produces build/gen/.
+#
 # Usage:
 #   scripts/import-gtk4.sh [--dry-run] [--diff]
 #
@@ -51,13 +55,13 @@ PLATFORM_EXCLUDES=(
     --exclude='gtk/media'
 )
 
-DRY=0
+DRY_RUN=0
 DIFF=0
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=1 ;;
         --diff)    DIFF=1 ;;
-        *) echo "unknown option: $a" >&2; exit 2 ;;
+        *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 
@@ -67,15 +71,17 @@ if [[ ! -d "$GTK4_SRC/gdk" || ! -d "$GTK4_SRC/gsk" || ! -d "$GTK4_SRC/gtk" ]]; t
     exit 1
 fi
 
-if [[ "${1:-}" == "--dry-run" ]]; then
+if [[ "$DRY_RUN" == 1 ]]; then
     echo "==> dry run: $GTK4_SRC -> $HERE"
-    (cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk) \
+    (cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk \
+            build-aux/meson/gen-visibility-macros.py) \
         | tar tf - | sort
     exit 0
 fi
 
-if [[ "${1:-}" == "--diff" ]]; then
-    (cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk) \
+if [[ "$DIFF" == 1 ]]; then
+    (cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk \
+            build-aux/meson/gen-visibility-macros.py) \
         | tar tf - | sed 's:/$::' | grep -v '/$' | sort -u \
         | while read -r f; do
               [ -e "$HERE/$f" ] || printf 'missing %s\n' "$f"
@@ -88,8 +94,10 @@ echo "==> pruned backends:"
 printf '     %s\n' "${PLATFORM_EXCLUDES[@]}" | sed 's/--exclude=//'
 
 # tar over the three trees; gdk/qt and gsk/qt are not in upstream, so the
-# existing Qt backends survive untouched.
-(cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk) \
+# existing Qt backends survive untouched.  build-aux/meson/ is GTK's own
+# generated-header tooling (gen-visibility-macros.py).
+(cd "$GTK4_SRC" && tar cf - "${PLATFORM_EXCLUDES[@]}" gdk gsk gtk \
+        build-aux/meson/gen-visibility-macros.py) \
     | (cd "$HERE" && tar xf -)
 
 echo "==> imported:"

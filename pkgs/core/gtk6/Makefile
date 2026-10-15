@@ -89,7 +89,73 @@ DEP := $(OBJ:.o=.d)
 
 LIB := build/libgtk6qt.a
 
-.PHONY: all clean check
+# ---------------------------------------------------------------------------
+# Phase 5 — the imported GTK4 sources (gtk/, gdk/, gsk/)
+#
+# GTK4's meson generates a dozen headers before a single .c compiles:
+# config.h, gdkconfig.h, the enum-type tables, the marshallers and the version
+# macros.  scripts/gen-gtk4-headers.py reproduces that with the target-built
+# glib tools in build/glib/ and writes them to build/gen/.
+#
+# The C is built with the x86_64-elf GCC driver (toolchain/cc): the same
+# freestanding contract as the C++ modules, but the libc interfaces CodeOS has
+# not re-declared come from the host /usr/include — exactly what
+# codeos-glib.cross.in does for glib.  (The C++ modules use clang with
+# -nostdinc + stubs instead, because Qt brings its own runtime.)
+#
+# Only the generated .c that have no dropped-library dependency compile yet;
+# the rest join the list as the cairo/pango/gdk-pixbuf surgery lands.
+# ---------------------------------------------------------------------------
+
+GTK4_GEN   ?= $(HERE)/build/gen
+GTK4_STAMP := $(GTK4_GEN)/.stamp
+GTK4_CC    ?= $(HERE)/toolchain/cc
+
+GTK4_HEADER_FILES := \
+    config.h \
+    gdk/gdkconfig.h gtk/gtkconfig.h \
+    gdk/version/gdkversionmacros.h gdk/version/gdk-visibility.h \
+    gdk/gdkenumtypes.h gdk/gdkenumtypes.c \
+    gdk/gdkmarshalers.h gdk/gdkmarshalers.c \
+    gsk/gskenumtypes.h gsk/gskenumtypes.c \
+    gtk/gtktypebuiltins.h gtk/gtktypebuiltins.c \
+    gtk/gtkprivatetypebuiltins.h gtk/gtkprivatetypebuiltins.c \
+    gtk/gtkmarshalers.h gtk/gtkmarshalers.c \
+    gtk/css/gtkcssenumtypes.h gtk/css/gtkcssenumtypes.c \
+    gtk/svg/gtksvgenumtypes.h gtk/svg/gtksvgenumtypes.c \
+    gtk/gtktypefuncs.inc
+
+GTK4_CFLAGS = \
+    -std=gnu11 -O2 -g -Wall \
+    -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx \
+    -fno-stack-protector -fno-PIC \
+    -D_GNU_SOURCE -D__codeos__ -D__linux__ \
+    -DGTK_COMPILATION -DG_LOG_USE_STRUCTURED=1 \
+    -isystem /usr/include -isystem /usr/local/include \
+    -isystem /usr/lib/gcc/x86_64-pc-linux-gnu/$(HOST_GXX_VERSION)/include \
+    -isystem $(QTDIR)/include \
+    -I$(GLIB_SYSROOT)/include \
+    -I$(GLIB_SYSROOT)/include/glib \
+    -I$(GLIB_SYSROOT)/include/gmodule \
+    -I$(GLIB_SYSROOT)/include/graphene-1.0 \
+    -I$(GLIB_BUILD) -I$(GLIB_BUILD)/glib \
+    -I$(GTK4_GEN) -I$(HERE) \
+    -I$(HERE)/gdk -I$(HERE)/gsk -I$(HERE)/gtk \
+    -I$(HERE)/gtk/css -I$(HERE)/gtk/svg
+
+GTK4_GEN_SRCS := \
+    gdk/gdkmarshalers.c \
+    gtk/gtkmarshalers.c \
+    gtk/css/gtkcssenumtypes.c
+
+GTK4_GEN_OBJ := $(patsubst %.c,build/obj/gtk4/%.o,$(GTK4_GEN_SRCS))
+
+# Compile-only probes for the surgery: each adds a public header that upstream
+# dragged cairo/pango in through.  They are never linked or run.
+GTK4_PROBES := tests/gdktypes.c
+
+
+.PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-clean
 
 all: $(LIB)
 
@@ -109,6 +175,40 @@ check: $(LIB) tests/linkcheck.o
 tests/linkcheck.o: tests/linkcheck.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
+# Regenerate the GTK4 config/enum/marshaler headers.  The target-built glib
+# tools are the only prerequisite, so glib is rebuilt only when build/glib is
+# absent (scripts/build-glib.sh is not itself incremental).
+gtk4-headers: $(GTK4_STAMP)
+
+$(GLIB_BUILD)/gobject/glib-mkenums:
+	$(HERE)/scripts/build-glib.sh
+
+$(GTK4_STAMP): $(HERE)/scripts/gen-gtk4-headers.py | $(GLIB_BUILD)/gobject/glib-mkenums
+	@mkdir -p $(GTK4_GEN)
+	python3 $(HERE)/scripts/gen-gtk4-headers.py \
+	    --out $(GTK4_GEN) --glib-build $(GLIB_BUILD)
+	@touch $@
+
+gtk4-generated: $(GTK4_GEN_OBJ)
+
+build/obj/gtk4/%.o: $(GTK4_STAMP)
+	@mkdir -p $(dir $@)
+	$(GTK4_CC) $(GTK4_CFLAGS) -c $(GTK4_GEN)/$*.c -o $@
+
+gtk4-check: gtk4-headers gtk4-generated $(GTK4_PROBES:%.c=build/obj/gtk4/%.o)
+	@for f in $(GTK4_HEADER_FILES); do \
+	    test -s "$(GTK4_GEN)/$$f" || \
+	        { echo "gtk4-check: missing or empty $(GTK4_GEN)/$$f" >&2; exit 1; }; \
+	done
+	@echo "gtk4-check: $(words $(GTK4_HEADER_FILES)) generated files, $(words $(GTK4_GEN_SRCS)) generated C files and $(words $(GTK4_PROBES)) probes compiled on the target"
+
+build/obj/gtk4/tests/%.o: tests/%.c
+	@mkdir -p $(dir $@)
+	$(GTK4_CC) $(GTK4_CFLAGS) -c $< -o $@
+
+gtk4-clean:
+	rm -rf $(GTK4_GEN) build/obj/gtk4
 
 clean:
 	rm -rf build/obj tests/linkcheck.o tests/linkcheck.d $(LIB)
