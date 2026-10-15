@@ -25,7 +25,7 @@
 #include "config.h"
 
 #include "gdkrectangle.h"
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 
 /**
@@ -37,7 +37,7 @@
  *
  * Represents a rectangle.
  *
- * `GdkRectangle` is identical to `cairo_rectangle_t`. Together with Cairo’s
+ * `GdkRectangle` is identical to `GdkPaintRectangle`. Together with Cairo’s
  * `GdkRegion` data type, these are the central types for representing
  * sets of pixels.
  *
@@ -214,11 +214,11 @@ gdk_rectangle_register_value_transform_funcs (GType gtype_gdk_rectangle)
    * GDK_TYPE_RECTANGLE), the program will wait indefinitely at
    * g_once_init_enter() in gdk_rectangle_get_type().
    */
-  g_value_register_transform_func (CAIRO_GOBJECT_TYPE_RECTANGLE_INT,
+  g_value_register_transform_func (GDK_TYPE_RECTANGLE,
                                    gtype_gdk_rectangle,
                                    gdk_rectangle_value_transform_rect);
   g_value_register_transform_func (gtype_gdk_rectangle,
-                                   CAIRO_GOBJECT_TYPE_RECTANGLE_INT,
+                                   GDK_TYPE_RECTANGLE,
                                    gdk_rectangle_value_transform_rect);
 }
 

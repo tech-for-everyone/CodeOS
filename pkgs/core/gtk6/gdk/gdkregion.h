@@ -35,6 +35,13 @@ typedef enum
 
 typedef struct _GdkRegion GdkRegion;
 
+/* Boxed GType.  This replaces cairo-gobject's CAIRO_GOBJECT_TYPE_REGION,
+ * which is what GDK used to expose regions as properties and GValue payloads.
+ * GDK_TYPE_REGION is spelled in the sources exactly where the cairo name was. */
+GDK_AVAILABLE_IN_ALL
+GType             gdk_region_get_type            (void) G_GNUC_CONST;
+#define GDK_TYPE_REGION (gdk_region_get_type ())
+
 GDK_AVAILABLE_IN_ALL
 GdkRegion *       gdk_region_create              (void);
 GDK_AVAILABLE_IN_ALL

@@ -114,21 +114,21 @@ gsk_stroke_free (GskStroke *self)
  */
 void
 gsk_stroke_to_cairo (const GskStroke *self,
-                     cairo_t         *cr)
+                     GdkPainter         *cr)
 {
-  cairo_set_line_width (cr, self->line_width);
+  gdk_paint_set_line_width (cr, self->line_width);
 
   /* gcc can optimize that to a direct case. This catches later additions to the enum */
   switch (self->line_cap)
     {
       case GSK_LINE_CAP_BUTT:
-        cairo_set_line_cap (cr, CAIRO_LINE_CAP_BUTT);
+        gdk_paint_set_line_cap (cr, GDK_PAINT_LINE_CAP_BUTT);
         break;
       case GSK_LINE_CAP_ROUND:
-        cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
+        gdk_paint_set_line_cap (cr, GDK_PAINT_LINE_CAP_ROUND);
         break;
       case GSK_LINE_CAP_SQUARE:
-        cairo_set_line_cap (cr, CAIRO_LINE_CAP_SQUARE);
+        gdk_paint_set_line_cap (cr, GDK_PAINT_LINE_CAP_SQUARE);
         break;
       default:
         g_assert_not_reached ();
@@ -139,20 +139,20 @@ gsk_stroke_to_cairo (const GskStroke *self,
   switch (self->line_join)
     {
       case GSK_LINE_JOIN_MITER:
-        cairo_set_line_join (cr, CAIRO_LINE_JOIN_MITER);
+        gdk_paint_set_line_join (cr, GDK_PAINT_LINE_JOIN_MITER);
         break;
       case GSK_LINE_JOIN_ROUND:
-        cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
+        gdk_paint_set_line_join (cr, GDK_PAINT_LINE_JOIN_ROUND);
         break;
       case GSK_LINE_JOIN_BEVEL:
-        cairo_set_line_join (cr, CAIRO_LINE_JOIN_BEVEL);
+        gdk_paint_set_line_join (cr, GDK_PAINT_LINE_JOIN_BEVEL);
         break;
       default:
         g_assert_not_reached ();
         break;
     }
 
-  cairo_set_miter_limit (cr, self->miter_limit);
+  gdk_paint_set_miter_limit (cr, self->miter_limit);
 
   if (self->dash_length)
     {
@@ -163,10 +163,10 @@ gsk_stroke_to_cairo (const GskStroke *self,
         {
           dash[i] = self->dash[i];
         }
-      cairo_set_dash (cr, dash, self->n_dash, self->dash_offset);
+      gdk_paint_set_dash (cr, dash, self->n_dash, self->dash_offset);
     }
   else
-    cairo_set_dash (cr, NULL, 0, 0.0);
+    gdk_paint_set_dash (cr, NULL, 0, 0.0);
 }
 
 /**

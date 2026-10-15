@@ -62,7 +62,7 @@ gsk_border_node_finalize (GskRenderNode *node)
 }
 
 static void
-gsk_border_node_mesh_add_patch (cairo_pattern_t *pattern,
+gsk_border_node_mesh_add_patch (GdkPaintPattern *pattern,
                                 GdkColorState   *ccs,
                                 const GdkColor  *color,
                                 double           x0,
@@ -78,21 +78,21 @@ gsk_border_node_mesh_add_patch (cairo_pattern_t *pattern,
 
   gdk_color_to_float (color, ccs, values);
 
-  cairo_mesh_pattern_begin_patch (pattern);
-  cairo_mesh_pattern_move_to (pattern, x0, y0);
-  cairo_mesh_pattern_line_to (pattern, x1, y1);
-  cairo_mesh_pattern_line_to (pattern, x2, y2);
-  cairo_mesh_pattern_line_to (pattern, x3, y3);
-  cairo_mesh_pattern_set_corner_color_rgba (pattern, 0, values[0], values[1], values[2], values[3]);
-  cairo_mesh_pattern_set_corner_color_rgba (pattern, 1, values[0], values[1], values[2], values[3]);
-  cairo_mesh_pattern_set_corner_color_rgba (pattern, 2, values[0], values[1], values[2], values[3]);
-  cairo_mesh_pattern_set_corner_color_rgba (pattern, 3, values[0], values[1], values[2], values[3]);
-  cairo_mesh_pattern_end_patch (pattern);
+  gdk_paint_mesh_pattern_begin_patch (pattern);
+  gdk_paint_mesh_pattern_move_to (pattern, x0, y0);
+  gdk_paint_mesh_pattern_line_to (pattern, x1, y1);
+  gdk_paint_mesh_pattern_line_to (pattern, x2, y2);
+  gdk_paint_mesh_pattern_line_to (pattern, x3, y3);
+  gdk_paint_mesh_pattern_set_corner_color_rgba (pattern, 0, values[0], values[1], values[2], values[3]);
+  gdk_paint_mesh_pattern_set_corner_color_rgba (pattern, 1, values[0], values[1], values[2], values[3]);
+  gdk_paint_mesh_pattern_set_corner_color_rgba (pattern, 2, values[0], values[1], values[2], values[3]);
+  gdk_paint_mesh_pattern_set_corner_color_rgba (pattern, 3, values[0], values[1], values[2], values[3]);
+  gdk_paint_mesh_pattern_end_patch (pattern);
 }
 
 static void
 gsk_border_node_draw (GskRenderNode *node,
-                      cairo_t       *cr,
+                      GdkPainter       *cr,
                       GskCairoData  *data)
 {
   GskBorderNode *self = (GskBorderNode *) node;
@@ -109,7 +109,7 @@ gsk_border_node_draw (GskRenderNode *node,
                            self->border_width[2], self->border_width[3]);
   ignore = gsk_cairo_rect_snap (cr, &inside.bounds, self->border_snap, &inside.bounds);
 
-  cairo_set_fill_rule (cr, CAIRO_FILL_RULE_EVEN_ODD);
+  gdk_paint_set_fill_rule (cr, GDK_PAINT_FILL_RULE_EVEN_ODD);
   gsk_rounded_rect_path (&outside, cr);
   gsk_rounded_rect_path (&inside, cr);
 
@@ -117,7 +117,7 @@ gsk_border_node_draw (GskRenderNode *node,
       gdk_color_equal (&self->border_color[0], &self->border_color[2]) &&
       gdk_color_equal (&self->border_color[0], &self->border_color[3]))
     {
-      gdk_cairo_set_source_color (cr, data->ccs, &self->border_color[0]);
+      gdk_painter_set_source_color (cr, data->ccs, &self->border_color[0]);
     }
   else
     {
@@ -134,17 +134,17 @@ gsk_border_node_draw (GskRenderNode *node,
        * or vertical, depending on if the rect is wider or taller.
        * We use the 4 sides spanned up by connecting the line to the corner
        * points to color the regions of the rectangle differently.
-       * Note that the call to cairo_fill() will add the potential final
+       * Note that the call to gdk_paint_fill() will add the potential final
        * segment by closing the path, so we don't have to care.
        */
-      cairo_pattern_t *mesh;
-      cairo_matrix_t mat;
+      GdkPaintPattern *mesh;
+      GdkPaintMatrix mat;
       graphene_point_t tl, br;
       float scale;
 
-      mesh = cairo_pattern_create_mesh ();
-      cairo_matrix_init_translate (&mat, -bounds->origin.x, -bounds->origin.y);
-      cairo_pattern_set_matrix (mesh, &mat);
+      mesh = gdk_paint_pattern_create_mesh ();
+      gdk_paint_matrix_init_translate (&mat, -bounds->origin.x, -bounds->origin.y);
+      gdk_paint_pattern_set_matrix (mesh, &mat);
 
       scale = MIN (bounds->size.width / (self->border_width[1] + self->border_width[3]),
                    bounds->size.height / (self->border_width[0] + self->border_width[2]));
@@ -203,11 +203,11 @@ gsk_border_node_draw (GskRenderNode *node,
                                           0, bounds->size.height);
         }
 
-      cairo_set_source (cr, mesh);
-      cairo_pattern_destroy (mesh);
+      gdk_paint_set_source (cr, mesh);
+      gdk_paint_pattern_destroy (mesh);
     }
 
-  cairo_fill (cr);
+  gdk_paint_fill (cr);
 }
 
 static void

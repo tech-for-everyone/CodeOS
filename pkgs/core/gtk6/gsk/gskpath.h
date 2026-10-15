@@ -101,7 +101,7 @@ GskPath *               gsk_path_parse                          (const char     
 
 GDK_AVAILABLE_IN_4_14
 void                    gsk_path_to_cairo                       (GskPath                *self,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 
 GDK_AVAILABLE_IN_4_14
 gboolean                gsk_path_is_empty                       (GskPath                *self);

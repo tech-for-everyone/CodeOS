@@ -34,7 +34,7 @@ struct _GskCairoNode
 {
   GskRenderNode render_node;
 
-  cairo_surface_t *surface;
+  GdkPaintSurface *surface;
 };
 
 static void
@@ -44,14 +44,14 @@ gsk_cairo_node_finalize (GskRenderNode *node)
   GskRenderNodeClass *parent_class = g_type_class_peek (g_type_parent (GSK_TYPE_CAIRO_NODE));
 
   if (self->surface)
-    cairo_surface_destroy (self->surface);
+    gdk_paint_surface_destroy (self->surface);
 
   parent_class->finalize (node);
 }
 
 static void
 gsk_cairo_node_draw (GskRenderNode *node,
-                     cairo_t       *cr,
+                     GdkPainter       *cr,
                      GskCairoData  *data)
 {
   GskCairoNode *self = (GskCairoNode *) node;
@@ -61,24 +61,24 @@ gsk_cairo_node_draw (GskRenderNode *node,
 
   if (gdk_color_state_equal (data->ccs, GDK_COLOR_STATE_SRGB))
     {
-      cairo_set_source_surface (cr, self->surface, 0, 0);
-      cairo_paint (cr);
+      gdk_paint_set_source_surface (cr, self->surface, 0, 0);
+      gdk_paint_paint (cr);
     }
   else
     {
-      cairo_save (cr);
-      gdk_cairo_rect (cr, &node->bounds);
-      cairo_clip (cr);
-      cairo_push_group (cr);
+      gdk_paint_save (cr);
+      gdk_painter_rect (cr, &node->bounds);
+      gdk_paint_clip (cr);
+      gdk_paint_push_group (cr);
 
-      cairo_set_source_surface (cr, self->surface, 0, 0);
-      cairo_paint (cr);
-      gdk_cairo_surface_convert_color_state (cairo_get_group_target (cr),
+      gdk_paint_set_source_surface (cr, self->surface, 0, 0);
+      gdk_paint_paint (cr);
+      gdk_painter_surface_convert_color_state (gdk_paint_get_group_target (cr),
                                              GDK_COLOR_STATE_SRGB,
                                              data->ccs);
-      cairo_pop_group_to_source (cr);
-      cairo_paint (cr);
-      cairo_restore (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_paint (cr);
+      gdk_paint_restore (cr);
     }
 }
 
@@ -112,7 +112,7 @@ GSK_DEFINE_RENDER_NODE_TYPE (GskCairoNode, gsk_cairo_node)
  *
  * Returns: (transfer none): a Cairo surface
  */
-cairo_surface_t *
+GdkPaintSurface *
 gsk_cairo_node_get_surface (GskRenderNode *node)
 {
   GskCairoNode *self = (GskCairoNode *) node;
@@ -124,14 +124,14 @@ gsk_cairo_node_get_surface (GskRenderNode *node)
 
 void
 gsk_cairo_node_set_surface (GskRenderNode   *node,
-                            cairo_surface_t *surface)
+                            GdkPaintSurface *surface)
 {
   GskCairoNode *self = (GskCairoNode *) node;
 
   g_return_if_fail (GSK_IS_RENDER_NODE_TYPE (node, GSK_CAIRO_NODE));
   g_return_if_fail (self->surface == NULL);
 
-  self->surface = cairo_surface_reference (surface);
+  self->surface = gdk_paint_surface_reference (surface);
 }
 
 /**
@@ -174,14 +174,14 @@ gsk_cairo_node_new (const graphene_rect_t *bounds)
  * rendering to @renderer.
  *
  * Returns: (transfer full): a Cairo context used for drawing; use
- *   cairo_destroy() when done drawing
+ *   gdk_paint_destroy() when done drawing
  */
-cairo_t *
+GdkPainter *
 gsk_cairo_node_get_draw_context (GskRenderNode *node)
 {
   GskCairoNode *self = (GskCairoNode *) node;
   int width, height;
-  cairo_t *res;
+  GdkPainter *res;
 
   g_return_val_if_fail (GSK_IS_RENDER_NODE_TYPE (node, GSK_CAIRO_NODE), NULL);
 
@@ -190,28 +190,28 @@ gsk_cairo_node_get_draw_context (GskRenderNode *node)
 
   if (width <= 0 || height <= 0)
     {
-      cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 0, 0);
-      res = cairo_create (surface);
-      cairo_surface_destroy (surface);
+      GdkPaintSurface *surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, 0, 0);
+      res = gdk_paint_create (surface);
+      gdk_paint_surface_destroy (surface);
     }
   else if (self->surface == NULL)
     {
-      self->surface = cairo_recording_surface_create (CAIRO_CONTENT_COLOR_ALPHA,
-                                                      &(cairo_rectangle_t) {
+      self->surface = gdk_paint_recording_surface_create (GDK_PAINT_CONTENT_COLOR_ALPHA,
+                                                      &(GdkPaintRectangle) {
                                                           node->bounds.origin.x,
                                                           node->bounds.origin.y,
                                                           node->bounds.size.width,
                                                           node->bounds.size.height
                                                       });
-      res = cairo_create (self->surface);
+      res = gdk_paint_create (self->surface);
     }
   else
     {
-      res = cairo_create (self->surface);
+      res = gdk_paint_create (self->surface);
     }
 
-  gdk_cairo_rect (res, &node->bounds);
-  cairo_clip (res);
+  gdk_painter_rect (res, &node->bounds);
+  gdk_paint_clip (res);
 
   return res;
 }

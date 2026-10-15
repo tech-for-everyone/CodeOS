@@ -339,12 +339,12 @@ gsk_turbulence_node_finalize (GskRenderNode *node)
 
 static void
 gsk_turbulence_node_draw (GskRenderNode *node,
-                          cairo_t       *cr,
+                          GdkPainter       *cr,
                           GskCairoData  *data)
 {
   GskTurbulenceNode *self = (GskTurbulenceNode *) node;
   graphene_rect_t bounds;
-  cairo_surface_t *surface;
+  GdkPaintSurface *surface;
   uint8_t *pixels;
   int stride;
   int width, height;
@@ -364,9 +364,9 @@ gsk_turbulence_node_draw (GskRenderNode *node,
 
   cs_equal = gdk_color_state_equal (data->ccs, self->color_state);
 
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
-  pixels = cairo_image_surface_get_data (surface);
-  stride = cairo_image_surface_get_stride (surface);
+  surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
+  pixels = gdk_paint_image_surface_get_data (surface);
+  stride = gdk_paint_image_surface_get_stride (surface);
 
   for (y = 0; y < height; y++)
     {
@@ -422,16 +422,16 @@ gsk_turbulence_node_draw (GskRenderNode *node,
           g *= a;
           b *= a;
 
-          row[x] = gdk_cairo_pixel_from_float ((float[4]) { r, g, b, a });
+          row[x] = gdk_painter_pixel_from_float ((float[4]) { r, g, b, a });
         }
     }
 
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 
-  cairo_set_source_surface (cr, surface, bounds.origin.x, bounds.origin.y);
-  cairo_paint (cr);
+  gdk_paint_set_source_surface (cr, surface, bounds.origin.x, bounds.origin.y);
+  gdk_paint_paint (cr);
 
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 }
 
 static void

@@ -58,67 +58,67 @@ gsk_texture_scale_node_finalize (GskRenderNode *node)
 
 static void
 gsk_texture_scale_node_draw (GskRenderNode *node,
-                             cairo_t       *cr,
+                             GdkPainter       *cr,
                              GskCairoData  *data)
 {
   GskTextureScaleNode *self = (GskTextureScaleNode *) node;
-  cairo_surface_t *surface;
-  cairo_pattern_t *pattern;
-  cairo_matrix_t matrix;
-  cairo_filter_t filters[] = {
-    CAIRO_FILTER_BILINEAR,
-    CAIRO_FILTER_NEAREST,
-    CAIRO_FILTER_GOOD,
+  GdkPaintSurface *surface;
+  GdkPaintPattern *pattern;
+  GdkPaintMatrix matrix;
+  GdkPaintFilter filters[] = {
+    GDK_PAINT_FILTER_BILINEAR,
+    GDK_PAINT_FILTER_NEAREST,
+    GDK_PAINT_FILTER_GOOD,
   };
-  cairo_t *cr2;
-  cairo_surface_t *surface2;
+  GdkPainter *cr2;
+  GdkPaintSurface *surface2;
   graphene_rect_t bounds, clip_rect;
 
   if (!gsk_cairo_rect_snap (cr, &node->bounds, self->snap, &bounds))
     return;
 
   /* Make sure we draw the minimum region by using the clip */
-  gdk_cairo_rect (cr, &bounds);
-  cairo_clip (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_clip (cr);
   _graphene_rect_init_from_clip_extents (&clip_rect, cr);
   if (clip_rect.size.width <= 0 || clip_rect.size.height <= 0)
     return;
 
-  surface2 = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+  surface2 = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32,
                                          (int) ceilf (clip_rect.size.width),
                                          (int) ceilf (clip_rect.size.height));
-  cairo_surface_set_device_offset (surface2, -clip_rect.origin.x, -clip_rect.origin.y);
-  cr2 = cairo_create (surface2);
+  gdk_paint_surface_set_device_offset (surface2, -clip_rect.origin.x, -clip_rect.origin.y);
+  cr2 = gdk_paint_create (surface2);
 
   surface = gdk_texture_download_surface (self->texture, data->ccs);
-  pattern = cairo_pattern_create_for_surface (surface);
-  cairo_pattern_set_extend (pattern, CAIRO_EXTEND_PAD);
+  pattern = gdk_paint_pattern_create_for_surface (surface);
+  gdk_paint_pattern_set_extend (pattern, GDK_PAINT_EXTEND_PAD);
 
-  cairo_matrix_init_scale (&matrix,
+  gdk_paint_matrix_init_scale (&matrix,
                            gdk_texture_get_width (self->texture) / bounds.size.width,
                            gdk_texture_get_height (self->texture) / bounds.size.height);
-  cairo_matrix_translate (&matrix, -bounds.origin.x, -bounds.origin.y);
-  cairo_pattern_set_matrix (pattern, &matrix);
-  cairo_pattern_set_filter (pattern, filters[self->filter]);
+  gdk_paint_matrix_translate (&matrix, -bounds.origin.x, -bounds.origin.y);
+  gdk_paint_pattern_set_matrix (pattern, &matrix);
+  gdk_paint_pattern_set_filter (pattern, filters[self->filter]);
 
-  cairo_set_source (cr2, pattern);
-  cairo_pattern_destroy (pattern);
-  cairo_surface_destroy (surface);
+  gdk_paint_set_source (cr2, pattern);
+  gdk_paint_pattern_destroy (pattern);
+  gdk_paint_surface_destroy (surface);
 
-  gdk_cairo_rect (cr2, &bounds);
-  cairo_fill (cr2);
+  gdk_painter_rect (cr2, &bounds);
+  gdk_paint_fill (cr2);
 
-  cairo_destroy (cr2);
+  gdk_paint_destroy (cr2);
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
-  cairo_set_source_surface (cr, surface2, 0, 0);
-  cairo_pattern_set_extend (cairo_get_source (cr), CAIRO_EXTEND_PAD);
-  cairo_surface_destroy (surface2);
+  gdk_paint_set_source_surface (cr, surface2, 0, 0);
+  gdk_paint_pattern_set_extend (gdk_paint_get_source (cr), GDK_PAINT_EXTEND_PAD);
+  gdk_paint_surface_destroy (surface2);
 
-  cairo_paint (cr);
+  gdk_paint_paint (cr);
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 static void

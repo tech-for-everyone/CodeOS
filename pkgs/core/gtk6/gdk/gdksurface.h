@@ -100,9 +100,9 @@ gboolean      gdk_surface_get_device_position (GdkSurface      *surface,
                                                GdkModifierType *mask);
 
 GDK_DEPRECATED_IN_4_12
-cairo_surface_t *
+GdkPaintSurface *
               gdk_surface_create_similar_surface (GdkSurface *surface,
-                                                  cairo_content_t  content,
+                                                  GdkPaintContent  content,
                                                   int              width,
                                                   int              height);
 
@@ -123,7 +123,7 @@ void       gdk_surface_set_opaque_region        (GdkSurface      *surface,
                                                  GdkRegion *region);
 
 GDK_DEPRECATED_IN_4_18
-GdkCairoContext *gdk_surface_create_cairo_context(GdkSurface    *surface);
+GdkPaintContext *gdk_surface_create_paint_context(GdkSurface    *surface);
 GDK_AVAILABLE_IN_ALL
 GdkGLContext * gdk_surface_create_gl_context    (GdkSurface     *surface,
                                                  GError        **error);

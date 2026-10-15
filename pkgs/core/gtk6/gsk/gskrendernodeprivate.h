@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gskrendernode.h"
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 #include "gdk/gdkmemoryformatprivate.h"
 #include "gdk/gdkcolorprivate.h"
@@ -78,7 +78,7 @@ struct _GskRenderNodeClass
 
   void          (* finalize)                            (GskRenderNode               *node);
   void          (* draw)                                (GskRenderNode               *node,
-                                                         cairo_t                     *cr,
+                                                         GdkPainter                     *cr,
                                                          GskCairoData                *data);
   gboolean      (* can_diff)                            (const GskRenderNode         *node1,
                                                          const GskRenderNode         *node2);
@@ -132,13 +132,13 @@ void            gsk_render_node_diff_impossible         (GskRenderNode          
                                                          GskRenderNode               *node2,
                                                          GskDiffData                 *data);
 void            gsk_render_node_draw_full               (GskRenderNode               *node,
-                                                         cairo_t                     *cr,
+                                                         GdkPainter                     *cr,
                                                          GskCairoData                *data);
 void            gsk_render_node_draw_with_color_state   (GskRenderNode               *node,
-                                                         cairo_t                     *cr,
+                                                         GdkPainter                     *cr,
                                                          GdkColorState               *color_state);
 void            gsk_render_node_draw_fallback           (GskRenderNode               *node,
-                                                         cairo_t                     *cr);
+                                                         GdkPainter                     *cr);
 void            gsk_render_node_render_opacity          (GskRenderNode               *self,
                                                          GskOpacityData              *data);
 

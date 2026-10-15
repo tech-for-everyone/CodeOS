@@ -23,7 +23,7 @@
 
 #include "gtkrenderborderprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <math.h>
 
 #include "gtkcssbordervalueprivate.h"
@@ -110,8 +110,8 @@ gtk_border_image_compute_border_size (GtkBorderImageSliceSize  sizes[3],
 }
 
 static void
-gtk_border_image_render_slice (cairo_t           *cr,
-                               cairo_surface_t   *slice,
+gtk_border_image_render_slice (GdkPainter           *cr,
+                               GdkPaintSurface   *slice,
                                double             slice_width,
                                double             slice_height,
                                double             x,
@@ -123,9 +123,9 @@ gtk_border_image_render_slice (cairo_t           *cr,
 {
   double hscale, vscale;
   double xstep, ystep;
-  cairo_extend_t extend = CAIRO_EXTEND_PAD;
-  cairo_matrix_t matrix;
-  cairo_pattern_t *pattern;
+  GdkPaintExtend extend = GDK_PAINT_EXTEND_PAD;
+  GdkPaintMatrix matrix;
+  GdkPaintPattern *pattern;
 
   /* We can't draw center tiles yet */
   g_assert (hrepeat == GTK_CSS_REPEAT_STYLE_STRETCH || vrepeat == GTK_CSS_REPEAT_STYLE_STRETCH);
@@ -138,14 +138,14 @@ gtk_border_image_render_slice (cairo_t           *cr,
   switch (hrepeat)
     {
     case GTK_CSS_REPEAT_STYLE_REPEAT:
-      extend = CAIRO_EXTEND_REPEAT;
+      extend = GDK_PAINT_EXTEND_REPEAT;
       hscale = vscale;
       break;
     case GTK_CSS_REPEAT_STYLE_SPACE:
       {
         double space, n;
 
-        extend = CAIRO_EXTEND_NONE;
+        extend = GDK_PAINT_EXTEND_NONE;
         hscale = vscale;
 
         xstep = hscale * slice_width;
@@ -159,7 +159,7 @@ gtk_border_image_render_slice (cairo_t           *cr,
     case GTK_CSS_REPEAT_STYLE_STRETCH:
       break;
     case GTK_CSS_REPEAT_STYLE_ROUND:
-      extend = CAIRO_EXTEND_REPEAT;
+      extend = GDK_PAINT_EXTEND_REPEAT;
       hscale = width / (slice_width * MAX (round (width / (slice_width * vscale)), 1));
       break;
     default:
@@ -170,14 +170,14 @@ gtk_border_image_render_slice (cairo_t           *cr,
   switch (vrepeat)
     {
     case GTK_CSS_REPEAT_STYLE_REPEAT:
-      extend = CAIRO_EXTEND_REPEAT;
+      extend = GDK_PAINT_EXTEND_REPEAT;
       vscale = hscale;
       break;
     case GTK_CSS_REPEAT_STYLE_SPACE:
       {
         double space, n;
 
-        extend = CAIRO_EXTEND_NONE;
+        extend = GDK_PAINT_EXTEND_NONE;
         vscale = hscale;
 
         ystep = vscale * slice_height;
@@ -191,7 +191,7 @@ gtk_border_image_render_slice (cairo_t           *cr,
     case GTK_CSS_REPEAT_STYLE_STRETCH:
       break;
     case GTK_CSS_REPEAT_STYLE_ROUND:
-      extend = CAIRO_EXTEND_REPEAT;
+      extend = GDK_PAINT_EXTEND_REPEAT;
       vscale = height / (slice_height * MAX (round (height / (slice_height * hscale)), 1));
       break;
     default:
@@ -199,38 +199,38 @@ gtk_border_image_render_slice (cairo_t           *cr,
       break;
     }
 
-  pattern = cairo_pattern_create_for_surface (slice);
+  pattern = gdk_paint_pattern_create_for_surface (slice);
 
-  cairo_matrix_init_translate (&matrix,
+  gdk_paint_matrix_init_translate (&matrix,
                                hrepeat == GTK_CSS_REPEAT_STYLE_REPEAT ? slice_width / 2 : 0,
                                vrepeat == GTK_CSS_REPEAT_STYLE_REPEAT ? slice_height / 2 : 0);
-  cairo_matrix_scale (&matrix, 1 / hscale, 1 / vscale);
-  cairo_matrix_translate (&matrix,
+  gdk_paint_matrix_scale (&matrix, 1 / hscale, 1 / vscale);
+  gdk_paint_matrix_translate (&matrix,
                           hrepeat == GTK_CSS_REPEAT_STYLE_REPEAT ? - width / 2 : 0,
                           vrepeat == GTK_CSS_REPEAT_STYLE_REPEAT ? - height / 2 : 0);
 
-  cairo_pattern_set_matrix (pattern, &matrix);
-  cairo_pattern_set_extend (pattern, extend);
+  gdk_paint_pattern_set_matrix (pattern, &matrix);
+  gdk_paint_pattern_set_extend (pattern, extend);
 
-  cairo_save (cr);
-  cairo_translate (cr, x, y);
+  gdk_paint_save (cr);
+  gdk_paint_translate (cr, x, y);
 
   for (y = 0; y < height; y += ystep)
     {
       for (x = 0; x < width; x += xstep)
         {
-          cairo_save (cr);
-          cairo_translate (cr, x, y);
-          cairo_set_source (cr, pattern);
-          cairo_rectangle (cr, 0, 0, xstep, ystep);
-          cairo_fill (cr);
-          cairo_restore (cr);
+          gdk_paint_save (cr);
+          gdk_paint_translate (cr, x, y);
+          gdk_paint_set_source (cr, pattern);
+          gdk_paint_rectangle (cr, 0, 0, xstep, ystep);
+          gdk_paint_fill (cr);
+          gdk_paint_restore (cr);
         }
     }
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 
-  cairo_pattern_destroy (pattern);
+  gdk_paint_pattern_destroy (pattern);
 }
 
 static void
@@ -252,10 +252,10 @@ gtk_border_image_compute_slice_size (GtkBorderImageSliceSize sizes[3],
 static void
 gtk_border_image_render (GtkBorderImage        *image,
                          const float            border_width[4],
-                         cairo_t               *cr,
+                         GdkPainter               *cr,
                          const graphene_rect_t *rect)
 {
-  cairo_surface_t *surface, *slice;
+  GdkPaintSurface *surface, *slice;
   GtkBorderImageSliceSize vertical_slice[3], horizontal_slice[3];
   GtkBorderImageSliceSize vertical_border[3], horizontal_border[3];
   double source_width, source_height;
@@ -269,7 +269,7 @@ gtk_border_image_render (GtkBorderImage        *image,
   /* XXX: Optimize for (source_width == width && source_height == height) */
 
   surface = _gtk_css_image_get_surface (image->source,
-                                        cairo_get_target (cr),
+                                        gdk_paint_get_target (cr),
                                         source_width, source_height);
 
   gtk_border_image_compute_slice_size (horizontal_slice,
@@ -310,7 +310,7 @@ gtk_border_image_render (GtkBorderImage        *image,
           if (h == 1 && v == 1)
             continue;
 
-          slice = cairo_surface_create_for_rectangle (surface,
+          slice = gdk_paint_surface_create_for_rectangle (surface,
                                                       horizontal_slice[h].offset,
                                                       vertical_slice[v].offset,
                                                       horizontal_slice[h].size,
@@ -327,11 +327,11 @@ gtk_border_image_render (GtkBorderImage        *image,
                                          h == 1 ? _gtk_css_border_repeat_value_get_x (image->repeat) : GTK_CSS_REPEAT_STYLE_STRETCH,
                                          v == 1 ? _gtk_css_border_repeat_value_get_y (image->repeat) : GTK_CSS_REPEAT_STYLE_STRETCH);
 
-          cairo_surface_destroy (slice);
+          gdk_paint_surface_destroy (slice);
         }
     }
 
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 }
 
 static void
@@ -365,7 +365,7 @@ snapshot_frame_fill (GtkSnapshot          *snapshot,
 }
 
 static void
-set_stroke_style (cairo_t        *cr,
+set_stroke_style (GdkPainter        *cr,
                   double          line_width,
                   GtkBorderStyle  style,
                   double          length)
@@ -373,7 +373,7 @@ set_stroke_style (cairo_t        *cr,
   double segments[2];
   double n;
 
-  cairo_set_line_width (cr, line_width);
+  gdk_paint_set_line_width (cr, line_width);
 
   if (style == GTK_BORDER_STYLE_DOTTED)
     {
@@ -381,10 +381,10 @@ set_stroke_style (cairo_t        *cr,
 
       segments[0] = 0;
       segments[1] = n ? length / n : 2;
-      cairo_set_dash (cr, segments, G_N_ELEMENTS (segments), 0);
+      gdk_paint_set_dash (cr, segments, G_N_ELEMENTS (segments), 0);
 
-      cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
-      cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
+      gdk_paint_set_line_cap (cr, GDK_PAINT_LINE_CAP_ROUND);
+      gdk_paint_set_line_join (cr, GDK_PAINT_LINE_JOIN_ROUND);
     }
   else
     {
@@ -404,15 +404,15 @@ set_stroke_style (cairo_t        *cr,
           segments[0] = n ? (1. / 3) * length / n : 1;
           segments[1] = 2 * segments[0];
         }
-      cairo_set_dash (cr, segments, G_N_ELEMENTS (segments), 0);
+      gdk_paint_set_dash (cr, segments, G_N_ELEMENTS (segments), 0);
 
-      cairo_set_line_cap (cr, CAIRO_LINE_CAP_SQUARE);
-      cairo_set_line_join (cr, CAIRO_LINE_JOIN_MITER);
+      gdk_paint_set_line_cap (cr, GDK_PAINT_LINE_CAP_SQUARE);
+      gdk_paint_set_line_join (cr, GDK_PAINT_LINE_JOIN_MITER);
     }
 }
 
 static void
-render_frame_stroke (cairo_t              *cr,
+render_frame_stroke (GdkPainter              *cr,
                      const GskRoundedRect *border_box,
                      const double          border_width[4],
                      const GdkColor        colors[4],
@@ -450,9 +450,9 @@ render_frame_stroke (cairo_t              *cr,
         }
 
       gsk_rounded_rect_path (&stroke_box, cr);
-      gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[0]);
+      gdk_painter_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[0]);
       set_stroke_style (cr, border_width[0], stroke_style, length);
-      cairo_stroke (cr);
+      gdk_paint_stroke (cr);
     }
   else
     {
@@ -473,7 +473,7 @@ render_frame_stroke (cairo_t              *cr,
           if (border_width[i] == 0)
             continue;
 
-          cairo_save (cr);
+          gdk_paint_save (cr);
 
           if (i == 0)
             _gtk_rounded_box_path_top (border_box, &padding_box, cr);
@@ -483,18 +483,18 @@ render_frame_stroke (cairo_t              *cr,
             _gtk_rounded_box_path_bottom (border_box, &padding_box, cr);
           else if (i == 3)
             _gtk_rounded_box_path_left (border_box, &padding_box, cr);
-          cairo_clip (cr);
+          gdk_paint_clip (cr);
 
           _gtk_rounded_box_path_side (&stroke_box, cr, i);
 
-          gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[i]);
+          gdk_painter_set_source_color (cr, GDK_COLOR_STATE_SRGB, &colors[i]);
           set_stroke_style (cr,
                             border_width[i],
                             stroke_style,
                             _gtk_rounded_box_guess_length (&stroke_box, i));
-          cairo_stroke (cr);
+          gdk_paint_stroke (cr);
 
-          cairo_restore (cr);
+          gdk_paint_restore (cr);
         }
     }
 }
@@ -508,11 +508,11 @@ snapshot_frame_stroke (GtkSnapshot          *snapshot,
                        GtkBorderStyle        stroke_style)
 {
   double double_width[4] = { border_width[0], border_width[1], border_width[2], border_width[3] };
-  cairo_t *cr;
+  GdkPainter *cr;
 
   cr = gtk_snapshot_append_cairo (snapshot, &outline->bounds);
   render_frame_stroke (cr, outline, double_width, colors, hidden_side, stroke_style);
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 }
 
 static void
@@ -665,7 +665,7 @@ gtk_css_style_snapshot_border (GtkCssBoxes *boxes,
 
   if (gtk_border_image_init (&border_image, style))
     {
-      cairo_t *cr;
+      GdkPainter *cr;
       const graphene_rect_t *bounds;
 
       border_width[0] = gtk_css_number_value_get (style->border->border_top_width, 100);
@@ -678,7 +678,7 @@ gtk_css_style_snapshot_border (GtkCssBoxes *boxes,
       gtk_snapshot_push_debug (snapshot, "CSS border image");
       cr = gtk_snapshot_append_cairo (snapshot, bounds);
       gtk_border_image_render (&border_image, border_width, cr, bounds);
-      cairo_destroy (cr);
+      gdk_paint_destroy (cr);
       gtk_snapshot_pop (snapshot);
     }
   else

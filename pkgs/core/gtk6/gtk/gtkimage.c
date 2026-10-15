@@ -35,7 +35,7 @@
 
 #include <math.h>
 #include <string.h>
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 /**
  * GtkImage:

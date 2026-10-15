@@ -60,7 +60,7 @@ gsk_subsurface_node_finalize (GskRenderNode *node)
 
 static void
 gsk_subsurface_node_draw (GskRenderNode *node,
-                          cairo_t       *cr,
+                          GdkPainter       *cr,
                           GskCairoData  *data)
 {
   GskSubsurfaceNode *self = (GskSubsurfaceNode *) node;

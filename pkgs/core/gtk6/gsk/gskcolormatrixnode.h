@@ -24,7 +24,7 @@
 
 #include <gsk/gsktypes.h>
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_BEGIN_DECLS
 

@@ -68,21 +68,21 @@ void                    gsk_path_builder_add_op                 (GskPathBuilder 
 
 
 /* implemented in gskstrokenode.c */
-void                    gsk_cairo_stroke_path                   (cairo_t                *cr,
+void                    gsk_cairo_stroke_path                   (GdkPainter                *cr,
                                                                  GskPath                *path,
                                                                  const GskStroke        *stroke);
 
 static inline void
-gsk_cairo_set_fill_rule (cairo_t     *cr,
+gsk_cairo_set_fill_rule (GdkPainter     *cr,
                          GskFillRule  fill_rule)
 {
   switch (fill_rule)
     {
       case GSK_FILL_RULE_WINDING:
-        cairo_set_fill_rule (cr, CAIRO_FILL_RULE_WINDING);
+        gdk_paint_set_fill_rule (cr, GDK_PAINT_FILL_RULE_WINDING);
         break;
       case GSK_FILL_RULE_EVEN_ODD:
-        cairo_set_fill_rule (cr, CAIRO_FILL_RULE_EVEN_ODD);
+        gdk_paint_set_fill_rule (cr, GDK_PAINT_FILL_RULE_EVEN_ODD);
         break;
       default:
         g_assert_not_reached ();

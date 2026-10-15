@@ -273,19 +273,19 @@ gsk_path_to_cairo_add_op (GskPathOperation        op,
   switch (op)
   {
     case GSK_PATH_MOVE:
-      cairo_move_to (cr, pts[0].x, pts[0].y);
+      gdk_paint_move_to (cr, pts[0].x, pts[0].y);
       break;
 
     case GSK_PATH_CLOSE:
-      cairo_close_path (cr);
+      gdk_paint_close_path (cr);
       break;
 
     case GSK_PATH_LINE:
-      cairo_line_to (cr, pts[1].x, pts[1].y);
+      gdk_paint_line_to (cr, pts[1].x, pts[1].y);
       break;
 
     case GSK_PATH_CUBIC:
-      cairo_curve_to (cr, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
+      gdk_paint_curve_to (cr, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
       break;
 
     case GSK_PATH_QUAD:
@@ -309,20 +309,20 @@ gsk_path_to_cairo_add_op (GskPathOperation        op,
  * Cairo does not support all features of `GskPath`.
  *
  * This function does not clear the existing Cairo path. Call
- * cairo_new_path() if you want this.
+ * gdk_paint_new_path() if you want this.
  *
  * Since: 4.14
  */
 void
 gsk_path_to_cairo (GskPath *self,
-                   cairo_t *cr)
+                   GdkPainter *cr)
 {
   g_return_if_fail (self != NULL);
   g_return_if_fail (cr != NULL);
 
   gsk_path_foreach_with_tolerance (self,
                                    GSK_PATH_FOREACH_ALLOW_CUBIC,
-                                   cairo_get_tolerance (cr),
+                                   gdk_paint_get_tolerance (cr),
                                    gsk_path_to_cairo_add_op,
                                    cr);
 }

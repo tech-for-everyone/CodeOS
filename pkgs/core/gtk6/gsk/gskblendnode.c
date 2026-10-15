@@ -47,7 +47,7 @@ struct _GskBlendNode
   GskBlendMode blend_mode;
 };
 
-static cairo_operator_t
+static GdkPaintOperator
 gsk_blend_mode_to_cairo_operator (GskBlendMode blend_mode)
 {
   switch (blend_mode)
@@ -55,37 +55,37 @@ gsk_blend_mode_to_cairo_operator (GskBlendMode blend_mode)
     default:
       g_assert_not_reached ();
     case GSK_BLEND_MODE_DEFAULT:
-      return CAIRO_OPERATOR_OVER;
+      return GDK_PAINT_OPERATOR_OVER;
     case GSK_BLEND_MODE_MULTIPLY:
-      return CAIRO_OPERATOR_MULTIPLY;
+      return GDK_PAINT_OPERATOR_MULTIPLY;
     case GSK_BLEND_MODE_SCREEN:
-      return CAIRO_OPERATOR_SCREEN;
+      return GDK_PAINT_OPERATOR_SCREEN;
     case GSK_BLEND_MODE_OVERLAY:
-      return CAIRO_OPERATOR_OVERLAY;
+      return GDK_PAINT_OPERATOR_OVERLAY;
     case GSK_BLEND_MODE_DARKEN:
-      return CAIRO_OPERATOR_DARKEN;
+      return GDK_PAINT_OPERATOR_DARKEN;
     case GSK_BLEND_MODE_LIGHTEN:
-      return CAIRO_OPERATOR_LIGHTEN;
+      return GDK_PAINT_OPERATOR_LIGHTEN;
     case GSK_BLEND_MODE_COLOR_DODGE:
-      return CAIRO_OPERATOR_COLOR_DODGE;
+      return GDK_PAINT_OPERATOR_COLOR_DODGE;
     case GSK_BLEND_MODE_COLOR_BURN:
-      return CAIRO_OPERATOR_COLOR_BURN;
+      return GDK_PAINT_OPERATOR_COLOR_BURN;
     case GSK_BLEND_MODE_HARD_LIGHT:
-      return CAIRO_OPERATOR_HARD_LIGHT;
+      return GDK_PAINT_OPERATOR_HARD_LIGHT;
     case GSK_BLEND_MODE_SOFT_LIGHT:
-      return CAIRO_OPERATOR_SOFT_LIGHT;
+      return GDK_PAINT_OPERATOR_SOFT_LIGHT;
     case GSK_BLEND_MODE_DIFFERENCE:
-      return CAIRO_OPERATOR_DIFFERENCE;
+      return GDK_PAINT_OPERATOR_DIFFERENCE;
     case GSK_BLEND_MODE_EXCLUSION:
-      return CAIRO_OPERATOR_EXCLUSION;
+      return GDK_PAINT_OPERATOR_EXCLUSION;
     case GSK_BLEND_MODE_COLOR:
-      return CAIRO_OPERATOR_HSL_COLOR;
+      return GDK_PAINT_OPERATOR_HSL_COLOR;
     case GSK_BLEND_MODE_HUE:
-      return CAIRO_OPERATOR_HSL_HUE;
+      return GDK_PAINT_OPERATOR_HSL_HUE;
     case GSK_BLEND_MODE_SATURATION:
-      return CAIRO_OPERATOR_HSL_SATURATION;
+      return GDK_PAINT_OPERATOR_HSL_SATURATION;
     case GSK_BLEND_MODE_LUMINOSITY:
-      return CAIRO_OPERATOR_HSL_LUMINOSITY;
+      return GDK_PAINT_OPERATOR_HSL_LUMINOSITY;
     }
 }
 
@@ -104,29 +104,29 @@ gsk_blend_node_finalize (GskRenderNode *node)
 
 static void
 gsk_blend_node_draw (GskRenderNode *node,
-                     cairo_t       *cr,
+                     GdkPainter       *cr,
                      GskCairoData  *data)
 {
   GskBlendNode *self = (GskBlendNode *) node;
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
   if (!gdk_color_state_equal (data->ccs, GDK_COLOR_STATE_SRGB))
     g_warning ("blend node in non-srgb colorstate isn't implemented yet.");
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
   gsk_render_node_draw_full (self->bottom, cr, data);
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
   gsk_render_node_draw_full (self->top, cr, data);
 
-  cairo_pop_group_to_source (cr);
-  cairo_set_operator (cr, gsk_blend_mode_to_cairo_operator (self->blend_mode));
-  cairo_paint (cr);
+  gdk_paint_pop_group_to_source (cr);
+  gdk_paint_set_operator (cr, gsk_blend_mode_to_cairo_operator (self->blend_mode));
+  gdk_paint_paint (cr);
 
-  cairo_pop_group_to_source (cr); /* resets operator */
-  cairo_paint (cr);
+  gdk_paint_pop_group_to_source (cr); /* resets operator */
+  gdk_paint_paint (cr);
 }
 
 static void

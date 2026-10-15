@@ -63,22 +63,22 @@ gsk_mask_node_finalize (GskRenderNode *node)
 }
 
 static void
-apply_luminance_to_pattern (cairo_pattern_t *pattern,
+apply_luminance_to_pattern (GdkPaintPattern *pattern,
                             gboolean         invert_luminance)
 {
-  cairo_surface_t *surface, *image_surface;
+  GdkPaintSurface *surface, *image_surface;
   guchar *data;
   gsize x, y, width, height, stride;
   guint red, green, blue, alpha, luminance;
   guint32* pixel_data;
 
-  cairo_pattern_get_surface (pattern, &surface);
-  image_surface = cairo_surface_map_to_image (surface, NULL);
+  gdk_paint_pattern_get_surface (pattern, &surface);
+  image_surface = gdk_paint_surface_map_to_image (surface, NULL);
 
-  data = cairo_image_surface_get_data (image_surface);
-  width = cairo_image_surface_get_width (image_surface);
-  height = cairo_image_surface_get_height (image_surface);
-  stride = cairo_image_surface_get_stride (image_surface);
+  data = gdk_paint_image_surface_get_data (image_surface);
+  width = gdk_paint_image_surface_get_width (image_surface);
+  height = gdk_paint_image_surface_get_height (image_surface);
+  stride = gdk_paint_image_surface_get_stride (image_surface);
 
   for (y = 0; y < height; y++)
     {
@@ -100,36 +100,36 @@ apply_luminance_to_pattern (cairo_pattern_t *pattern,
       data += stride;
     }
 
-  cairo_surface_mark_dirty (image_surface);
-  cairo_surface_unmap_image (surface, image_surface);
+  gdk_paint_surface_mark_dirty (image_surface);
+  gdk_paint_surface_unmap_image (surface, image_surface);
   /* https://gitlab.freedesktop.org/cairo/cairo/-/merge_requests/487 */
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 }
 
 static void
 gsk_mask_node_draw (GskRenderNode *node,
-                    cairo_t       *cr,
+                    GdkPainter       *cr,
                     GskCairoData  *data)
 {
   GskMaskNode *self = (GskMaskNode *) node;
-  cairo_pattern_t *mask_pattern;
+  GdkPaintPattern *mask_pattern;
   graphene_matrix_t color_matrix;
   graphene_vec4_t color_offset;
 
   /* clip so the push_group() creates a smaller surface */
-  gdk_cairo_rectangle_snap_to_grid (cr, &node->bounds);
-  cairo_clip (cr);
+  gdk_painter_rectangle_snap_to_grid (cr, &node->bounds);
+  gdk_paint_clip (cr);
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
   gsk_render_node_draw_full (self->source, cr, data);
-  cairo_pop_group_to_source (cr);
+  gdk_paint_pop_group_to_source (cr);
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
   gsk_render_node_draw_full (self->mask, cr, data);
-  mask_pattern = cairo_pop_group (cr);
+  mask_pattern = gdk_paint_pop_group (cr);
 
   switch (self->mask_mode)
     {
@@ -153,9 +153,9 @@ gsk_mask_node_draw (GskRenderNode *node,
       g_assert_not_reached ();
     }
 
-  cairo_mask (cr, mask_pattern);
+  gdk_paint_mask (cr, mask_pattern);
 
-  cairo_pattern_destroy (mask_pattern);
+  gdk_paint_pattern_destroy (mask_pattern);
 }
 
 static void

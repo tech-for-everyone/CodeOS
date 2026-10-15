@@ -479,15 +479,15 @@ gsk_hue_interpolation_fixup (GskHueInterpolation  interp,
   return h2;
 }
 
-cairo_extend_t
+GdkPaintExtend
 gsk_repeat_to_cairo (GskRepeat repeat)
 {
   switch (repeat)
     {
-    case GSK_REPEAT_NONE: return CAIRO_EXTEND_NONE;
-    case GSK_REPEAT_REPEAT: return CAIRO_EXTEND_REPEAT;
-    case GSK_REPEAT_REFLECT: return CAIRO_EXTEND_REFLECT;
-    case GSK_REPEAT_PAD: return CAIRO_EXTEND_PAD;
+    case GSK_REPEAT_NONE: return GDK_PAINT_EXTEND_NONE;
+    case GSK_REPEAT_REPEAT: return GDK_PAINT_EXTEND_REPEAT;
+    case GSK_REPEAT_REFLECT: return GDK_PAINT_EXTEND_REFLECT;
+    case GSK_REPEAT_PAD: return GDK_PAINT_EXTEND_PAD;
     default: g_assert_not_reached ();
     }
 }

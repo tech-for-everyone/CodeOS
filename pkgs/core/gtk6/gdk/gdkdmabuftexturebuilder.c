@@ -28,7 +28,7 @@
 #include "gdkdmabuftextureprivate.h"
 #include "gdkdmabuftexturebuilderprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 
 struct _GdkDmabufTextureBuilder
@@ -393,7 +393,7 @@ gdk_dmabuf_texture_builder_class_init (GdkDmabufTextureBuilderClass *klass)
    */
   properties[PROP_UPDATE_REGION] =
     g_param_spec_boxed ("update-region", NULL, NULL,
-                        CAIRO_GOBJECT_TYPE_REGION,
+                        GDK_TYPE_REGION,
                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
 
   /**

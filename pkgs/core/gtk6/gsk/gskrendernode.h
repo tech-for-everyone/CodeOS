@@ -114,7 +114,7 @@ gboolean                gsk_render_node_get_opaque_rect         (GskRenderNode  
 
 GDK_AVAILABLE_IN_ALL
 void                    gsk_render_node_draw                    (GskRenderNode *node,
-                                                                 cairo_t       *cr);
+                                                                 GdkPainter       *cr);
 
 GDK_AVAILABLE_IN_ALL
 GBytes *                gsk_render_node_serialize               (GskRenderNode *node);

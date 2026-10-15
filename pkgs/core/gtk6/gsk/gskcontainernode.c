@@ -62,7 +62,7 @@ gsk_container_node_finalize (GskRenderNode *node)
 
 static void
 gsk_container_node_draw (GskRenderNode *node,
-                         cairo_t       *cr,
+                         GdkPainter       *cr,
                          GskCairoData  *data)
 {
   GskContainerNode *container = (GskContainerNode *) node;

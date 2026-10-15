@@ -54,7 +54,7 @@ gsk_rounded_clip_node_finalize (GskRenderNode *node)
 
 static void
 gsk_rounded_clip_node_draw (GskRenderNode *node,
-                            cairo_t       *cr,
+                            GdkPainter       *cr,
                             GskCairoData  *data)
 {
   GskRoundedClipNode *self = (GskRoundedClipNode *) node;
@@ -64,14 +64,14 @@ gsk_rounded_clip_node_draw (GskRenderNode *node,
   if (!gsk_cairo_rect_snap (cr, &clip.bounds, self->snap, &clip.bounds))
     return;
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
   gsk_rounded_rect_path (&clip, cr);
-  cairo_clip (cr);
+  gdk_paint_clip (cr);
 
   gsk_render_node_draw_full (self->child, cr, data);
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 static void

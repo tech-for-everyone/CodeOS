@@ -231,15 +231,15 @@ _boxblur (guchar      *buffer,
  * Blurs the cairo image surface at the given radius.
  */
 void
-gsk_cairo_blur_surface (cairo_surface_t* surface,
+gsk_cairo_blur_surface (GdkPaintSurface* surface,
                         double           radius_d,
                         GskBlurFlags     flags)
 {
   int radius = radius_d;
 
   g_return_if_fail (surface != NULL);
-  g_return_if_fail (cairo_surface_get_type (surface) == CAIRO_SURFACE_TYPE_IMAGE);
-  g_return_if_fail (cairo_image_surface_get_format (surface) == CAIRO_FORMAT_A8);
+  g_return_if_fail (gdk_paint_surface_get_type (surface) == GDK_PAINT_SURFACE_TYPE_IMAGE);
+  g_return_if_fail (gdk_paint_image_surface_get_format (surface) == GDK_PAINT_FORMAT_A8);
 
   /* The code doesn't actually do any blurring for radius 1, as it
    * ends up with box filter size 1 */
@@ -250,15 +250,15 @@ gsk_cairo_blur_surface (cairo_surface_t* surface,
     return;
 
   /* Before we mess with the surface, execute any pending drawing. */
-  cairo_surface_flush (surface);
+  gdk_paint_surface_flush (surface);
 
-  _boxblur (cairo_image_surface_get_data (surface),
-            cairo_image_surface_get_stride (surface),
-            cairo_image_surface_get_height (surface),
+  _boxblur (gdk_paint_image_surface_get_data (surface),
+            gdk_paint_image_surface_get_stride (surface),
+            gdk_paint_image_surface_get_height (surface),
             radius, flags);
 
   /* Inform cairo we altered the surface contents. */
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 }
 
 /*<private>
@@ -302,14 +302,14 @@ needs_blur (float        radius,
 }
 
 static void
-apply_current_scale (cairo_t *cr,
+apply_current_scale (GdkPainter *cr,
                      double  *x,
                      double  *y)
 {
   double x_scale, y_scale;
-  cairo_matrix_t matrix;
+  GdkPaintMatrix matrix;
 
-  cairo_get_matrix (cr, &matrix);
+  gdk_paint_get_matrix (cr, &matrix);
 
   if (matrix.xx != 0 || matrix.yx != 0)
     {
@@ -332,16 +332,16 @@ apply_current_scale (cairo_t *cr,
     *y *= fabs (y_scale);
 }
 
-static const cairo_user_data_key_t original_cr_key = { 0, };
+static const GdkPaintUserDataKey original_cr_key = { 0, };
 
-cairo_t *
-gsk_cairo_blur_start_drawing (cairo_t         *cr,
+GdkPainter *
+gsk_cairo_blur_start_drawing (GdkPainter         *cr,
                               float            radius,
                               GskBlurFlags     blur_flags)
 {
   double clip_x1, clip_x2, clip_y1, clip_y2, clip_width, clip_height;
-  cairo_surface_t *surface;
-  cairo_t *blur_cr;
+  GdkPaintSurface *surface;
+  GdkPainter *blur_cr;
   double clip_radius;
   double x_scale, y_scale;
   gboolean blur_x = (blur_flags & GSK_BLUR_X) != 0;
@@ -350,14 +350,14 @@ gsk_cairo_blur_start_drawing (cairo_t         *cr,
   if (!needs_blur (radius, blur_flags))
     return cr;
 
-  cairo_clip_extents (cr, &clip_x1, &clip_y1, &clip_x2, &clip_y2);
+  gdk_paint_clip_extents (cr, &clip_x1, &clip_y1, &clip_x2, &clip_y2);
   clip_width = clip_x2 - clip_x1;
   clip_height = clip_y2 - clip_y1;
 
   clip_radius = gsk_cairo_blur_compute_pixels (radius);
 
   x_scale = y_scale = 1;
-  cairo_surface_get_device_scale (cairo_get_target (cr), &x_scale, &y_scale);
+  gdk_paint_surface_get_device_scale (gdk_paint_get_target (cr), &x_scale, &y_scale);
   apply_current_scale (cr, &x_scale, &y_scale);
 
   clip_width = x_scale * (clip_width + (blur_x ? 2 * clip_radius : 0));
@@ -372,78 +372,78 @@ gsk_cairo_blur_start_drawing (cairo_t         *cr,
     }
 
   /* Create a larger surface to center the blur. */
-  surface = cairo_surface_create_similar_image (cairo_get_target (cr),
-                                                CAIRO_FORMAT_A8,
+  surface = gdk_paint_surface_create_similar_image (gdk_paint_get_target (cr),
+                                                GDK_PAINT_FORMAT_A8,
                                                 clip_width,
                                                 clip_height);
-  cairo_surface_set_device_scale (surface, x_scale, y_scale);
-  cairo_surface_set_device_offset (surface,
+  gdk_paint_surface_set_device_scale (surface, x_scale, y_scale);
+  gdk_paint_surface_set_device_offset (surface,
                                     x_scale * ((blur_x ? clip_radius : 0) - clip_x1),
                                     y_scale * ((blur_y ? clip_radius : 0) - clip_y1));
 
-  blur_cr = cairo_create (surface);
-  cairo_set_user_data (blur_cr, &original_cr_key, cairo_reference (cr), (cairo_destroy_func_t) cairo_destroy);
+  blur_cr = gdk_paint_create (surface);
+  gdk_paint_set_user_data (blur_cr, &original_cr_key, gdk_paint_reference (cr), (GdkPaintDestroyFunc) gdk_paint_destroy);
 
-  if (cairo_has_current_point (cr))
+  if (gdk_paint_has_current_point (cr))
     {
       double x, y;
 
-      cairo_get_current_point (cr, &x, &y);
-      cairo_move_to (blur_cr, x, y);
+      gdk_paint_get_current_point (cr, &x, &y);
+      gdk_paint_move_to (blur_cr, x, y);
     }
 
   return blur_cr;
 }
 
 static void
-mask_surface_repeat (cairo_t         *cr,
-                     cairo_surface_t *surface)
+mask_surface_repeat (GdkPainter         *cr,
+                     GdkPaintSurface *surface)
 {
-  cairo_pattern_t *pattern;
+  GdkPaintPattern *pattern;
 
-  pattern = cairo_pattern_create_for_surface (surface);
-  cairo_pattern_set_extend (pattern, CAIRO_EXTEND_REPEAT);
+  pattern = gdk_paint_pattern_create_for_surface (surface);
+  gdk_paint_pattern_set_extend (pattern, GDK_PAINT_EXTEND_REPEAT);
 
-  cairo_mask (cr, pattern);
+  gdk_paint_mask (cr, pattern);
 
-  cairo_pattern_destroy (pattern);
+  gdk_paint_pattern_destroy (pattern);
 }
 
-cairo_t *
-gsk_cairo_blur_finish_drawing (cairo_t         *cr,
+GdkPainter *
+gsk_cairo_blur_finish_drawing (GdkPainter         *cr,
                                GdkColorState   *ccs,
                                float            radius,
                                const GdkColor  *color,
                                GskBlurFlags     blur_flags)
 {
-  cairo_t *original_cr;
-  cairo_surface_t *surface;
+  GdkPainter *original_cr;
+  GdkPaintSurface *surface;
   double x_scale;
   double scaled_radius;
 
   if (!needs_blur (radius, blur_flags))
     return cr;
 
-  original_cr = cairo_get_user_data (cr, &original_cr_key);
+  original_cr = gdk_paint_get_user_data (cr, &original_cr_key);
 
   /* Blur the surface. */
-  surface = cairo_get_target (cr);
+  surface = gdk_paint_get_target (cr);
 
   x_scale = 1;
-  cairo_surface_get_device_scale (cairo_get_target (cr), &x_scale, NULL);
+  gdk_paint_surface_get_device_scale (gdk_paint_get_target (cr), &x_scale, NULL);
   scaled_radius = round ((x_scale + 0.0001) * radius);
 
   gsk_cairo_blur_surface (surface, scaled_radius, blur_flags);
 
-  gdk_cairo_set_source_color (original_cr, ccs, color);
+  gdk_painter_set_source_color (original_cr, ccs, color);
   if (blur_flags & GSK_BLUR_REPEAT)
     mask_surface_repeat (original_cr, surface);
   else
-    cairo_mask_surface (original_cr, surface, 0, 0);
+    gdk_paint_mask_surface (original_cr, surface, 0, 0);
 
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 
   return original_cr;
 }

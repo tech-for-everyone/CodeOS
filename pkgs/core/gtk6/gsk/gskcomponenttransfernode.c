@@ -63,32 +63,32 @@ gsk_component_transfer_node_finalize (GskRenderNode *node)
 
 static void
 gsk_component_transfer_node_draw (GskRenderNode *node,
-                                  cairo_t       *cr,
+                                  GdkPainter       *cr,
                                   GskCairoData  *data)
 {
   GskComponentTransferNode *self = (GskComponentTransferNode *) node;
   int width, height;
-  cairo_surface_t *surface;
-  cairo_t *cr2;
+  GdkPaintSurface *surface;
+  GdkPainter *cr2;
   guchar *pixels;
   gsize stride;
   guint32 pixel;
   float r, g, b, a;
-  cairo_pattern_t *pattern;
+  GdkPaintPattern *pattern;
   gboolean cs_equal;
   GdkColor c, l;
 
   width = ceil (node->bounds.size.width);
   height = ceil (node->bounds.size.height);
 
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
 
-  cr2 = cairo_create (surface);
+  cr2 = gdk_paint_create (surface);
   gsk_render_node_draw_full (self->child, cr2, data);
-  cairo_destroy (cr2);
+  gdk_paint_destroy (cr2);
 
-  pixels = cairo_image_surface_get_data (surface);
-  stride = cairo_image_surface_get_stride (surface);
+  pixels = gdk_paint_image_surface_get_data (surface);
+  stride = gdk_paint_image_surface_get_stride (surface);
 
   cs_equal = gdk_color_state_equal (data->ccs, self->color_state);
 
@@ -141,23 +141,23 @@ gsk_component_transfer_node_draw (GskRenderNode *node,
           g *= a;
           b *= a;
 
-          pixel = gdk_cairo_pixel_from_float ((float[4]) { r, g, b, a });
+          pixel = gdk_painter_pixel_from_float ((float[4]) { r, g, b, a });
 
           *(guint32 *)(pixels + y * stride + 4 * x) = pixel;
         }
     }
 
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 
-  pattern = cairo_pattern_create_for_surface (surface);
-  cairo_pattern_set_extend (pattern, CAIRO_EXTEND_PAD);
+  pattern = gdk_paint_pattern_create_for_surface (surface);
+  gdk_paint_pattern_set_extend (pattern, GDK_PAINT_EXTEND_PAD);
 
-  cairo_set_source (cr, pattern);
-  cairo_pattern_destroy (pattern);
-  cairo_surface_destroy (surface);
+  gdk_paint_set_source (cr, pattern);
+  gdk_paint_pattern_destroy (pattern);
+  gdk_paint_surface_destroy (surface);
 
-  gdk_cairo_rect (cr, &node->bounds);
-  cairo_fill (cr);
+  gdk_painter_rect (cr, &node->bounds);
+  gdk_paint_fill (cr);
 }
 
 static gboolean

@@ -18,7 +18,7 @@
 #pragma once
 
 #include <glib-object.h>
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 #include "gtkcsstypesprivate.h"
 #include "gtkcssboxesprivate.h"

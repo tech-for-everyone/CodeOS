@@ -26,7 +26,7 @@
 #include "gdkcolorstate.h"
 #include "gdkgltextureprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 struct _GdkGLTextureBuilder
 {
@@ -318,7 +318,7 @@ gdk_gl_texture_builder_class_init (GdkGLTextureBuilderClass *klass)
    */
   properties[PROP_UPDATE_REGION] =
     g_param_spec_boxed ("update-region", NULL, NULL,
-                        CAIRO_GOBJECT_TYPE_REGION,
+                        GDK_TYPE_REGION,
                         G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_NAME);
 
   /**

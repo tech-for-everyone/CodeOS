@@ -2,7 +2,7 @@
 
 #include <glib.h>
 #include <pango/pango.h>
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_BEGIN_DECLS
 
@@ -10,15 +10,15 @@ void       gsk_ensure_resources  (void);
 
 PangoFont *gsk_reload_font (PangoFont            *font,
                             float                 scale,
-                            cairo_hint_metrics_t  hint_metrics,
-                            cairo_hint_style_t    hint_style,
-                            cairo_antialias_t     antialias);
+                            GdkPaintHintMetrics  hint_metrics,
+                            GdkPaintHintStyle    hint_style,
+                            GdkPaintAntialias     antialias);
 
 void       gsk_get_glyph_string_extents (PangoGlyphString *glyphs,
                                          PangoFont        *font,
                                          PangoRectangle   *ink_rect);
 
-cairo_hint_style_t gsk_font_get_hint_style (PangoFont *font);
+GdkPaintHintStyle gsk_font_get_hint_style (PangoFont *font);
 
 G_END_DECLS
 

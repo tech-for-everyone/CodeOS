@@ -73,7 +73,7 @@
 #include "gsk/gskrendererprivate.h"
 #include "gsk/gskroundedrectprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <errno.h>
 #include <graphene.h>
 #include <limits.h>
@@ -3397,27 +3397,27 @@ render_paintable_to_texture (GdkPaintable *paintable)
   GtkSnapshot *snapshot;
   GskRenderNode *node;
   int width, height;
-  cairo_surface_t *surface;
-  cairo_t *cr;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
   GdkTexture *texture;
 
   width = gdk_paintable_get_intrinsic_width (paintable);
   height = gdk_paintable_get_intrinsic_height (paintable);
 
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
 
   snapshot = gtk_snapshot_new ();
   gdk_paintable_snapshot (paintable, snapshot, width, height);
   node = gtk_snapshot_free_to_node (snapshot);
 
-  cr = cairo_create (surface);
+  cr = gdk_paint_create (surface);
   gsk_render_node_draw (node, cr);
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
   gsk_render_node_unref (node);
 
   texture = gdk_texture_new_for_surface (surface);
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 
   return texture;
 }

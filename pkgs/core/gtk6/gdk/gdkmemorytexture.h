@@ -34,7 +34,7 @@ G_BEGIN_DECLS
  * The default memory format used by GTK.
  *
  * This is the format provided by [method@Gdk.Texture.download].
- * It is equal to %CAIRO_FORMAT_ARGB32.
+ * It is equal to %GDK_PAINT_FORMAT_ARGB32.
  *
  * Be aware that unlike the `GdkMemoryFormat` values, this format
  * is different for different endianness.

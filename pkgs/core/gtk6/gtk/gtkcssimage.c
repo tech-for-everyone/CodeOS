@@ -257,7 +257,7 @@ _gtk_css_image_equal (GtkCssImage *image1,
 
 static void
 gtk_css_image_draw (GtkCssImage *image,
-                    cairo_t     *cr,
+                    GdkPainter     *cr,
                     double       width,
                     double       height)
 {
@@ -269,7 +269,7 @@ gtk_css_image_draw (GtkCssImage *image,
   gtk_internal_return_if_fail (width > 0);
   gtk_internal_return_if_fail (height > 0);
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
   snapshot = gtk_snapshot_new ();
   gtk_css_image_snapshot (image, snapshot, width, height);
@@ -281,7 +281,7 @@ gtk_css_image_draw (GtkCssImage *image,
       gsk_render_node_unref (node);
     }
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 void
@@ -489,32 +489,32 @@ _gtk_css_image_get_concrete_size (GtkCssImage *image,
     }
 }
 
-cairo_surface_t *
+GdkPaintSurface *
 _gtk_css_image_get_surface (GtkCssImage     *image,
-                            cairo_surface_t *target,
+                            GdkPaintSurface *target,
                             int              surface_width,
                             int              surface_height)
 {
-  cairo_surface_t *result;
-  cairo_t *cr;
+  GdkPaintSurface *result;
+  GdkPainter *cr;
 
   gtk_internal_return_val_if_fail (GTK_IS_CSS_IMAGE (image), NULL);
   gtk_internal_return_val_if_fail (surface_width > 0, NULL);
   gtk_internal_return_val_if_fail (surface_height > 0, NULL);
 
   if (target)
-    result = cairo_surface_create_similar (target,
-                                           CAIRO_CONTENT_COLOR_ALPHA,
+    result = gdk_paint_surface_create_similar (target,
+                                           GDK_PAINT_CONTENT_COLOR_ALPHA,
                                            surface_width,
                                            surface_height);
   else
-    result = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+    result = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32,
                                          surface_width,
                                          surface_height);
 
-  cr = cairo_create (result);
+  cr = gdk_paint_create (result);
   gtk_css_image_draw (image, cr, surface_width, surface_height);
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
   return result;
 }

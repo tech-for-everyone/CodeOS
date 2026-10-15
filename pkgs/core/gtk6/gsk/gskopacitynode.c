@@ -52,24 +52,24 @@ gsk_opacity_node_finalize (GskRenderNode *node)
 
 static void
 gsk_opacity_node_draw (GskRenderNode *node,
-                       cairo_t       *cr,
+                       GdkPainter       *cr,
                        GskCairoData  *data)
 {
   GskOpacityNode *self = (GskOpacityNode *) node;
 
   /* clip so the push_group() creates a smaller surface */
-  gdk_cairo_rectangle_snap_to_grid (cr, &node->bounds);
-  cairo_clip (cr);
+  gdk_painter_rectangle_snap_to_grid (cr, &node->bounds);
+  gdk_paint_clip (cr);
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
 
   gsk_render_node_draw_full (self->child, cr, data);
 
-  cairo_pop_group_to_source (cr);
-  cairo_paint_with_alpha (cr, self->opacity);
+  gdk_paint_pop_group_to_source (cr);
+  gdk_paint_paint_with_alpha (cr, self->opacity);
 }
 
 static void

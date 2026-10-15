@@ -45,7 +45,7 @@
 #include <stdlib.h>
 
 #include "gdk/gdkprofilerprivate.h"
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 #define GDK_ARRAY_NAME gtk_css_selectors
 #define GDK_ARRAY_TYPE_NAME GtkCssSelectors

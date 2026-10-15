@@ -25,7 +25,7 @@
 
 #include "config.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 #include "gdksurface.h"
 
@@ -732,7 +732,7 @@ gdk_surface_class_init (GdkSurfaceClass *klass)
                   _gdk_marshal_BOOLEAN__BOXED,
                   G_TYPE_BOOLEAN,
                   1,
-                  CAIRO_GOBJECT_TYPE_REGION);
+                  GDK_TYPE_REGION);
   g_signal_set_va_marshaller (signals[RENDER],
                               G_OBJECT_CLASS_TYPE (object_class),
                               _gdk_marshal_BOOLEAN__BOXEDv);
@@ -1236,18 +1236,18 @@ gdk_surface_create_gl_context (GdkSurface   *surface,
 }
 
 /**
- * gdk_surface_create_cairo_context:
+ * gdk_surface_create_paint_context:
  * @surface: a `GdkSurface`
  *
- * Creates a new `GdkCairoContext` for rendering on @surface.
+ * Creates a new `GdkPaintContext` for rendering on @surface.
  *
- * Returns: (transfer full): the newly created `GdkCairoContext`
+ * Returns: (transfer full): the newly created `GdkPaintContext`
  *
  * Deprecated: 4.18: Drawing content with Cairo should be done via
  *   Cairo rendernodes, not by using the Cairo renderer.
  */
-GdkCairoContext *
-gdk_surface_create_cairo_context (GdkSurface *surface)
+GdkPaintContext *
+gdk_surface_create_paint_context (GdkSurface *surface)
 {
   GdkDisplay *display;
 
@@ -1255,7 +1255,7 @@ gdk_surface_create_cairo_context (GdkSurface *surface)
 
   display = surface->display;
 
-  return g_object_new (GDK_DISPLAY_GET_CLASS (display)->cairo_context_type,
+  return g_object_new (GDK_DISPLAY_GET_CLASS (display)->gdk_paint_context_type,
                        "surface", surface,
                        NULL);
 }
@@ -2194,7 +2194,7 @@ _gdk_windowing_got_event (GdkDisplay *display,
  * and font options as @surface. Generally, the new surface will also
  * use the same backend as @surface, unless that is not possible for
  * some reason. The type of the returned surface may be examined with
- * cairo_surface_get_type().
+ * gdk_paint_surface_get_type().
  *
  * Initially the surface contents are all 0 (transparent if contents
  * have transparency, black otherwise.)
@@ -2204,27 +2204,27 @@ _gdk_windowing_got_event (GdkDisplay *display,
  * or any other error occurs.
  *
  * Returns: a pointer to the newly allocated surface. The caller
- *   owns the surface and should call cairo_surface_destroy() when done
+ *   owns the surface and should call gdk_paint_surface_destroy() when done
  *   with it.
  *
  * Deprecated: 4.12: Create a suitable cairo image surface yourself
  */
-cairo_surface_t *
+GdkPaintSurface *
 gdk_surface_create_similar_surface (GdkSurface      *surface,
-                                    cairo_content_t  content,
+                                    GdkPaintContent  content,
                                     int              width,
                                     int              height)
 {
-  cairo_surface_t *similar_surface;
+  GdkPaintSurface *similar_surface;
   int scale;
 
   g_return_val_if_fail (GDK_IS_SURFACE (surface), NULL);
 
   scale = gdk_surface_get_scale_factor (surface);
 
-  similar_surface = cairo_image_surface_create (gdk_cairo_format_for_content (content),
+  similar_surface = gdk_paint_image_surface_create (gdk_painter_format_for_content (content),
                                                 width * scale, height * scale);
-  cairo_surface_set_device_scale (similar_surface, scale, scale);
+  gdk_paint_surface_set_device_scale (similar_surface, scale, scale);
 
   return similar_surface;
 }

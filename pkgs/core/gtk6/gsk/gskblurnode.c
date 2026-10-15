@@ -51,8 +51,8 @@ gsk_blur_node_finalize (GskRenderNode *node)
 }
 
 static void
-blur_once (cairo_surface_t *src,
-           cairo_surface_t *dest,
+blur_once (GdkPaintSurface *src,
+           GdkPaintSurface *dest,
            int              hradius,
            int              vradius)
 {
@@ -62,15 +62,15 @@ blur_once (cairo_surface_t *src,
   int r, g, b, a;
   guchar *p_dest_row, *p_dest_col;
 
-  width = cairo_image_surface_get_width (src);
-  height = cairo_image_surface_get_height (src);
+  width = gdk_paint_image_surface_get_width (src);
+  height = gdk_paint_image_surface_get_height (src);
   n_channels = 4;
 
   /* horizontal blur */
-  p_src = cairo_image_surface_get_data (src);
-  p_dest = cairo_image_surface_get_data (dest);
-  src_rowstride = cairo_image_surface_get_stride (src);
-  dest_rowstride = cairo_image_surface_get_stride (dest);
+  p_src = gdk_paint_image_surface_get_data (src);
+  p_dest = gdk_paint_image_surface_get_data (dest);
+  src_rowstride = gdk_paint_image_surface_get_stride (src);
+  dest_rowstride = gdk_paint_image_surface_get_stride (dest);
 
   width_minus_1 = width - 1;
   for (y = 0; y < height; y++)
@@ -119,10 +119,10 @@ blur_once (cairo_surface_t *src,
     }
 
   /* vertical blur */
-  p_src = cairo_image_surface_get_data (dest);
-  p_dest = cairo_image_surface_get_data (src);
-  src_rowstride = cairo_image_surface_get_stride (dest);
-  dest_rowstride = cairo_image_surface_get_stride (src);
+  p_src = gdk_paint_image_surface_get_data (dest);
+  p_dest = gdk_paint_image_surface_get_data (src);
+  src_rowstride = gdk_paint_image_surface_get_stride (dest);
+  dest_rowstride = gdk_paint_image_surface_get_stride (src);
 
   height_minus_1 = height - 1;
   for (x = 0; x < width; x++)
@@ -173,35 +173,35 @@ blur_once (cairo_surface_t *src,
 }
 
 static void
-blur_image_surface (cairo_surface_t *surface,
+blur_image_surface (GdkPaintSurface *surface,
                     int              hradius,
                     int              vradius,
                     int              iterations)
 {
-  cairo_surface_t *tmp;
+  GdkPaintSurface *tmp;
   int width, height;
 
   g_assert (hradius >= 0);
   g_assert (vradius >= 0);
 
-  width = cairo_image_surface_get_width (surface);
-  height = cairo_image_surface_get_height (surface);
-  tmp = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  width = gdk_paint_image_surface_get_width (surface);
+  height = gdk_paint_image_surface_get_height (surface);
+  tmp = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
 
   while (iterations-- > 0)
     blur_once (surface, tmp, hradius, vradius);
 
-  cairo_surface_destroy (tmp);
+  gdk_paint_surface_destroy (tmp);
 }
 
 static void
 gsk_blur_node_draw (GskRenderNode *node,
-                    cairo_t       *cr,
+                    GdkPainter       *cr,
                     GskCairoData  *data)
 {
   GskBlurNode *self = (GskBlurNode *) node;
-  cairo_surface_t *surface;
-  cairo_t *cr2;
+  GdkPaintSurface *surface;
+  GdkPainter *cr2;
   graphene_rect_t blur_bounds;
   double hclip_radius, vclip_radius;
 
@@ -217,27 +217,27 @@ gsk_blur_node_draw (GskRenderNode *node,
   if (!gsk_cairo_rect_snap (cr, &blur_bounds, GSK_RECT_SNAP_GROW, &blur_bounds))
     return;
 
-  surface = gdk_cairo_create_similar_surface (cr,
-                                              CAIRO_CONTENT_COLOR_ALPHA,
+  surface = gdk_painter_create_similar_surface (cr,
+                                              GDK_PAINT_CONTENT_COLOR_ALPHA,
                                               &blur_bounds);
 
-  cr2 = cairo_create (surface);
+  cr2 = gdk_paint_create (surface);
   gsk_render_node_draw_full (self->child, cr2, data);
-  cairo_destroy (cr2);
+  gdk_paint_destroy (cr2);
 
   blur_image_surface (surface,
                       (int) ceil (self->sigma.width),
                       (int) ceil (self->sigma.height),
                       3);
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 
-  cairo_set_source_surface (cr, surface, 0, 0);
-  cairo_rectangle (cr,
+  gdk_paint_set_source_surface (cr, surface, 0, 0);
+  gdk_paint_rectangle (cr,
                    node->bounds.origin.x, node->bounds.origin.y,
                    node->bounds.size.width, node->bounds.size.height);
-  cairo_fill (cr);
+  gdk_paint_fill (cr);
 
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 }
 
 static void

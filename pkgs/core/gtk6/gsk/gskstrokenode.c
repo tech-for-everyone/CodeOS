@@ -62,13 +62,13 @@ gsk_stroke_node_finalize (GskRenderNode *node)
 }
 
 void
-gsk_cairo_stroke_path (cairo_t         *cr,
+gsk_cairo_stroke_path (GdkPainter         *cr,
                        GskPath         *path,
                        const GskStroke *stroke)
 {
   gsk_stroke_to_cairo (stroke, cr);
   gsk_path_to_cairo (path, cr);
-  cairo_stroke (cr);
+  gdk_paint_stroke (cr);
 
   /* Cairo draws caps for zero-length subpaths with round caps,
    * but not square. So we do it ourselves.
@@ -87,12 +87,12 @@ gsk_cairo_stroke_path (cairo_t         *cr,
               graphene_point_t p;
 
               gsk_contour_get_position (c, &point, &p);
-              cairo_rectangle (cr,
+              gdk_paint_rectangle (cr,
                                p.x - width / 2,
                                p.y - width / 2,
                                width,
                                width);
-              cairo_fill (cr);
+              gdk_paint_fill (cr);
             }
         }
     }
@@ -100,7 +100,7 @@ gsk_cairo_stroke_path (cairo_t         *cr,
 
 static void
 gsk_stroke_node_draw (GskRenderNode *node,
-                      cairo_t       *cr,
+                      GdkPainter       *cr,
                       GskCairoData  *data)
 {
   GskStrokeNode *self = (GskStrokeNode *) node;
@@ -108,18 +108,18 @@ gsk_stroke_node_draw (GskRenderNode *node,
   if (gsk_render_node_get_node_type (self->child) == GSK_COLOR_NODE &&
       gsk_rect_contains_rect (&self->child->bounds, &node->bounds))
     {
-      gdk_cairo_set_source_rgba_ccs (cr, data->ccs, gsk_color_node_get_color (self->child));
+      gdk_painter_set_source_rgba_ccs (cr, data->ccs, gsk_color_node_get_color (self->child));
     }
   else
     {
-      gdk_cairo_rectangle_snap_to_grid (cr, &self->child->bounds);
-      cairo_clip (cr);
-      if (gdk_cairo_is_all_clipped (cr))
+      gdk_painter_rectangle_snap_to_grid (cr, &self->child->bounds);
+      gdk_paint_clip (cr);
+      if (gdk_painter_is_all_clipped (cr))
         return;
 
-      cairo_push_group (cr);
+      gdk_paint_push_group (cr);
       gsk_render_node_draw_full (self->child, cr, data);
-      cairo_pop_group_to_source (cr);
+      gdk_paint_pop_group_to_source (cr);
     }
 
   gsk_cairo_stroke_path (cr, self->path, &self->stroke);

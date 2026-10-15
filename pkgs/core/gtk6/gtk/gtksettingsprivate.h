@@ -25,7 +25,7 @@ G_BEGIN_DECLS
 #define DEFAULT_THEME_NAME      "Default"
 #define DEFAULT_ICON_THEME      "Adwaita"
 
-const cairo_font_options_t *
+const GdkPaintFontOptions *
                     gtk_settings_get_font_options            (GtkSettings            *settings);
 GdkDisplay         *_gtk_settings_get_display                (GtkSettings            *settings);
 GtkStyleCascade    *_gtk_settings_get_style_cascade          (GtkSettings            *settings,

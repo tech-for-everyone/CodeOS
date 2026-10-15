@@ -143,9 +143,9 @@ DXGI_FORMAT             gdk_memory_format_get_dxgi_format           (GdkMemoryFo
                                                                      guint                      *out_shader_4_component_mapping);
 DXGI_FORMAT             gdk_memory_format_get_dxgi_srgb_format      (GdkMemoryFormat             format);
 
-gboolean                gdk_memory_format_find_by_cairo_format      (cairo_format_t              cairo_format,
+gboolean                gdk_memory_format_find_by_cairo_format      (GdkPaintFormat              gdk_paint_format,
                                                                      GdkMemoryFormat            *out_memory_format);
-cairo_format_t          gdk_memory_format_get_cairo_format          (GdkMemoryFormat             format);
+GdkPaintFormat          gdk_memory_format_get_cairo_format          (GdkMemoryFormat             format);
 
 #ifdef HAVE_GSTREAMER
 gboolean                gdk_memory_format_find_by_gst_video_format  (GstVideoFormat              gst_format,

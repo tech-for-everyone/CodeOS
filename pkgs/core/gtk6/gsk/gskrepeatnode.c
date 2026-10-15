@@ -55,21 +55,21 @@ gsk_repeat_node_finalize (GskRenderNode *node)
 
 /* function should be in gdkcairoprivate.h, but headers... */
 static void
-gdk_cairo_pattern_set_repeat (cairo_pattern_t *pattern,
+gdk_painter_pattern_set_repeat (GdkPaintPattern *pattern,
                               GskRepeat        repeat)
 {
-  cairo_extend_t extend[] = {
-    [GSK_REPEAT_NONE] = CAIRO_EXTEND_NONE,
-    [GSK_REPEAT_PAD] = CAIRO_EXTEND_PAD,
-    [GSK_REPEAT_REPEAT] = CAIRO_EXTEND_REPEAT,
-    [GSK_REPEAT_REFLECT] = CAIRO_EXTEND_REFLECT,
+  GdkPaintExtend extend[] = {
+    [GSK_REPEAT_NONE] = GDK_PAINT_EXTEND_NONE,
+    [GSK_REPEAT_PAD] = GDK_PAINT_EXTEND_PAD,
+    [GSK_REPEAT_REPEAT] = GDK_PAINT_EXTEND_REPEAT,
+    [GSK_REPEAT_REFLECT] = GDK_PAINT_EXTEND_REFLECT,
   };
 
-  cairo_pattern_set_extend (pattern, extend[repeat]);
+  gdk_paint_pattern_set_extend (pattern, extend[repeat]);
 }
 
 static void
-gsk_repeat_node_draw_tiled (cairo_t                *cr,
+gsk_repeat_node_draw_tiled (GdkPainter                *cr,
                             GskCairoData           *data,
                             const graphene_rect_t  *rect,
                             GskRepeat               repeat,
@@ -77,43 +77,43 @@ gsk_repeat_node_draw_tiled (cairo_t                *cr,
                             const graphene_rect_t  *child_bounds,
                             const graphene_point_t *pos)
 {
-  cairo_pattern_t *pattern;
-  cairo_surface_t *child_surface;
-  cairo_t *child_cr;
-  cairo_matrix_t matrix;
+  GdkPaintPattern *pattern;
+  GdkPaintSurface *child_surface;
+  GdkPainter *child_cr;
+  GdkPaintMatrix matrix;
 
-  child_surface = gdk_cairo_create_similar_surface (cr,
-                                                    CAIRO_CONTENT_COLOR_ALPHA,
+  child_surface = gdk_painter_create_similar_surface (cr,
+                                                    GDK_PAINT_CONTENT_COLOR_ALPHA,
                                                     &GRAPHENE_RECT_INIT (
                                                         0, 0,
                                                         child_bounds->size.width,
                                                         child_bounds->size.height));
   if (child_surface == NULL)
     return;
-  child_cr = cairo_create (child_surface);
-  cairo_translate (child_cr,
+  child_cr = gdk_paint_create (child_surface);
+  gdk_paint_translate (child_cr,
                    - child_bounds->origin.x,
                    - child_bounds->origin.y);
   gsk_render_node_draw_full (child, child_cr, data);
-  cairo_destroy (child_cr);
+  gdk_paint_destroy (child_cr);
 
-  pattern = cairo_pattern_create_for_surface (child_surface);
-  gdk_cairo_pattern_set_repeat (pattern, repeat);
-  cairo_matrix_init_translate (&matrix, -pos->x, -pos->y);
-  cairo_pattern_set_matrix (pattern, &matrix);
+  pattern = gdk_paint_pattern_create_for_surface (child_surface);
+  gdk_painter_pattern_set_repeat (pattern, repeat);
+  gdk_paint_matrix_init_translate (&matrix, -pos->x, -pos->y);
+  gdk_paint_pattern_set_matrix (pattern, &matrix);
 
-  cairo_set_source (cr, pattern);
-  cairo_pattern_destroy (pattern);
+  gdk_paint_set_source (cr, pattern);
+  gdk_paint_pattern_destroy (pattern);
 
-  gdk_cairo_rect (cr, rect);
-  cairo_fill (cr);
+  gdk_painter_rect (cr, rect);
+  gdk_paint_fill (cr);
 
-  cairo_surface_destroy (child_surface);
+  gdk_paint_surface_destroy (child_surface);
 }
 
 static void
 gsk_repeat_node_draw_none (GskRenderNode *node,
-                           cairo_t       *cr,
+                           GdkPainter       *cr,
                            GskCairoData  *data)
 {
   GskRepeatNode *self = (GskRepeatNode *) node;
@@ -126,8 +126,8 @@ gsk_repeat_node_draw_none (GskRenderNode *node,
   if (!gsk_rect_intersection (&bounds, &child_bounds, &bounds))
     return;
 
-  gdk_cairo_rect (cr, &bounds);
-  cairo_clip (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_clip (cr);
   gsk_render_node_draw_full (self->child, cr, data);
   return;
 }
@@ -156,7 +156,7 @@ gsk_repeat_node_compute_rect_for_pad (const graphene_rect_t *draw_bounds,
 
 static void
 gsk_repeat_node_draw_pad (GskRenderNode *node,
-                          cairo_t       *cr,
+                          GdkPainter       *cr,
                           GskCairoData  *data)
 {
   GskRepeatNode *self = (GskRepeatNode *) node;
@@ -186,7 +186,7 @@ gsk_repeat_node_draw_pad (GskRenderNode *node,
 
 static void
 gsk_repeat_node_draw_repeat (GskRenderNode *node,
-                             cairo_t       *cr,
+                             GdkPainter       *cr,
                              GskCairoData  *data)
 {
   GskRepeatNode *self = (GskRepeatNode *) node;
@@ -309,21 +309,21 @@ gsk_repeat_node_draw_repeat (GskRenderNode *node,
       /* repeat in both directions */
       float x, y;
 
-      gdk_cairo_rect (cr, &clip_bounds);
-      cairo_clip (cr);
+      gdk_painter_rect (cr, &clip_bounds);
+      gdk_paint_clip (cr);
 
       for (x = floorf (tile_left); x < ceilf (tile_right); x++)
         {
           for (y = floorf (tile_top); y < ceilf (tile_bottom); y++)
             {
-              cairo_save (cr);
-              cairo_translate (cr,
+              gdk_paint_save (cr);
+              gdk_paint_translate (cr,
                                x * child_bounds.size.width,
                                y * child_bounds.size.height);
-              gdk_cairo_rect (cr, &child_bounds);
-              cairo_clip (cr);
+              gdk_painter_rect (cr, &child_bounds);
+              gdk_paint_clip (cr);
               gsk_render_node_draw_full (self->child, cr, data);
-              cairo_restore (cr);
+              gdk_paint_restore (cr);
             }
         }
     }
@@ -432,7 +432,7 @@ gsk_repeat_node_compute_rect_for_reflect (const graphene_rect_t *draw_bounds,
 
 static void
 gsk_repeat_node_draw_reflect (GskRenderNode *node,
-                              cairo_t       *cr,
+                              GdkPainter       *cr,
                               GskCairoData  *data)
 {
   GskRepeatNode *self = (GskRepeatNode *) node;
@@ -474,7 +474,7 @@ gsk_repeat_node_draw_reflect (GskRenderNode *node,
 
 static void
 gsk_repeat_node_draw (GskRenderNode *node,
-                      cairo_t       *cr,
+                      GdkPainter       *cr,
                       GskCairoData  *data)
 {
   GskRepeatNode *self = (GskRepeatNode *) node;

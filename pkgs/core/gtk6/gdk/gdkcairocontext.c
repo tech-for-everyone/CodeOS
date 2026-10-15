@@ -28,53 +28,53 @@
 #include "gdksurface.h"
 
 /**
- * GdkCairoContext:
+ * GdkPaintContext:
  *
  * Represents the platform-specific draw context.
  *
- * `GdkCairoContext`s are created for a surface using
+ * `GdkPaintContext`s are created for a surface using
  * [method@Gdk.Surface.create_cairo_context], and the context
  * can then be used to draw on that surface.
  */
 
-typedef struct _GdkCairoContextPrivate GdkCairoContextPrivate;
+typedef struct _GdkPaintContextPrivate GdkPaintContextPrivate;
 
-struct _GdkCairoContextPrivate {
+struct _GdkPaintContextPrivate {
   gpointer unused;
 };
 
-G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GdkCairoContext, gdk_cairo_context, GDK_TYPE_DRAW_CONTEXT,
-                                  G_ADD_PRIVATE (GdkCairoContext))
+G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GdkPaintContext, gdk_paint_context, GDK_TYPE_DRAW_CONTEXT,
+                                  G_ADD_PRIVATE (GdkPaintContext))
 
 static void
-gdk_cairo_context_finalize_frame (GdkDrawContext      *context,
+gdk_paint_context_finalize_frame (GdkDrawContext      *context,
                                   GdkDrawContextFrame *draw_frame)
 {
-  GdkCairoContextFrame *frame = (GdkCairoContextFrame *) draw_frame;
+  GdkPaintContextFrame *frame = (GdkPaintContextFrame *) draw_frame;
 
-  g_clear_pointer (&frame->surface, cairo_surface_destroy);
+  g_clear_pointer (&frame->surface, gdk_paint_surface_destroy);
 
-  GDK_DRAW_CONTEXT_CLASS (gdk_cairo_context_parent_class)->finalize_frame (context, draw_frame);
+  GDK_DRAW_CONTEXT_CLASS (gdk_paint_context_parent_class)->finalize_frame (context, draw_frame);
 }
 
 static void
-gdk_cairo_context_class_init (GdkCairoContextClass *klass)
+gdk_paint_context_class_init (GdkPaintContextClass *klass)
 {
   GdkDrawContextClass *context_class = GDK_DRAW_CONTEXT_CLASS (klass);
 
-  context_class->frame_size = sizeof (GdkCairoContextFrame);
+  context_class->frame_size = sizeof (GdkPaintContextFrame);
 
-  context_class->finalize_frame = gdk_cairo_context_finalize_frame;
+  context_class->finalize_frame = gdk_paint_context_finalize_frame;
 }
 
 static void
-gdk_cairo_context_init (GdkCairoContext *self)
+gdk_paint_context_init (GdkPaintContext *self)
 {
 }
 
 /**
- * gdk_cairo_context_cairo_create:
- * @self: a `GdkCairoContext` that is currently drawing
+ * gdk_paint_context_get_painter:
+ * @self: a `GdkPaintContext` that is currently drawing
  *
  * Retrieves a Cairo context to be used to draw on the `GdkSurface`
  * of @context.
@@ -91,13 +91,13 @@ gdk_cairo_context_init (GdkCairoContext *self)
  * Deprecated: 4.18: Drawing content with Cairo should be done via
  *   Cairo rendernodes, not by using renderers.
  */
-cairo_t *
-gdk_cairo_context_cairo_create (GdkCairoContext *self)
+GdkPainter *
+gdk_paint_context_get_painter (GdkPaintContext *self)
 {
   GdkDrawContext *draw_context;
   GdkDrawContextFrame *frame;
-  GdkCairoContextFrame *cframe;
-  cairo_t *cr;
+  GdkPaintContextFrame *cframe;
+  GdkPainter *cr;
   double scale;
 
   g_return_val_if_fail (GDK_IS_CAIRO_CONTEXT (self), NULL);
@@ -110,23 +110,23 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 G_GNUC_END_IGNORE_DEPRECATIONS
 
   frame = gdk_draw_context_get_current_frame (GDK_DRAW_CONTEXT (self));
-  cframe = (GdkCairoContextFrame *) frame;
+  cframe = (GdkPaintContextFrame *) frame;
   if (cframe == NULL || cframe->surface == NULL)
     return NULL;
 
-  cr = cairo_create (cframe->surface);
+  cr = gdk_paint_create (cframe->surface);
 
-  gdk_cairo_region (cr, gdk_draw_context_frame_get_damage (frame));
-  cairo_clip (cr);
+  gdk_painter_region (cr, gdk_draw_context_frame_get_damage (frame));
+  gdk_paint_clip (cr);
 
   scale = gdk_surface_get_scale (gdk_draw_context_get_surface (draw_context));
-  cairo_scale (cr, scale, scale);
+  gdk_paint_scale (cr, scale, scale);
 
   return cr;
 }
 
 /**
- * gdk_cairo_context_frame_set_surface:
+ * gdk_paint_context_frame_set_surface:
  * @frame: the frame
  * @surface: (transfer full) (nullable): the surface to use for rendering to this frame
  *
@@ -140,15 +140,15 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  * a new surfaces every frame in begin_frame() and unset them again in end_frame().
  **/
 void
-gdk_cairo_context_frame_set_surface (GdkCairoContextFrame *frame,
-                                     cairo_surface_t     *surface)
+gdk_paint_context_frame_set_surface (GdkPaintContextFrame *frame,
+                                     GdkPaintSurface     *surface)
 {
-  g_clear_pointer (&frame->surface, cairo_surface_destroy);
+  g_clear_pointer (&frame->surface, gdk_paint_surface_destroy);
   frame->surface = surface;
 }
 
 /*
- * gdk_cairo_context_frame_get_surface:
+ * gdk_paint_context_frame_get_surface:
  * @frame: the frame
  *
  * Queries the surface that's used for this frame. A surface may only exist
@@ -157,8 +157,8 @@ gdk_cairo_context_frame_set_surface (GdkCairoContextFrame *frame,
  *
  * Returns: the surface to render to or NULL if none exists yet
  **/
-cairo_surface_t *
-gdk_cairo_context_frame_get_surface (GdkCairoContextFrame *frame)
+GdkPaintSurface *
+gdk_paint_context_frame_get_surface (GdkPaintContextFrame *frame)
 {
   return frame->surface;
 }

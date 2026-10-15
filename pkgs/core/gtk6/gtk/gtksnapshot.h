@@ -180,7 +180,7 @@ GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_append_node                (GtkSnapshot            *snapshot,
                                                          GskRenderNode          *node);
 GDK_AVAILABLE_IN_ALL
-cairo_t *       gtk_snapshot_append_cairo               (GtkSnapshot            *snapshot,
+GdkPainter *       gtk_snapshot_append_cairo               (GtkSnapshot            *snapshot,
                                                          const graphene_rect_t  *bounds);
 GDK_AVAILABLE_IN_ALL
 void            gtk_snapshot_append_texture             (GtkSnapshot            *snapshot,

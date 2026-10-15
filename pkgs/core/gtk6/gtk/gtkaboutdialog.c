@@ -30,7 +30,7 @@
 
 #include <string.h>
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 #include "gtkaboutdialog.h"
 #include "gtkbutton.h"

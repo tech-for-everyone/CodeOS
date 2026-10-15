@@ -23,9 +23,9 @@
 #include "gskcairorenderer.h"
 #include "gpu/gskglrenderer.h"
 
-#include <cairo.h>
-#ifdef CAIRO_HAS_SVG_SURFACE
-#include <cairo-svg.h>
+#include <gdk/gdkpaint.h>
+#ifdef GDK_PAINT_HAS_SVG_SURFACE
+#include <gdk/gdkpaint.h>
 #endif
 #include <hb-ot.h>
 
@@ -65,23 +65,23 @@ gsk_render_node_serialize_bytes (GdkContentSerializer *serializer,
   g_bytes_unref (bytes);
 }
 
-#ifdef CAIRO_HAS_SVG_SURFACE
-static cairo_status_t
+#ifdef GDK_PAINT_HAS_SVG_SURFACE
+static GdkPaintStatus
 gsk_render_node_cairo_serializer_write (gpointer             user_data,
                                         const unsigned char *data,
                                         unsigned int         length)
 {
   g_byte_array_append (user_data, data, length);
 
-  return CAIRO_STATUS_SUCCESS;
+  return GDK_PAINT_STATUS_SUCCESS;
 }
 
 static void
 gsk_render_node_svg_serializer (GdkContentSerializer *serializer)
 {
   GskRenderNode *node;
-  cairo_surface_t *surface;
-  cairo_t *cr;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
   graphene_rect_t bounds;
   GByteArray *array;
 
@@ -89,30 +89,30 @@ gsk_render_node_svg_serializer (GdkContentSerializer *serializer)
   gsk_render_node_get_bounds (node, &bounds);
   array = g_byte_array_new ();
 
-  surface = cairo_svg_surface_create_for_stream (gsk_render_node_cairo_serializer_write,
+  surface = gdk_paint_svg_surface_create_for_stream (gsk_render_node_cairo_serializer_write,
                                                  array,
                                                  bounds.size.width,
                                                  bounds.size.height);
-  cairo_svg_surface_set_document_unit (surface, CAIRO_SVG_UNIT_PX);
-  cairo_surface_set_device_offset (surface, -bounds.origin.x, -bounds.origin.y);
+  gdk_paint_svg_surface_set_document_unit (surface, GDK_PAINT_SVG_UNIT_PX);
+  gdk_paint_surface_set_device_offset (surface, -bounds.origin.x, -bounds.origin.y);
 
-  cr = cairo_create (surface);
+  cr = gdk_paint_create (surface);
   gsk_render_node_draw (node, cr);
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
-  cairo_surface_finish (surface);
-  if (cairo_surface_status (surface) == CAIRO_STATUS_SUCCESS)
+  gdk_paint_surface_finish (surface);
+  if (gdk_paint_surface_status (surface) == GDK_PAINT_STATUS_SUCCESS)
     {
       gsk_render_node_serialize_bytes (serializer, g_byte_array_free_to_bytes (array));
     }
   else
     {
       GError *error = g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED,
-                                           cairo_status_to_string (cairo_surface_status (surface)));
+                                           gdk_paint_status_to_string (gdk_paint_surface_status (surface)));
       gdk_content_serializer_return_error (serializer, error);
       g_byte_array_unref (array);
     }
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 }
 #endif
 
@@ -227,7 +227,7 @@ gsk_render_node_init_content_serializers (void)
                                    gsk_render_node_content_serializer,
                                    NULL,
                                    NULL);
-#ifdef CAIRO_HAS_SVG_SURFACE
+#ifdef GDK_PAINT_HAS_SVG_SURFACE
   gdk_content_register_serializer (GSK_TYPE_RENDER_NODE,
                                    "image/svg+xml",
                                    gsk_render_node_svg_serializer,

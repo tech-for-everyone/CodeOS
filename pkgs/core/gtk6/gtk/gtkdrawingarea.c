@@ -89,23 +89,23 @@ static guint signals[LAST_SIGNAL] = { 0, };
  * ```c
  * static void
  * draw_function (GtkDrawingArea *area,
- *                cairo_t        *cr,
+ *                GdkPainter        *cr,
  *                int             width,
  *                int             height,
  *                gpointer        data)
  * {
  *   GdkRGBA color;
  *
- *   cairo_arc (cr,
+ *   gdk_paint_arc (cr,
  *              width / 2.0, height / 2.0,
  *              MIN (width, height) / 2.0,
  *              0, 2 * G_PI);
  *
  *   gtk_widget_get_color (GTK_WIDGET (area),
  *                         &color);
- *   gdk_cairo_set_source_rgba (cr, &color);
+ *   gdk_painter_set_source_rgba (cr, &color);
  *
- *   cairo_fill (cr);
+ *   gdk_paint_fill (cr);
  * }
  *
  * int
@@ -131,8 +131,8 @@ static guint signals[LAST_SIGNAL] = { 0, };
  *
  * The available routines for drawing are documented in the
  * [Cairo documentation](https://www.cairographics.org/manual/); GDK
- * offers additional API to integrate with Cairo, like [func@Gdk.cairo_set_source_rgba]
- * or [func@Gdk.cairo_set_source_pixbuf].
+ * offers additional API to integrate with Cairo, like [func@Gdk.gdk_paint_set_source_rgba]
+ * or [func@Gdk.gdk_paint_set_source_pixbuf].
  *
  * To receive mouse events on a drawing area, you will need to use
  * event controllers. To receive keyboard events, you will need to set
@@ -245,7 +245,7 @@ gtk_drawing_area_snapshot (GtkWidget   *widget,
 {
   GtkDrawingArea *self = GTK_DRAWING_AREA (widget);
   GtkDrawingAreaPrivate *priv = gtk_drawing_area_get_instance_private (self);
-  cairo_t *cr;
+  GdkPainter *cr;
   int width, height;
 
   if (!priv->draw_func)
@@ -264,7 +264,7 @@ gtk_drawing_area_snapshot (GtkWidget   *widget,
                    cr,
                    width, height,
                    priv->draw_func_target);
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 }
 
 static void

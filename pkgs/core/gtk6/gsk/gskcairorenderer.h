@@ -24,7 +24,7 @@
 #error "Only <gsk/gsk.h> can be included directly."
 #endif
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include <gsk/gskrenderer.h>
 
 G_BEGIN_DECLS

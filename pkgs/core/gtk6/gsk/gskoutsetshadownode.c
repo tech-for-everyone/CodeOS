@@ -73,7 +73,7 @@ gsk_outset_shadow_node_get_extents (const GskRenderNode *node,
 
 static void
 gsk_outset_shadow_node_draw (GskRenderNode *node,
-                             cairo_t       *cr,
+                             GdkPainter       *cr,
                              GskCairoData  *data)
 {
   GskOutsetShadowNode *self = (GskOutsetShadowNode *) node;
@@ -100,17 +100,17 @@ gsk_outset_shadow_node_draw (GskRenderNode *node,
 
   clip_radius = gsk_cairo_blur_compute_pixels (blur_radius);
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
   gsk_rounded_rect_init_copy (&clip_box, &outline);
   gsk_outset_shadow_node_get_extents (node, extents);
   gsk_rounded_rect_shrink (&clip_box, -extents[0], -extents[1], -extents[2], -extents[3]);
 
-  cairo_set_fill_rule (cr, CAIRO_FILL_RULE_EVEN_ODD);
+  gdk_paint_set_fill_rule (cr, GDK_PAINT_FILL_RULE_EVEN_ODD);
   gsk_rounded_rect_path (&outline, cr);
-  gdk_cairo_rect (cr, &clip_box.bounds);
+  gdk_painter_rect (cr, &clip_box.bounds);
 
-  cairo_clip (cr);
+  gdk_paint_clip (cr);
 
   gsk_rounded_rect_init_copy (&box, &outline);
   gsk_rounded_rect_offset (&box, self->offset.x, self->offset.y);
@@ -145,12 +145,12 @@ gsk_outset_shadow_node_draw (GskRenderNode *node,
       /* First do the corners of box */
       for (i = 0; i < 4; i++)
         {
-          cairo_save (cr);
+          gdk_paint_save (cr);
           /* Always clip with remaining to ensure we never draw any area twice */
-          gdk_cairo_region (cr, remaining);
-          cairo_clip (cr);
+          gdk_painter_region (cr, remaining);
+          gdk_paint_clip (cr);
           gsk_cairo_shadow_draw_corner (cr, data->ccs, FALSE, &box, &clip_box, blur_radius, &self->color, i, &r);
-          cairo_restore (cr);
+          gdk_paint_restore (cr);
 
           /* We drew the region, remove it from remaining */
           gdk_region_subtract_rectangle (remaining, &r);
@@ -159,12 +159,12 @@ gsk_outset_shadow_node_draw (GskRenderNode *node,
       /* Then the sides */
       for (i = 0; i < 4; i++)
         {
-          cairo_save (cr);
+          gdk_paint_save (cr);
           /* Always clip with remaining to ensure we never draw any area twice */
-          gdk_cairo_region (cr, remaining);
-          cairo_clip (cr);
+          gdk_painter_region (cr, remaining);
+          gdk_paint_clip (cr);
           gsk_cairo_shadow_draw_side (cr, data->ccs, FALSE, &box, &clip_box, blur_radius, &self->color, i, &r);
-          cairo_restore (cr);
+          gdk_paint_restore (cr);
 
           /* We drew the region, remove it from remaining */
           gdk_region_subtract_rectangle (remaining, &r);
@@ -172,16 +172,16 @@ gsk_outset_shadow_node_draw (GskRenderNode *node,
 
       /* Then the rest, which needs no blurring */
 
-      cairo_save (cr);
-      gdk_cairo_region (cr, remaining);
-      cairo_clip (cr);
+      gdk_paint_save (cr);
+      gdk_painter_region (cr, remaining);
+      gdk_paint_clip (cr);
       gsk_cairo_shadow_draw (cr, data->ccs, FALSE, &box, &clip_box, blur_radius, &self->color, GSK_BLUR_NONE);
-      cairo_restore (cr);
+      gdk_paint_restore (cr);
 
       gdk_region_destroy (remaining);
     }
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 static void

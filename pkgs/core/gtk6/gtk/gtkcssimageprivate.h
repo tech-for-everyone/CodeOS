@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include <glib-object.h>
 
 #include <gtk/css/gtkcss.h>
@@ -135,9 +135,9 @@ void           _gtk_css_image_get_concrete_size    (GtkCssImage                *
                                                     double                      default_height,
                                                     double                     *concrete_width,
                                                     double                     *concrete_height);
-cairo_surface_t *
+GdkPaintSurface *
                _gtk_css_image_get_surface          (GtkCssImage                *image,
-                                                    cairo_surface_t            *target,
+                                                    GdkPaintSurface            *target,
                                                     int                         surface_width,
                                                     int                         surface_height);
 gboolean       gtk_css_image_is_computed           (GtkCssImage                *image) G_GNUC_PURE;

@@ -81,6 +81,7 @@ CXXFLAGS = \
 
 CXX_SRCS := \
     gdk/qt/gdkqt.cpp \
+    gdk/qt/gdkqtpaint.cpp \
     gsk/qt/gskqt.cpp \
     qt/qttext.cpp
 
@@ -152,9 +153,17 @@ GTK4_GEN_SRCS := \
 
 GTK4_GEN_OBJ := $(patsubst %.c,build/obj/gtk4/%.o,$(GTK4_GEN_SRCS))
 
+# GTK6's own C sources that belong to the GTK4 layer (as opposed to the C++
+# engine in CXX_SRCS).  They are compiled with the same freestanding contract
+# as the imported sources, from $(HERE) rather than build/gen/.
+GTK4_OWN_SRCS := \
+    gdk/gdkpaintenumtypes.c
+
+GTK4_OWN_OBJ := $(patsubst %.c,build/obj/gtk4/src/%.o,$(GTK4_OWN_SRCS))
+
 # Compile-only probes for the surgery: each adds a public header that upstream
 # dragged cairo/pango in through.  They are never linked or run.
-GTK4_PROBES := tests/gdktypes.c tests/gdkregion.c
+GTK4_PROBES := tests/gdktypes.c tests/gdkregion.c tests/gdkpaint.c
 
 
 .PHONY: all clean check gtk4-headers gtk4-generated gtk4-check gtk4-ledger gtk4-clean
@@ -198,12 +207,16 @@ build/obj/gtk4/%.o: $(GTK4_STAMP)
 	@mkdir -p $(dir $@)
 	$(GTK4_CC) $(GTK4_CFLAGS) -c $(GTK4_GEN)/$*.c -o $@
 
-gtk4-check: gtk4-headers gtk4-generated $(GTK4_PROBES:%.c=build/obj/gtk4/%.o)
+build/obj/gtk4/src/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(GTK4_CC) $(GTK4_CFLAGS) -c $< -o $@
+
+gtk4-check: gtk4-headers gtk4-generated $(GTK4_OWN_OBJ) $(GTK4_PROBES:%.c=build/obj/gtk4/%.o)
 	@for f in $(GTK4_HEADER_FILES); do \
 	    test -s "$(GTK4_GEN)/$$f" || \
 	        { echo "gtk4-check: missing or empty $(GTK4_GEN)/$$f" >&2; exit 1; }; \
 	done
-	@echo "gtk4-check: $(words $(GTK4_HEADER_FILES)) generated files, $(words $(GTK4_GEN_SRCS)) generated C files and $(words $(GTK4_PROBES)) probes compiled on the target"
+	@echo "gtk4-check: $(words $(GTK4_HEADER_FILES)) generated files, $(words $(GTK4_GEN_SRCS)) generated C files, $(words $(GTK4_OWN_SRCS)) own C files and $(words $(GTK4_PROBES)) probes compiled on the target"
 
 build/obj/gtk4/tests/%.o: tests/%.c
 	@mkdir -p $(dir $@)

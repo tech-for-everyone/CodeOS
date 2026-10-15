@@ -30,7 +30,7 @@ G_BEGIN_DECLS
  * GskRenderNodeType:
  * @GSK_NOT_A_RENDER_NODE: Error type. No node will ever have this type.
  * @GSK_CONTAINER_NODE: A node containing a stack of children
- * @GSK_CAIRO_NODE: A node drawing a `cairo_surface_t`
+ * @GSK_CAIRO_NODE: A node drawing a `GdkPaintSurface`
  * @GSK_COLOR_NODE: A node drawing a single color rectangle
  * @GSK_LINEAR_GRADIENT_NODE: A node drawing a linear gradient
  * @GSK_REPEATING_LINEAR_GRADIENT_NODE: A node drawing a repeating linear gradient
@@ -292,7 +292,7 @@ typedef enum {
  * The 12 compositing modes defined by the seminal paper
  * by Thomas Porter and Tom Duff.
  *
- * They are used in SVG, PDF and in Cairo with `cairo_operator_t`.
+ * They are used in SVG, PDF and in Cairo with `GdkPaintOperator`.
  *
  * Since: 4.22
  */

@@ -40,7 +40,7 @@ struct _GskTextNode
   PangoFontMap *fontmap;
   PangoFont *font;
   gboolean has_color_glyphs;
-  cairo_hint_style_t hint_style;
+  GdkPaintHintStyle hint_style;
 
   GdkColor color;
   graphene_point_t offset;
@@ -65,7 +65,7 @@ gsk_text_node_finalize (GskRenderNode *node)
 
 static void
 gsk_text_node_draw (GskRenderNode *node,
-                    cairo_t       *cr,
+                    GdkPainter       *cr,
                     GskCairoData  *data)
 {
   GskTextNode *self = (GskTextNode *) node;
@@ -75,7 +75,7 @@ gsk_text_node_draw (GskRenderNode *node,
   glyphs.glyphs = self->glyphs;
   glyphs.log_clusters = NULL;
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
   if (!gdk_color_state_equal (data->ccs, GDK_COLOR_STATE_SRGB) &&
       self->has_color_glyphs)
@@ -84,12 +84,12 @@ gsk_text_node_draw (GskRenderNode *node,
     }
   else
     {
-      gdk_cairo_set_source_color (cr, data->ccs, &self->color);
-      cairo_translate (cr, self->offset.x, self->offset.y);
+      gdk_painter_set_source_color (cr, data->ccs, &self->color);
+      gdk_paint_translate (cr, self->offset.x, self->offset.y);
       pango_cairo_show_glyph_string (cr, self->font, &glyphs);
     }
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 static void
@@ -340,7 +340,7 @@ gsk_text_node_get_font (const GskRenderNode *node)
   return self->font;
 }
 
-cairo_hint_style_t
+GdkPaintHintStyle
 gsk_text_node_get_font_hint_style (const GskRenderNode *node)
 {
   const GskTextNode *self = (const GskTextNode *) node;

@@ -59,11 +59,11 @@ gsk_conic_gradient_node_finalize (GskRenderNode *node)
 #define DEG_TO_RAD(x)          ((x) * (G_PI / 180.f))
 
 static void
-_cairo_mesh_pattern_set_corner_rgba (cairo_pattern_t *pattern,
+_cairo_mesh_pattern_set_corner_rgba (GdkPaintPattern *pattern,
                                      guint            corner_num,
                                      const float      color[4])
 {
-  cairo_mesh_pattern_set_corner_color_rgba (pattern, corner_num, color[0], color[1], color[2], color[3]);
+  gdk_paint_mesh_pattern_set_corner_color_rgba (pattern, corner_num, color[0], color[1], color[2], color[3]);
 }
 
 static void
@@ -85,7 +85,7 @@ project (double  angle,
 }
 
 static void
-gsk_conic_gradient_node_add_patch (cairo_pattern_t *pattern,
+gsk_conic_gradient_node_add_patch (GdkPaintPattern *pattern,
                                    float            radius,
                                    float            start_angle,
                                    const float      start_color[4],
@@ -94,21 +94,21 @@ gsk_conic_gradient_node_add_patch (cairo_pattern_t *pattern,
 {
   double x, y;
 
-  cairo_mesh_pattern_begin_patch (pattern);
+  gdk_paint_mesh_pattern_begin_patch (pattern);
 
-  cairo_mesh_pattern_move_to  (pattern, 0, 0);
+  gdk_paint_mesh_pattern_move_to  (pattern, 0, 0);
   project (start_angle, radius, &x, &y);
-  cairo_mesh_pattern_line_to  (pattern, x, y);
+  gdk_paint_mesh_pattern_line_to  (pattern, x, y);
   project (end_angle, radius, &x, &y);
-  cairo_mesh_pattern_line_to  (pattern, x, y);
-  cairo_mesh_pattern_line_to  (pattern, 0, 0);
+  gdk_paint_mesh_pattern_line_to  (pattern, x, y);
+  gdk_paint_mesh_pattern_line_to  (pattern, 0, 0);
 
   _cairo_mesh_pattern_set_corner_rgba (pattern, 0, start_color);
   _cairo_mesh_pattern_set_corner_rgba (pattern, 1, start_color);
   _cairo_mesh_pattern_set_corner_rgba (pattern, 2, end_color);
   _cairo_mesh_pattern_set_corner_rgba (pattern, 3, end_color);
 
-  cairo_mesh_pattern_end_patch (pattern);
+  gdk_paint_mesh_pattern_end_patch (pattern);
 }
 
 static void
@@ -151,12 +151,12 @@ add_color_stop_to_array (float    offset,
 
 static void
 gsk_conic_gradient_node_draw (GskRenderNode *node,
-                              cairo_t       *cr,
+                              GdkPainter       *cr,
                               GskCairoData  *data)
 {
   GskConicGradientNode *self = (GskConicGradientNode *) node;
   graphene_rect_t bounds;
-  cairo_pattern_t *pattern;
+  GdkPaintPattern *pattern;
   graphene_point_t corner;
   float radius;
   gsize i;
@@ -166,7 +166,7 @@ gsk_conic_gradient_node_draw (GskRenderNode *node,
   if (!gsk_cairo_rect_snap (cr, &node->bounds, self->snap, &bounds))
     return;
 
-  pattern = cairo_pattern_create_mesh ();
+  pattern = gdk_paint_pattern_create_mesh ();
   graphene_rect_get_top_right (&bounds, &corner);
   radius = graphene_point_distance (&self->center, &corner, NULL, NULL);
   graphene_rect_get_bottom_right (&bounds, &corner);
@@ -287,14 +287,14 @@ gsk_conic_gradient_node_draw (GskRenderNode *node,
 
   g_array_unref (stops);
 
-  cairo_pattern_set_extend (pattern, CAIRO_EXTEND_PAD);
+  gdk_paint_pattern_set_extend (pattern, GDK_PAINT_EXTEND_PAD);
 
-  gdk_cairo_rect (cr, &bounds);
-  cairo_translate (cr, self->center.x, self->center.y);
-  cairo_set_source (cr, pattern);
-  cairo_fill (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_translate (cr, self->center.x, self->center.y);
+  gdk_paint_set_source (cr, pattern);
+  gdk_paint_fill (cr);
 
-  cairo_pattern_destroy (pattern);
+  gdk_paint_pattern_destroy (pattern);
 }
 
 static void

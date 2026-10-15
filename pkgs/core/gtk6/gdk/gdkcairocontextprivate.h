@@ -24,32 +24,32 @@
 
 #include "gdkdrawcontextprivate.h"
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_BEGIN_DECLS
 
-typedef struct _GdkCairoContextFrame GdkCairoContextFrame;
+typedef struct _GdkPaintContextFrame GdkPaintContextFrame;
 
-struct _GdkCairoContextFrame
+struct _GdkPaintContextFrame
 {
   GdkDrawContextFrame parent;
 
-  cairo_surface_t *surface;
+  GdkPaintSurface *surface;
 };
 
-struct _GdkCairoContext
+struct _GdkPaintContext
 {
   GdkDrawContext parent_instance;
 };
 
-struct _GdkCairoContextClass
+struct _GdkPaintContextClass
 {
   GdkDrawContextClass parent_class;
 };
 
-void                    gdk_cairo_context_frame_set_surface     (GdkCairoContextFrame   *frame,
-                                                                 cairo_surface_t        *surface);
-cairo_surface_t *       gdk_cairo_context_frame_get_surface     (GdkCairoContextFrame   *frame);
+void                    gdk_paint_context_frame_set_surface     (GdkPaintContextFrame   *frame,
+                                                                 GdkPaintSurface        *surface);
+GdkPaintSurface *       gdk_paint_context_frame_get_surface     (GdkPaintContextFrame   *frame);
 
 G_END_DECLS
 

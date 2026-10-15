@@ -99,7 +99,7 @@
 #include "gtkopenuriportal.h"
 #endif
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>

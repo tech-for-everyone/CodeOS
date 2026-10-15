@@ -147,7 +147,7 @@ struct _GdkDisplayClass
 
   GType toplevel_type;        /* Type for GdkToplevel, must be set */
   GType popup_type;           /* Type for GdkPopup, must be set */
-  GType cairo_context_type;   /* type for GdkCairoContext, must be set */
+  GType gdk_paint_context_type;   /* type for GdkPaintContext, must be set */
   GType vk_context_type;      /* type for GdkVulkanContext, must be set if vk_extension_name != NULL */
   const char *vk_extension_name; /* Name of required windowing vulkan extension or %NULL (default) if Vulkan isn't supported */
 

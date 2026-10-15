@@ -64,24 +64,24 @@ arc_path_equal (ArcPath *arc1,
 }
 
 /* We need the path to start with a line-to */
-static cairo_path_t *
-fixup_path (cairo_path_t *path)
+static GdkPaintPath *
+fixup_path (GdkPaintPath *path)
 {
-  cairo_path_data_t *data;
+  GdkPaintPathData *data;
 
   data = &path->data[0];
-  if (data->header.type == CAIRO_PATH_MOVE_TO)
-    data->header.type = CAIRO_PATH_LINE_TO;
+  if (data->header.type == GDK_PAINT_PATH_MOVE_TO)
+    data->header.type = GDK_PAINT_PATH_LINE_TO;
 
   return path;
 }
 
 static void
-append_arc (cairo_t *cr, double angle1, double angle2, gboolean negative)
+append_arc (GdkPainter *cr, double angle1, double angle2, gboolean negative)
 {
   static GHashTable *arc_path_cache;
   ArcPath key;
-  cairo_path_t *arc;
+  GdkPaintPath *arc;
 
   memset (&key, 0, sizeof (ArcPath));
   key.angle1 = angle1;
@@ -91,72 +91,72 @@ append_arc (cairo_t *cr, double angle1, double angle2, gboolean negative)
   if (arc_path_cache == NULL)
     arc_path_cache = g_hash_table_new_full ((GHashFunc)arc_path_hash,
                                             (GEqualFunc)arc_path_equal,
-                                            g_free, (GDestroyNotify)cairo_path_destroy);
+                                            g_free, (GDestroyNotify)gdk_paint_path_destroy);
 
   arc = g_hash_table_lookup (arc_path_cache, &key);
   if (arc == NULL)
     {
-      cairo_surface_t *surface;
-      cairo_t *tmp;
+      GdkPaintSurface *surface;
+      GdkPainter *tmp;
 
-      surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, 1, 1);
-      tmp = cairo_create (surface);
+      surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, 1, 1);
+      tmp = gdk_paint_create (surface);
 
       if (negative)
-        cairo_arc_negative (tmp, 0.0, 0.0, 1.0, angle1, angle2);
+        gdk_paint_arc_negative (tmp, 0.0, 0.0, 1.0, angle1, angle2);
       else
-        cairo_arc (tmp, 0.0, 0.0, 1.0, angle1, angle2);
+        gdk_paint_arc (tmp, 0.0, 0.0, 1.0, angle1, angle2);
 
-      arc = fixup_path (cairo_copy_path (tmp));
+      arc = fixup_path (gdk_paint_copy_path (tmp));
       g_hash_table_insert (arc_path_cache, g_memdup2 (&key, sizeof (key)), arc);
 
-      cairo_destroy (tmp);
-      cairo_surface_destroy (surface);
+      gdk_paint_destroy (tmp);
+      gdk_paint_surface_destroy (surface);
     }
 
-  cairo_append_path (cr, arc);
+  gdk_paint_append_path (cr, arc);
 }
 
 static void
-_cairo_ellipsis (cairo_t *cr,
+_cairo_ellipsis (GdkPainter *cr,
 	         double xc, double yc,
 	         double xradius, double yradius,
 	         double angle1, double angle2)
 {
-  cairo_matrix_t save;
+  GdkPaintMatrix save;
 
   if (xradius <= 0.0 || yradius <= 0.0)
     {
-      cairo_line_to (cr, xc, yc);
+      gdk_paint_line_to (cr, xc, yc);
       return;
     }
 
-  cairo_get_matrix (cr, &save);
-  cairo_translate (cr, xc, yc);
-  cairo_scale (cr, xradius, yradius);
+  gdk_paint_get_matrix (cr, &save);
+  gdk_paint_translate (cr, xc, yc);
+  gdk_paint_scale (cr, xradius, yradius);
   append_arc (cr, angle1, angle2, FALSE);
-  cairo_set_matrix (cr, &save);
+  gdk_paint_set_matrix (cr, &save);
 }
 
 static void
-_cairo_ellipsis_negative (cairo_t *cr,
+_cairo_ellipsis_negative (GdkPainter *cr,
                           double xc, double yc,
                           double xradius, double yradius,
                           double angle1, double angle2)
 {
-  cairo_matrix_t save;
+  GdkPaintMatrix save;
 
   if (xradius <= 0.0 || yradius <= 0.0)
     {
-      cairo_line_to (cr, xc, yc);
+      gdk_paint_line_to (cr, xc, yc);
       return;
     }
 
-  cairo_get_matrix (cr, &save);
-  cairo_translate (cr, xc, yc);
-  cairo_scale (cr, xradius, yradius);
+  gdk_paint_get_matrix (cr, &save);
+  gdk_paint_translate (cr, xc, yc);
+  gdk_paint_scale (cr, xradius, yradius);
   append_arc (cr, angle1, angle2, TRUE);
-  cairo_set_matrix (cr, &save);
+  gdk_paint_set_matrix (cr, &save);
 }
 
 double
@@ -188,7 +188,7 @@ _gtk_rounded_box_guess_length (const GskRoundedRect *box,
 
 void
 _gtk_rounded_box_path_side (const GskRoundedRect *box,
-                            cairo_t              *cr,
+                            GdkPainter              *cr,
                             GtkCssSide            side)
 {
   switch (side)
@@ -258,7 +258,7 @@ _gtk_rounded_box_path_side (const GskRoundedRect *box,
 void
 _gtk_rounded_box_path_top (const GskRoundedRect *outer,
                            const GskRoundedRect *inner,
-                           cairo_t              *cr)
+                           GdkPainter              *cr)
 {
   double start_angle, middle_angle, end_angle;
 
@@ -275,7 +275,7 @@ _gtk_rounded_box_path_top (const GskRoundedRect *outer,
   else
     end_angle = 7 * G_PI_4;
 
-  cairo_new_sub_path (cr);
+  gdk_paint_new_sub_path (cr);
 
   _cairo_ellipsis (cr,
                    outer->bounds.origin.x + outer->corner[GSK_CORNER_TOP_LEFT].width,
@@ -303,13 +303,13 @@ _gtk_rounded_box_path_top (const GskRoundedRect *outer,
                             inner->corner[GSK_CORNER_TOP_LEFT].height,
                             middle_angle, start_angle);
 
-  cairo_close_path (cr);
+  gdk_paint_close_path (cr);
 }
 
 void
 _gtk_rounded_box_path_right (const GskRoundedRect *outer,
                              const GskRoundedRect *inner,
-                             cairo_t              *cr)
+                             GdkPainter              *cr)
 {
   double start_angle, middle_angle, end_angle;
 
@@ -326,7 +326,7 @@ _gtk_rounded_box_path_right (const GskRoundedRect *outer,
   else
     end_angle = G_PI_4;
 
-  cairo_new_sub_path (cr);
+  gdk_paint_new_sub_path (cr);
 
   _cairo_ellipsis (cr, 
                    outer->bounds.origin.x + outer->bounds.size.width - outer->corner[GSK_CORNER_TOP_RIGHT].width,
@@ -354,13 +354,13 @@ _gtk_rounded_box_path_right (const GskRoundedRect *outer,
                             inner->corner[GSK_CORNER_TOP_RIGHT].height,
                             middle_angle, start_angle);
 
-  cairo_close_path (cr);
+  gdk_paint_close_path (cr);
 }
 
 void
 _gtk_rounded_box_path_bottom (const GskRoundedRect *outer,
                               const GskRoundedRect *inner,
-                              cairo_t              *cr)
+                              GdkPainter              *cr)
 {
   double start_angle, middle_angle, end_angle;
 
@@ -377,7 +377,7 @@ _gtk_rounded_box_path_bottom (const GskRoundedRect *outer,
   else
     end_angle = 3 * G_PI_4;
 
-  cairo_new_sub_path (cr);
+  gdk_paint_new_sub_path (cr);
 
   _cairo_ellipsis (cr,
                    outer->bounds.origin.x + outer->bounds.size.width - outer->corner[GSK_CORNER_BOTTOM_RIGHT].width,
@@ -405,13 +405,13 @@ _gtk_rounded_box_path_bottom (const GskRoundedRect *outer,
                             inner->corner[GSK_CORNER_BOTTOM_RIGHT].height,
                             middle_angle, start_angle);
 
-  cairo_close_path (cr);
+  gdk_paint_close_path (cr);
 }
 
 void
 _gtk_rounded_box_path_left (const GskRoundedRect *outer,
                             const GskRoundedRect *inner,
-                            cairo_t              *cr)
+                            GdkPainter              *cr)
 {
   double start_angle, middle_angle, end_angle;
 
@@ -428,7 +428,7 @@ _gtk_rounded_box_path_left (const GskRoundedRect *outer,
   else
     end_angle = 5 * G_PI_4;
 
-  cairo_new_sub_path (cr);
+  gdk_paint_new_sub_path (cr);
 
   _cairo_ellipsis (cr,
                    outer->bounds.origin.x + outer->corner[GSK_CORNER_BOTTOM_LEFT].width,
@@ -456,6 +456,6 @@ _gtk_rounded_box_path_left (const GskRoundedRect *outer,
                             inner->corner[GSK_CORNER_BOTTOM_LEFT].height,
                             middle_angle, start_angle);
 
-  cairo_close_path (cr);
+  gdk_paint_close_path (cr);
 }
 

@@ -54,7 +54,7 @@ gsk_copy_node_finalize (GskRenderNode *node)
 
 static void
 gsk_copy_node_draw (GskRenderNode *node,
-                    cairo_t       *cr,
+                    GdkPainter       *cr,
                     GskCairoData  *data)
 {
   GskCopyNode *self = (GskCopyNode *) node;

@@ -18,7 +18,7 @@
 #pragma once
 
 #include <glib-object.h>
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include <gsk/gsk.h>
 #include <gtk/gtkenums.h>
 #include <gtk/gtktypes.h>
@@ -31,20 +31,20 @@ double          _gtk_rounded_box_guess_length                   (const GskRounde
                                                                  GtkCssSide              side);
 
 void            _gtk_rounded_box_path_side                      (const GskRoundedRect   *box,
-                                                                 cairo_t                *cr,
+                                                                 GdkPainter                *cr,
                                                                  GtkCssSide              side);
 void            _gtk_rounded_box_path_top                       (const GskRoundedRect   *outer,
                                                                  const GskRoundedRect   *inner,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 void            _gtk_rounded_box_path_right                     (const GskRoundedRect   *outer,
                                                                  const GskRoundedRect   *inner,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 void            _gtk_rounded_box_path_bottom                    (const GskRoundedRect   *outer,
                                                                  const GskRoundedRect   *inner,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 void            _gtk_rounded_box_path_left                      (const GskRoundedRect   *outer,
                                                                  const GskRoundedRect   *inner,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 
 G_END_DECLS
 

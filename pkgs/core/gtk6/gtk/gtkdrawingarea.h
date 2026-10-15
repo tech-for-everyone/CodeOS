@@ -60,7 +60,7 @@ typedef struct _GtkDrawingAreaClass  GtkDrawingAreaClass;
  * and must not call any widget functions that cause changes.
  */
 typedef void (* GtkDrawingAreaDrawFunc)  (GtkDrawingArea *drawing_area,
-                                          cairo_t        *cr,
+                                          GdkPainter        *cr,
                                           int             width,
                                           int             height,
                                           gpointer        user_data);

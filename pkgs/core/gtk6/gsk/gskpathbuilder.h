@@ -56,7 +56,7 @@ void                    gsk_path_builder_add_reverse_path       (GskPathBuilder 
                                                                  GskPath                *path);
 GDK_AVAILABLE_IN_4_14
 void                    gsk_path_builder_add_cairo_path         (GskPathBuilder         *self,
-                                                                 const cairo_path_t     *path);
+                                                                 const GdkPaintPath     *path);
 GDK_AVAILABLE_IN_4_14
 void                    gsk_path_builder_add_layout             (GskPathBuilder         *self,
                                                                  PangoLayout            *layout);

@@ -28,24 +28,24 @@ GskPath *
 svg_pango_layout_to_path (PangoLayout          *layout,
                           PangoRenderComponent  component)
 {
-  cairo_surface_t *surface;
-  cairo_t *cr;
-  cairo_path_t *path;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
+  GdkPaintPath *path;
   GskPathBuilder *builder;
   PangoRectangle rect;
 
   pango_layout_get_pixel_extents (layout, &rect, NULL);
-  surface = cairo_recording_surface_create (CAIRO_CONTENT_COLOR_ALPHA,
-                                            &(cairo_rectangle_t) { rect.x, rect.y, rect.width, rect.height });
+  surface = gdk_paint_recording_surface_create (GDK_PAINT_CONTENT_COLOR_ALPHA,
+                                            &(GdkPaintRectangle) { rect.x, rect.y, rect.width, rect.height });
 
-  cr = cairo_create (surface);
+  cr = gdk_paint_create (surface);
   pango_cairo_layout_path_for_components (cr, layout, component);
-  path = cairo_copy_path (cr);
+  path = gdk_paint_copy_path (cr);
   builder = gsk_path_builder_new ();
   gsk_path_builder_add_cairo_path (builder, path);
-  cairo_path_destroy (path);
-  cairo_destroy (cr);
-  cairo_surface_destroy (surface);
+  gdk_paint_path_destroy (path);
+  gdk_paint_destroy (cr);
+  gdk_paint_surface_destroy (surface);
 
   return gsk_path_builder_free_to_path (builder);
 }

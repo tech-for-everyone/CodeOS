@@ -3,7 +3,7 @@
 #include "gskresources.h"
 #include "gskprivate.h"
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include <pango/pangocairo.h>
 #ifdef HAVE_PANGOFT
 #include <pango/pangoft2.h>
@@ -29,11 +29,11 @@ gsk_ensure_resources (void)
  * gsk_reload_font:
  * @font: a `PangoFont`
  * @scale: the scale to apply
- * @hint_metris: hint metrics to use or `CAIRO_HINT_METRICS_DEFAILT` to keep the
+ * @hint_metris: hint metrics to use or `GDK_PAINT_HINT_METRICS_DEFAILT` to keep the
  *   hint metrics of the font unchanged
- * @hint_style: hint style to use or `CAIRO_HINT_STYLE_DEFAULT` to keep the
+ * @hint_style: hint style to use or `GDK_PAINT_HINT_STYLE_DEFAULT` to keep the
  *   hint style of @font unchanged
- * @antialias: antialiasing to use, or `CAIRO_ANTIALIAS_DEFAULT` to keep the
+ * @antialias: antialiasing to use, or `GDK_PAINT_ANTIALIAS_DEFAULT` to keep the
  *   antialias option of @font unchanged
  *
  * Returns a font that is just like @font, but uses the
@@ -44,22 +44,22 @@ gsk_ensure_resources (void)
 PangoFont *
 gsk_reload_font (PangoFont            *font,
                  float                 scale,
-                 cairo_hint_metrics_t  hint_metrics,
-                 cairo_hint_style_t    hint_style,
-                 cairo_antialias_t     antialias)
+                 GdkPaintHintMetrics  hint_metrics,
+                 GdkPaintHintStyle    hint_style,
+                 GdkPaintAntialias     antialias)
 {
-  static cairo_font_options_t *options = NULL;
+  static GdkPaintFontOptions *options = NULL;
   static PangoContext *context = NULL;
-  cairo_scaled_font_t *sf;
+  GdkPaintScaledFont *sf;
 
   /* These requests often come in sequentially so keep the result
    * around and re-use it if everything matches.
    */
   static PangoFont *last_font;
   static float last_scale;
-  static cairo_hint_metrics_t last_hint_metrics;
-  static cairo_hint_style_t last_hint_style;
-  static cairo_antialias_t last_antialias;
+  static GdkPaintHintMetrics last_hint_metrics;
+  static GdkPaintHintStyle last_hint_style;
+  static GdkPaintAntialias last_antialias;
   static PangoFont *last_result;
 
   if (last_result != NULL &&
@@ -79,39 +79,39 @@ gsk_reload_font (PangoFont            *font,
   g_clear_object (&last_result);
 
   if (G_UNLIKELY (options == NULL))
-    options = cairo_font_options_create ();
+    options = gdk_paint_font_options_create ();
 
   sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
-  cairo_scaled_font_get_font_options (sf, options);
+  gdk_paint_scaled_font_get_font_options (sf, options);
 
-  if (hint_metrics == CAIRO_HINT_METRICS_DEFAULT)
-    hint_metrics = cairo_font_options_get_hint_metrics (options);
+  if (hint_metrics == GDK_PAINT_HINT_METRICS_DEFAULT)
+    hint_metrics = gdk_paint_font_options_get_hint_metrics (options);
 
-  if (hint_style == CAIRO_HINT_STYLE_DEFAULT)
-    hint_style = cairo_font_options_get_hint_style (options);
+  if (hint_style == GDK_PAINT_HINT_STYLE_DEFAULT)
+    hint_style = gdk_paint_font_options_get_hint_style (options);
 
-  if (antialias == CAIRO_ANTIALIAS_DEFAULT)
-    antialias = cairo_font_options_get_antialias (options);
+  if (antialias == GDK_PAINT_ANTIALIAS_DEFAULT)
+    antialias = gdk_paint_font_options_get_antialias (options);
 
   if (1.0 == scale &&
-      cairo_font_options_get_hint_metrics (options) == hint_metrics &&
-      cairo_font_options_get_hint_style (options) == hint_style &&
-      cairo_font_options_get_antialias (options) == antialias &&
-      cairo_font_options_get_subpixel_order (options) == CAIRO_SUBPIXEL_ORDER_DEFAULT)
+      gdk_paint_font_options_get_hint_metrics (options) == hint_metrics &&
+      gdk_paint_font_options_get_hint_style (options) == hint_style &&
+      gdk_paint_font_options_get_antialias (options) == antialias &&
+      gdk_paint_font_options_get_subpixel_order (options) == GDK_PAINT_SUBPIXEL_ORDER_DEFAULT)
     {
       last_result = g_object_ref (font);
       return g_object_ref (font);
     }
 
-  cairo_font_options_set_hint_metrics (options, hint_metrics);
-  cairo_font_options_set_hint_style (options, hint_style);
-  cairo_font_options_set_antialias (options, antialias);
-  cairo_font_options_set_subpixel_order (options, CAIRO_SUBPIXEL_ORDER_DEFAULT);
+  gdk_paint_font_options_set_hint_metrics (options, hint_metrics);
+  gdk_paint_font_options_set_hint_style (options, hint_style);
+  gdk_paint_font_options_set_antialias (options, antialias);
+  gdk_paint_font_options_set_subpixel_order (options, GDK_PAINT_SUBPIXEL_ORDER_DEFAULT);
 
   if (G_UNLIKELY (context == NULL))
     context = pango_context_new ();
 
-  pango_context_set_round_glyph_positions (context, hint_metrics == CAIRO_HINT_METRICS_ON);
+  pango_context_set_round_glyph_positions (context, hint_metrics == GDK_PAINT_HINT_METRICS_ON);
   pango_cairo_context_set_font_options (context, options);
 
   last_result = pango_font_map_reload_font (pango_font_get_font_map (font), font, scale, context, NULL);
@@ -139,9 +139,9 @@ gsk_get_glyph_string_extents (PangoGlyphString *glyphs,
 
   unhinted = gsk_reload_font (font,
                               1.0,
-                              CAIRO_HINT_METRICS_DEFAULT,
-                              CAIRO_HINT_STYLE_NONE,
-                              CAIRO_ANTIALIAS_DEFAULT);
+                              GDK_PAINT_HINT_METRICS_DEFAULT,
+                              GDK_PAINT_HINT_STYLE_NONE,
+                              GDK_PAINT_ANTIALIAS_DEFAULT);
 
   pango_glyph_string_extents (glyphs, unhinted, ink_rect, NULL);
 
@@ -156,19 +156,19 @@ gsk_get_glyph_string_extents (PangoGlyphString *glyphs,
  *
  * Returns: the hint style
  */
-cairo_hint_style_t
+GdkPaintHintStyle
 gsk_font_get_hint_style (PangoFont *font)
 {
-  static cairo_font_options_t *options = NULL;
-  cairo_scaled_font_t *sf;
-  cairo_hint_style_t style;
+  static GdkPaintFontOptions *options = NULL;
+  GdkPaintScaledFont *sf;
+  GdkPaintHintStyle style;
 
   if (G_UNLIKELY (options == NULL))
-    options = cairo_font_options_create ();
+    options = gdk_paint_font_options_create ();
 
   sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
-  cairo_scaled_font_get_font_options (sf, options);
-  style = cairo_font_options_get_hint_style (options);
+  gdk_paint_scaled_font_get_font_options (sf, options);
+  style = gdk_paint_font_options_get_hint_style (options);
 
   return style;
 }

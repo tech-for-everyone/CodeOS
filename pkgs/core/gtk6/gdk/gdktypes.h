@@ -36,7 +36,7 @@
 
 /* GTK6: cairo.h and pango/pango.h used to be included here.  They are gone --
  * drawing is QPainter and text is QTextLayout (qt/qttext.h), so the only thing
- * gdktypes.h ever took from cairo was cairo_rectangle_int_t, which GDK owns
+ * gdktypes.h ever took from cairo was GdkRectangle, which GDK owns
  * outright now as GdkRectangle.  The rest of the tree is being moved off them
  * file by file; see PLAN.md "Dependency surgery". */
 
@@ -91,7 +91,7 @@ typedef struct _GdkSeat               GdkSeat;
 typedef struct _GdkSnapshot           GdkSnapshot;
 
 typedef struct _GdkDrawContext        GdkDrawContext;
-typedef struct _GdkCairoContext       GdkCairoContext;
+typedef struct _GdkPaintContext       GdkPaintContext;
 typedef struct _GdkGLContext          GdkGLContext;
 typedef struct _GdkVulkanContext      GdkVulkanContext;
 
@@ -171,5 +171,10 @@ G_END_DECLS
  * used GdkRegion.  The include is at the very end of this header so that
  * everything gdkregion.h needs is already defined. */
 #include <gdk/gdkregion.h>
+
+/* GTK6: GdkPainter (gdk/gdkpaint.h) replaces GdkPainter, and the rest of the
+ * cairo drawing API, as GDK's own types.  Same reasoning as GdkRegion above,
+ * and the include is at the very end so GdkRectangle and glib are available. */
+#include <gdk/gdkpaint.h>
 
 

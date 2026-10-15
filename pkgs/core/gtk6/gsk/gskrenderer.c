@@ -47,7 +47,7 @@
 #include "gdk/gdkdisplayprivate.h"
 
 #include <graphene-gobject.h>
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <gdk/gdk.h>
 #include "gdk/gdkdebugprivate.h"
 

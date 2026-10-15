@@ -75,41 +75,41 @@ gsk_porter_duff_is_bound_by_source (GskPorterDuff porter_duff)
     }
 }
 
-static cairo_operator_t
+static GdkPaintOperator
 gsk_porter_duff_to_cairo_operator (GskPorterDuff porter_duff)
 {
   switch (porter_duff)
     {
       case GSK_PORTER_DUFF_SOURCE:
-        return CAIRO_OPERATOR_SOURCE;
+        return GDK_PAINT_OPERATOR_SOURCE;
       case GSK_PORTER_DUFF_DEST:
-        return CAIRO_OPERATOR_DEST;
+        return GDK_PAINT_OPERATOR_DEST;
       case GSK_PORTER_DUFF_SOURCE_OVER_DEST:
-        return CAIRO_OPERATOR_OVER;
+        return GDK_PAINT_OPERATOR_OVER;
       case GSK_PORTER_DUFF_DEST_OVER_SOURCE:
-        return CAIRO_OPERATOR_DEST_OVER;
+        return GDK_PAINT_OPERATOR_DEST_OVER;
       case GSK_PORTER_DUFF_SOURCE_IN_DEST:
-        return CAIRO_OPERATOR_IN;
+        return GDK_PAINT_OPERATOR_IN;
       case GSK_PORTER_DUFF_DEST_IN_SOURCE:
-        return CAIRO_OPERATOR_DEST_IN;
+        return GDK_PAINT_OPERATOR_DEST_IN;
       case GSK_PORTER_DUFF_SOURCE_OUT_DEST:
-        return CAIRO_OPERATOR_OUT;
+        return GDK_PAINT_OPERATOR_OUT;
       case GSK_PORTER_DUFF_DEST_OUT_SOURCE:
-        return CAIRO_OPERATOR_DEST_OUT;
+        return GDK_PAINT_OPERATOR_DEST_OUT;
       case GSK_PORTER_DUFF_SOURCE_ATOP_DEST:
-        return CAIRO_OPERATOR_ATOP;
+        return GDK_PAINT_OPERATOR_ATOP;
       case GSK_PORTER_DUFF_DEST_ATOP_SOURCE:
-        return CAIRO_OPERATOR_DEST_ATOP;
+        return GDK_PAINT_OPERATOR_DEST_ATOP;
       case GSK_PORTER_DUFF_XOR:
-        return CAIRO_OPERATOR_XOR;
+        return GDK_PAINT_OPERATOR_XOR;
       case GSK_PORTER_DUFF_CLEAR:
-        return CAIRO_OPERATOR_CLEAR;
+        return GDK_PAINT_OPERATOR_CLEAR;
       default:
-        g_return_val_if_reached (CAIRO_OPERATOR_OVER);
+        g_return_val_if_reached (GDK_PAINT_OPERATOR_OVER);
     }
 }
 
-static cairo_operator_t
+static GdkPaintOperator
 gsk_porter_duff_clears_background (GskPorterDuff porter_duff)
 {
   switch (porter_duff)
@@ -135,7 +135,7 @@ gsk_porter_duff_clears_background (GskPorterDuff porter_duff)
     }
 }
 
-static cairo_operator_t
+static GdkPaintOperator
 gsk_porter_duff_clears_foreground (GskPorterDuff porter_duff)
 {
   switch (porter_duff)
@@ -175,58 +175,58 @@ gsk_composite_node_finalize (GskRenderNode *node)
 
 static void
 gsk_composite_node_draw (GskRenderNode *node,
-                         cairo_t       *cr,
+                         GdkPainter       *cr,
                          GskCairoData  *data)
 {
   GskCompositeNode *self = (GskCompositeNode *) node;
 
   /* clip so the push_group() creates a smaller surface */
-  gdk_cairo_rectangle_snap_to_grid (cr, &node->bounds);
-  cairo_clip (cr);
-  if (gdk_cairo_is_all_clipped (cr))
+  gdk_painter_rectangle_snap_to_grid (cr, &node->bounds);
+  gdk_paint_clip (cr);
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
   if (gsk_render_node_is_fully_opaque (self->mask))
     {
-      gdk_cairo_rect (cr, &self->mask->bounds);
-      cairo_clip (cr);
-      cairo_push_group (cr);
+      gdk_painter_rect (cr, &self->mask->bounds);
+      gdk_paint_clip (cr);
+      gdk_paint_push_group (cr);
       gsk_render_node_draw_full (self->child, cr, data);
-      cairo_pop_group_to_source (cr);
-      cairo_set_operator (cr, gsk_porter_duff_to_cairo_operator (self->op));
-      cairo_paint (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_set_operator (cr, gsk_porter_duff_to_cairo_operator (self->op));
+      gdk_paint_paint (cr);
     }
   else
     {
-      cairo_surface_t *bg = cairo_get_group_target (cr);
-      cairo_pattern_t *mask_pattern;
+      GdkPaintSurface *bg = gdk_paint_get_group_target (cr);
+      GdkPaintPattern *mask_pattern;
 
       /* First, copy the current target contents into a new offscreen */
-      cairo_push_group (cr);
-      cairo_save (cr);
-      cairo_identity_matrix (cr);
-      cairo_set_source_surface (cr, bg, 0, 0);
-      cairo_paint (cr);
-      cairo_restore (cr);
+      gdk_paint_push_group (cr);
+      gdk_paint_save (cr);
+      gdk_paint_identity_matrix (cr);
+      gdk_paint_set_source_surface (cr, bg, 0, 0);
+      gdk_paint_paint (cr);
+      gdk_paint_restore (cr);
 
       /* Then, draw the child into the offscreen as if no mask existed */
-      cairo_push_group (cr);
+      gdk_paint_push_group (cr);
       gsk_render_node_draw_full (self->child, cr, data);
-      cairo_pop_group_to_source (cr);
-      cairo_set_operator (cr, gsk_porter_duff_to_cairo_operator (self->op));
-      cairo_paint (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_set_operator (cr, gsk_porter_duff_to_cairo_operator (self->op));
+      gdk_paint_paint (cr);
 
       /* Next, clear according to the mask */
-      cairo_pop_group_to_source (cr);
-      cairo_push_group (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_push_group (cr);
       gsk_render_node_draw_full (self->mask, cr, data);
-      mask_pattern = cairo_pop_group (cr);
-      cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-      cairo_mask (cr, mask_pattern);
+      mask_pattern = gdk_paint_pop_group (cr);
+      gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_CLEAR);
+      gdk_paint_mask (cr, mask_pattern);
 
       /* Finally, add the offscreen using the mask */
-      cairo_set_operator (cr, CAIRO_OPERATOR_ADD);
-      cairo_mask (cr, mask_pattern);
+      gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_ADD);
+      gdk_paint_mask (cr, mask_pattern);
     }
 }
 

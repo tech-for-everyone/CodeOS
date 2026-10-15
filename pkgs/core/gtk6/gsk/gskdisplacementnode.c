@@ -110,14 +110,14 @@ sample_image (guchar *image,
 }
 
 static void
-get_matrix (cairo_pattern_t *pattern,
-            cairo_surface_t *surface,
-            cairo_matrix_t  *out_matrix)
+get_matrix (GdkPaintPattern *pattern,
+            GdkPaintSurface *surface,
+            GdkPaintMatrix  *out_matrix)
 {
-  cairo_matrix_t pattern_matrix, surface_matrix;
+  GdkPaintMatrix pattern_matrix, surface_matrix;
 
-  cairo_pattern_get_matrix (pattern, &pattern_matrix);
-  gdk_cairo_surface_get_device_matrix (surface, &surface_matrix);
+  gdk_paint_pattern_get_matrix (pattern, &pattern_matrix);
+  gdk_painter_surface_get_device_matrix (surface, &surface_matrix);
 
   DEBUG ("pattern: %g %g %g\n         %g %g %g\n",
            pattern_matrix.xx, pattern_matrix.yx, pattern_matrix.x0,
@@ -126,45 +126,45 @@ get_matrix (cairo_pattern_t *pattern,
            surface_matrix.xx, surface_matrix.yx, surface_matrix.x0,
            surface_matrix.yx, surface_matrix.yy, surface_matrix.y0);
 
-  cairo_matrix_multiply (out_matrix, &pattern_matrix, &surface_matrix);
+  gdk_paint_matrix_multiply (out_matrix, &pattern_matrix, &surface_matrix);
 }
 
 static void
 apply_displacement (GskDisplacementNode *self,
-                    cairo_surface_t     *image_surface,
-                    cairo_pattern_t     *displacement_pattern)
+                    GdkPaintSurface     *image_surface,
+                    GdkPaintPattern     *displacement_pattern)
 {
-  cairo_surface_t *d_surface, *d_image, *i_image;
-  cairo_matrix_t d_matrix, i_matrix;
+  GdkPaintSurface *d_surface, *d_image, *i_image;
+  GdkPaintMatrix d_matrix, i_matrix;
   guchar *d_data, *i_data;
   gsize x, y, d_width, d_height, d_stride, i_width, i_height, i_stride;
   double s, t;
   float h, v;
   guint32* pixel_data;
 
-  cairo_pattern_get_surface (displacement_pattern, &d_surface);
-  d_image = cairo_surface_map_to_image (d_surface, NULL);
-  g_assert (cairo_image_surface_get_format (d_image) == CAIRO_FORMAT_ARGB32);
+  gdk_paint_pattern_get_surface (displacement_pattern, &d_surface);
+  d_image = gdk_paint_surface_map_to_image (d_surface, NULL);
+  g_assert (gdk_paint_image_surface_get_format (d_image) == GDK_PAINT_FORMAT_ARGB32);
   get_matrix (displacement_pattern, d_surface, &d_matrix);
-  d_data = cairo_image_surface_get_data (d_image);
-  d_width = cairo_image_surface_get_width (d_image);
-  d_height = cairo_image_surface_get_height (d_image);
-  d_stride = cairo_image_surface_get_stride (d_image);
+  d_data = gdk_paint_image_surface_get_data (d_image);
+  d_width = gdk_paint_image_surface_get_width (d_image);
+  d_height = gdk_paint_image_surface_get_height (d_image);
+  d_stride = gdk_paint_image_surface_get_stride (d_image);
   DEBUG ("displacement image: %zu %zu\n", d_width, d_height);
 
-  i_image = cairo_surface_map_to_image (image_surface, NULL);
-  g_assert (cairo_image_surface_get_format (i_image) == CAIRO_FORMAT_ARGB32);
-  gdk_cairo_surface_get_device_matrix (image_surface, &i_matrix);
+  i_image = gdk_paint_surface_map_to_image (image_surface, NULL);
+  g_assert (gdk_paint_image_surface_get_format (i_image) == GDK_PAINT_FORMAT_ARGB32);
+  gdk_painter_surface_get_device_matrix (image_surface, &i_matrix);
   DEBUG ("image:   %g %g %g\n         %g %g %g\n",
            i_matrix.xx, i_matrix.yx, i_matrix.x0,
            i_matrix.yx, i_matrix.yy, i_matrix.y0);
-  i_data = cairo_image_surface_get_data (i_image);
-  i_width = cairo_image_surface_get_width (i_image);
-  i_height = cairo_image_surface_get_height (i_image);
-  i_stride = cairo_image_surface_get_stride (i_image);
+  i_data = gdk_paint_image_surface_get_data (i_image);
+  i_width = gdk_paint_image_surface_get_width (i_image);
+  i_height = gdk_paint_image_surface_get_height (i_image);
+  i_stride = gdk_paint_image_surface_get_stride (i_image);
   DEBUG ("child image: %zu %zu\n", i_width, i_height);
 
-  cairo_matrix_invert (&d_matrix);
+  gdk_paint_matrix_invert (&d_matrix);
 
   for (y = 0; y < d_height; y++)
     {
@@ -175,7 +175,7 @@ apply_displacement (GskDisplacementNode *self,
           t = y;
           DEBUG ("pixel       : %08X\n", pixel_data[x]);
           DEBUG ("coordinate  : %zu %zu\n", x, y);
-          cairo_matrix_transform_point (&d_matrix, &s, &t);
+          gdk_paint_matrix_transform_point (&d_matrix, &s, &t);
           DEBUG ("node space  : %g %g\n", s, t);
           h = get_channel (pixel_data[x], self->channels[0]);
           v = get_channel (pixel_data[x], self->channels[1]);
@@ -186,7 +186,7 @@ apply_displacement (GskDisplacementNode *self,
           s += h;
           t += v;
           DEBUG ("coordinate  : %g %g\n", s, t);
-          cairo_matrix_transform_point (&i_matrix, &s, &t);
+          gdk_paint_matrix_transform_point (&i_matrix, &s, &t);
           DEBUG ("final       : %g %g\n", s, t);
 
           pixel_data[x] = sample_image (i_data, i_width, i_height, i_stride, s, t);
@@ -195,22 +195,22 @@ apply_displacement (GskDisplacementNode *self,
       d_data += d_stride;
     }
 
-  cairo_surface_mark_dirty (d_image);
-  cairo_surface_unmap_image (d_surface, d_image);
+  gdk_paint_surface_mark_dirty (d_image);
+  gdk_paint_surface_unmap_image (d_surface, d_image);
   /* https://gitlab.freedesktop.org/cairo/cairo/-/merge_requests/487 */
-  cairo_surface_mark_dirty (d_surface);
-  cairo_surface_unmap_image (image_surface, i_image);
+  gdk_paint_surface_mark_dirty (d_surface);
+  gdk_paint_surface_unmap_image (image_surface, i_image);
 }
 
 static void
 gsk_displacement_node_draw (GskRenderNode *node,
-                            cairo_t       *cr,
+                            GdkPainter       *cr,
                             GskCairoData  *data)
 {
   GskDisplacementNode *self = (GskDisplacementNode *) node;
-  cairo_pattern_t *displacement;
-  cairo_surface_t *child_surface;
-  cairo_t *child_cr;
+  GdkPaintPattern *displacement;
+  GdkPaintSurface *child_surface;
+  GdkPainter *child_cr;
   graphene_rect_t bounds, child_bounds;
 
   if (!gsk_cairo_rect_snap (cr, &node->bounds, self->snap, &bounds))
@@ -221,27 +221,27 @@ gsk_displacement_node_draw (GskRenderNode *node,
     return;
 
   /* clip so the push_group() creates a smaller surface */
-  gdk_cairo_rect (cr, &bounds);
-  cairo_clip (cr);
-  if (gdk_cairo_is_all_clipped (cr))
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_clip (cr);
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
+  gdk_paint_push_group_with_content (cr, GDK_PAINT_CONTENT_COLOR_ALPHA);
   gsk_render_node_draw_full (self->displacement, cr, data);
-  displacement = cairo_pop_group (cr);
+  displacement = gdk_paint_pop_group (cr);
 
-  child_surface = gdk_cairo_create_similar_surface (cr, CAIRO_CONTENT_COLOR_ALPHA, &child_bounds);
-  child_cr = cairo_create (child_surface);
+  child_surface = gdk_painter_create_similar_surface (cr, GDK_PAINT_CONTENT_COLOR_ALPHA, &child_bounds);
+  child_cr = gdk_paint_create (child_surface);
   gsk_render_node_draw_full (self->child, child_cr, data);
-  cairo_destroy (child_cr);
+  gdk_paint_destroy (child_cr);
 
   apply_displacement (self, child_surface, displacement);
 
-  cairo_set_source (cr, displacement);
-  cairo_paint (cr);
+  gdk_paint_set_source (cr, displacement);
+  gdk_paint_paint (cr);
 
-  cairo_surface_destroy (child_surface);
-  cairo_pattern_destroy (displacement);
+  gdk_paint_surface_destroy (child_surface);
+  gdk_paint_pattern_destroy (displacement);
 }
 
 static void

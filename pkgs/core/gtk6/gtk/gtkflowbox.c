@@ -151,7 +151,7 @@ static void gtk_flow_box_set_accept_unpaired_release (GtkFlowBox *box,
 static void gtk_flow_box_check_model_compat  (GtkFlowBox *box);
 
 static void
-path_from_horizontal_line_rects (cairo_t      *cr,
+path_from_horizontal_line_rects (GdkPainter      *cr,
                                  GdkRectangle *lines,
                                  int           n_lines)
 {
@@ -173,7 +173,7 @@ path_from_horizontal_line_rects (cairo_t      *cr,
       r2->height += old - r2->y;
     }
 
-  cairo_new_path (cr);
+  gdk_paint_new_path (cr);
   start_line = 0;
 
   do
@@ -182,10 +182,10 @@ path_from_horizontal_line_rects (cairo_t      *cr,
         {
           r = &lines[i];
           if (i == start_line)
-            cairo_move_to (cr, r->x + r->width, r->y);
+            gdk_paint_move_to (cr, r->x + r->width, r->y);
           else
-            cairo_line_to (cr, r->x + r->width, r->y);
-          cairo_line_to (cr, r->x + r->width, r->y + r->height);
+            gdk_paint_line_to (cr, r->x + r->width, r->y);
+          gdk_paint_line_to (cr, r->x + r->width, r->y + r->height);
 
           if (i < n_lines - 1 &&
               (r->x + r->width < lines[i+1].x ||
@@ -199,17 +199,17 @@ path_from_horizontal_line_rects (cairo_t      *cr,
       for (i = end_line - 1; i >= start_line; i--)
         {
           r = &lines[i];
-          cairo_line_to (cr, r->x, r->y + r->height);
-          cairo_line_to (cr, r->x, r->y);
+          gdk_paint_line_to (cr, r->x, r->y + r->height);
+          gdk_paint_line_to (cr, r->x, r->y);
         }
-      cairo_close_path (cr);
+      gdk_paint_close_path (cr);
       start_line = end_line;
     }
   while (end_line < n_lines);
 }
 
 static void
-path_from_vertical_line_rects (cairo_t      *cr,
+path_from_vertical_line_rects (GdkPainter      *cr,
                                GdkRectangle *lines,
                                int           n_lines)
 {
@@ -231,7 +231,7 @@ path_from_vertical_line_rects (cairo_t      *cr,
       r2->width += old - r2->x;
     }
 
-  cairo_new_path (cr);
+  gdk_paint_new_path (cr);
   start_line = 0;
 
   do
@@ -240,10 +240,10 @@ path_from_vertical_line_rects (cairo_t      *cr,
         {
           r = &lines[i];
           if (i == start_line)
-            cairo_move_to (cr, r->x, r->y + r->height);
+            gdk_paint_move_to (cr, r->x, r->y + r->height);
           else
-            cairo_line_to (cr, r->x, r->y + r->height);
-          cairo_line_to (cr, r->x + r->width, r->y + r->height);
+            gdk_paint_line_to (cr, r->x, r->y + r->height);
+          gdk_paint_line_to (cr, r->x + r->width, r->y + r->height);
 
           if (i < n_lines - 1 &&
               (r->y + r->height < lines[i+1].y ||
@@ -257,10 +257,10 @@ path_from_vertical_line_rects (cairo_t      *cr,
       for (i = end_line - 1; i >= start_line; i--)
         {
           r = &lines[i];
-          cairo_line_to (cr, r->x + r->width, r->y);
-          cairo_line_to (cr, r->x, r->y);
+          gdk_paint_line_to (cr, r->x + r->width, r->y);
+          gdk_paint_line_to (cr, r->x, r->y);
         }
-      cairo_close_path (cr);
+      gdk_paint_close_path (cr);
       start_line = end_line;
     }
   while (end_line < n_lines);
@@ -2568,7 +2568,7 @@ gtk_flow_box_snapshot (GtkWidget   *widget,
       GdkRectangle line_rect = { 0, }, rect;
       GArray *lines;
       gboolean vertical;
-      cairo_t *cr;
+      GdkPainter *cr;
 
       vertical = priv->orientation == GTK_ORIENTATION_VERTICAL;
 
@@ -2622,7 +2622,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
       if (lines->len > 0)
         {
-          cairo_path_t *path;
+          GdkPaintPath *path;
           const GdkRGBA *border_color;
           int border_width;
           GtkSnapshot *bg_snapshot;
@@ -2636,10 +2636,10 @@ G_GNUC_END_IGNORE_DEPRECATIONS
           /* For some reason we need to copy and reapply the path,
            * or it gets eaten by gtk_render_background()
            */
-          path = cairo_copy_path (cr);
+          path = gdk_paint_copy_path (cr);
 
-          cairo_save (cr);
-          cairo_clip (cr);
+          gdk_paint_save (cr);
+          gdk_paint_clip (cr);
 
           bg_snapshot = gtk_snapshot_new ();
           gtk_css_boxes_init_border_box (&boxes, style, x, y, width, height);
@@ -2651,21 +2651,21 @@ G_GNUC_END_IGNORE_DEPRECATIONS
               gsk_render_node_unref (node);
             }
 
-          cairo_restore (cr);
+          gdk_paint_restore (cr);
 
-          cairo_append_path (cr, path);
-          cairo_path_destroy (path);
+          gdk_paint_append_path (cr, path);
+          gdk_paint_path_destroy (path);
 
           border_color = gtk_css_color_value_get_rgba (style->used->border_top_color);
           border_width = round (gtk_css_number_value_get (style->border->border_left_width, 100));
 
-          cairo_set_line_width (cr, border_width);
-          gdk_cairo_set_source_rgba (cr, border_color);
-          cairo_stroke (cr);
+          gdk_paint_set_line_width (cr, border_width);
+          gdk_painter_set_source_rgba (cr, border_color);
+          gdk_paint_stroke (cr);
         }
       g_array_free (lines, TRUE);
 
-      cairo_destroy (cr);
+      gdk_paint_destroy (cr);
     }
 }
 

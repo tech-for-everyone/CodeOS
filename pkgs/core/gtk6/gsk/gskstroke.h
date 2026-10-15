@@ -81,7 +81,7 @@ float                   gsk_stroke_get_dash_offset              (const GskStroke
 
 GDK_AVAILABLE_IN_4_14
 void                    gsk_stroke_to_cairo                     (const GskStroke        *self,
-                                                                 cairo_t                *cr);
+                                                                 GdkPainter                *cr);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GskStroke, gsk_stroke_free)
 

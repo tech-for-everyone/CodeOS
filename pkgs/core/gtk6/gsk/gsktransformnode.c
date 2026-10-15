@@ -78,24 +78,24 @@ gsk_transform_node_finalize (GskRenderNode *node)
 
 static void
 gsk_transform_node_draw (GskRenderNode *node,
-                         cairo_t       *cr,
+                         GdkPainter       *cr,
                          GskCairoData  *data)
 {
   GskTransformNode *self = (GskTransformNode *) node;
   float xx, yx, xy, yy, dx, dy;
-  cairo_matrix_t ctm;
+  GdkPaintMatrix ctm;
 
   if (gsk_transform_get_category (self->transform) < GSK_TRANSFORM_CATEGORY_2D)
     {
       GdkRGBA pink = { 255 / 255., 105 / 255., 180 / 255., 1.0 };
-      gdk_cairo_set_source_rgba_ccs (cr, data->ccs, &pink);
-      gdk_cairo_rect (cr, &node->bounds);
-      cairo_fill (cr);
+      gdk_painter_set_source_rgba_ccs (cr, data->ccs, &pink);
+      gdk_painter_rect (cr, &node->bounds);
+      gdk_paint_fill (cr);
       return;
     }
 
   gsk_transform_to_2d (self->transform, &xx, &yx, &xy, &yy, &dx, &dy);
-  cairo_matrix_init (&ctm, xx, yx, xy, yy, dx, dy);
+  gdk_paint_matrix_init (&ctm, xx, yx, xy, yy, dx, dy);
   if (xx * yy == xy * yx)
     {
       /* broken matrix here. This can happen during transitions
@@ -106,7 +106,7 @@ gsk_transform_node_draw (GskRenderNode *node,
        */
       return;
     }
-  cairo_transform (cr, &ctm);
+  gdk_paint_transform (cr, &ctm);
 
   gsk_render_node_draw_full (self->child, cr, data);
 }

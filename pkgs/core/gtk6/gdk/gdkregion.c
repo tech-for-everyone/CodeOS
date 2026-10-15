@@ -27,6 +27,20 @@ struct _GdkRegion
   int           capacity;
 };
 
+/* Boxed GType: the CAIRO_GOBJECT_TYPE_REGION replacement (see gdkregion.h). */
+GType
+gdk_region_get_type (void)
+{
+  static gsize region_type = 0;
+
+  if (g_once_init_enter (&region_type))
+    g_once_init_leave (&region_type, g_boxed_type_register_static (
+                                        "GdkRegion",
+                                        (GBoxedCopyFunc) gdk_region_reference,
+                                        (GBoxedFreeFunc) gdk_region_destroy));
+  return region_type;
+}
+
 /* Append a non-empty rectangle, growing the array as needed. */
 static void
 region_append (GdkRegion *region,

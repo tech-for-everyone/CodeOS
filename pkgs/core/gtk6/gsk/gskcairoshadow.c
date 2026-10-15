@@ -5,7 +5,7 @@
 #include "gdk/gdkcairoprivate.h"
 
 void
-gsk_cairo_shadow_draw (cairo_t              *cr,
+gsk_cairo_shadow_draw (GdkPainter              *cr,
                        GdkColorState        *ccs,
                        gboolean              inset,
                        const GskRoundedRect *box,
@@ -14,20 +14,20 @@ gsk_cairo_shadow_draw (cairo_t              *cr,
                        const GdkColor       *color,
                        GskBlurFlags          blur_flags)
 {
-  cairo_t *shadow_cr;
+  GdkPainter *shadow_cr;
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  gdk_cairo_set_source_color (cr, ccs, color);
+  gdk_painter_set_source_color (cr, ccs, color);
   shadow_cr = gsk_cairo_blur_start_drawing (cr, radius, blur_flags);
 
-  cairo_set_fill_rule (shadow_cr, CAIRO_FILL_RULE_EVEN_ODD);
+  gdk_paint_set_fill_rule (shadow_cr, GDK_PAINT_FILL_RULE_EVEN_ODD);
   gsk_rounded_rect_path (box, shadow_cr);
   if (inset)
-    gdk_cairo_rect (shadow_cr, &clip_box->bounds);
+    gdk_painter_rect (shadow_cr, &clip_box->bounds);
 
-  cairo_fill (shadow_cr);
+  gdk_paint_fill (shadow_cr);
 
   gsk_cairo_blur_finish_drawing (shadow_cr, ccs, radius, color, blur_flags);
 }
@@ -56,7 +56,7 @@ corner_mask_equal (CornerMask *mask1,
 }
 
 void
-gsk_cairo_shadow_draw_corner (cairo_t               *cr,
+gsk_cairo_shadow_draw_corner (GdkPainter               *cr,
                               GdkColorState         *ccs,
                               gboolean               inset,
                               const GskRoundedRect  *box,
@@ -69,10 +69,10 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
   float clip_radius;
   int x1, x2, x3, y1, y2, y3, x, y;
   GskRoundedRect corner_box;
-  cairo_t *mask_cr;
-  cairo_surface_t *mask;
-  cairo_pattern_t *pattern;
-  cairo_matrix_t matrix;
+  GdkPainter *mask_cr;
+  GdkPaintSurface *mask;
+  GdkPaintPattern *pattern;
+  GdkPaintMatrix matrix;
   float sx, sy;
   static GHashTable *corner_mask_cache = NULL;
   float max_other;
@@ -133,8 +133,8 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
   drawn_rect->width = x2 - x1;
   drawn_rect->height = y2 - y1;
 
-  cairo_rectangle (cr, x1, y1, x2 - x1, y2 - y1);
-  cairo_clip (cr);
+  gdk_paint_rectangle (cr, x1, y1, x2 - x1, y2 - y1);
+  gdk_paint_clip (cr);
 
   if (inset || overlapped)
     {
@@ -144,7 +144,7 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
       return;
     }
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
   /* At this point we're drawing a blurred outset corner. The only
@@ -165,7 +165,7 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
   if (corner_mask_cache == NULL)
     corner_mask_cache = g_hash_table_new_full ((GHashFunc)corner_mask_hash,
                                                (GEqualFunc)corner_mask_equal,
-                                               g_free, (GDestroyNotify)cairo_surface_destroy);
+                                               g_free, (GDestroyNotify)gdk_paint_surface_destroy);
 
   key.radius = radius;
   key.corner = box->corner[corner];
@@ -173,31 +173,31 @@ gsk_cairo_shadow_draw_corner (cairo_t               *cr,
   mask = g_hash_table_lookup (corner_mask_cache, &key);
   if (mask == NULL)
     {
-      mask = cairo_surface_create_similar_image (cairo_get_target (cr), CAIRO_FORMAT_A8,
+      mask = gdk_paint_surface_create_similar_image (gdk_paint_get_target (cr), GDK_PAINT_FORMAT_A8,
                                                  drawn_rect->width + clip_radius,
                                                  drawn_rect->height + clip_radius);
-      mask_cr = cairo_create (mask);
+      mask_cr = gdk_paint_create (mask);
       gsk_rounded_rect_init_from_rect (&corner_box, &GRAPHENE_RECT_INIT (clip_radius, clip_radius, 2*drawn_rect->width, 2*drawn_rect->height), 0);
       corner_box.corner[0] = box->corner[corner];
       gsk_rounded_rect_path (&corner_box, mask_cr);
-      cairo_fill (mask_cr);
+      gdk_paint_fill (mask_cr);
       gsk_cairo_blur_surface (mask, radius, GSK_BLUR_X | GSK_BLUR_Y);
-      cairo_destroy (mask_cr);
+      gdk_paint_destroy (mask_cr);
       g_hash_table_insert (corner_mask_cache, g_memdup2 (&key, sizeof (key)), mask);
     }
 
-  gdk_cairo_set_source_color (cr, ccs, color);
-  pattern = cairo_pattern_create_for_surface (mask);
-  cairo_matrix_init_identity (&matrix);
-  cairo_matrix_scale (&matrix, sx, sy);
-  cairo_matrix_translate (&matrix, -x, -y);
-  cairo_pattern_set_matrix (pattern, &matrix);
-  cairo_mask (cr, pattern);
-  cairo_pattern_destroy (pattern);
+  gdk_painter_set_source_color (cr, ccs, color);
+  pattern = gdk_paint_pattern_create_for_surface (mask);
+  gdk_paint_matrix_init_identity (&matrix);
+  gdk_paint_matrix_scale (&matrix, sx, sy);
+  gdk_paint_matrix_translate (&matrix, -x, -y);
+  gdk_paint_pattern_set_matrix (pattern, &matrix);
+  gdk_paint_mask (cr, pattern);
+  gdk_paint_pattern_destroy (pattern);
 }
 
 void
-gsk_cairo_shadow_draw_side (cairo_t               *cr,
+gsk_cairo_shadow_draw_side (GdkPainter               *cr,
                             GdkColorState         *ccs,
                             gboolean               inset,
                             const GskRoundedRect  *box,
@@ -252,8 +252,8 @@ gsk_cairo_shadow_draw_side (cairo_t               *cr,
   drawn_rect->width = x2 - x1;
   drawn_rect->height = y2 - y1;
 
-  cairo_rectangle (cr, x1, y1, x2 - x1, y2 - y1);
-  cairo_clip (cr);
+  gdk_paint_rectangle (cr, x1, y1, x2 - x1, y2 - y1);
+  gdk_paint_clip (cr);
   gsk_cairo_shadow_draw (cr, ccs, inset, box, clip_box, radius, color, blur_flags);
 }
 

@@ -61,26 +61,26 @@ gsk_cross_fade_node_finalize (GskRenderNode *node)
 
 static void
 gsk_cross_fade_node_draw (GskRenderNode *node,
-                          cairo_t       *cr,
+                          GdkPainter       *cr,
                           GskCairoData  *data)
 {
   GskCrossFadeNode *self = (GskCrossFadeNode *) node;
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
+  gdk_paint_push_group_with_content (cr, GDK_PAINT_CONTENT_COLOR_ALPHA);
   gsk_render_node_draw_full (self->start, cr, data);
 
-  cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
+  gdk_paint_push_group_with_content (cr, GDK_PAINT_CONTENT_COLOR_ALPHA);
   gsk_render_node_draw_full (self->end, cr, data);
 
-  cairo_pop_group_to_source (cr);
-  cairo_set_operator (cr, CAIRO_OPERATOR_SOURCE);
-  cairo_paint_with_alpha (cr, self->progress);
+  gdk_paint_pop_group_to_source (cr);
+  gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_SOURCE);
+  gdk_paint_paint_with_alpha (cr, self->progress);
 
-  cairo_pop_group_to_source (cr); /* resets operator */
-  cairo_paint (cr);
+  gdk_paint_pop_group_to_source (cr); /* resets operator */
+  gdk_paint_paint (cr);
 }
 
 static void

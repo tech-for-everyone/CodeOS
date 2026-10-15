@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gskrendernode.h"
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 #include "gdk/gdkmemoryformatprivate.h"
 #include "gdk/gdkcolorprivate.h"
@@ -124,6 +124,6 @@ const GskColorStop *
 float           gsk_hue_interpolation_fixup             (GskHueInterpolation      interp,
                                                          float                    h1,
                                                          float                    h2);
-cairo_extend_t  gsk_repeat_to_cairo (GskRepeat repeat);
+GdkPaintExtend  gsk_repeat_to_cairo (GskRepeat repeat);
 
 G_END_DECLS

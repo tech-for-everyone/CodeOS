@@ -68,13 +68,13 @@ gsk_arithmetic_node_finalize (GskRenderNode *node)
 
 static void
 gsk_arithmetic_node_draw (GskRenderNode *node,
-                          cairo_t       *cr,
+                          GdkPainter       *cr,
                           GskCairoData  *data)
 {
   GskArithmeticNode *self = (GskArithmeticNode *) node;
-  cairo_pattern_t *first_pattern, *second_pattern;
-  cairo_surface_t *first_surface, *second_surface;
-  cairo_surface_t *first_image, *second_image;
+  GdkPaintPattern *first_pattern, *second_pattern;
+  GdkPaintSurface *first_surface, *second_surface;
+  GdkPaintSurface *first_image, *second_image;
   guchar *first_data, *second_data;
   int first_width, first_height, first_stride;
   int second_stride;
@@ -88,10 +88,10 @@ gsk_arithmetic_node_draw (GskRenderNode *node,
   if (!gsk_cairo_rect_snap (cr, &node->bounds, self->snap, &bounds))
     return;
 
-  gdk_cairo_rect (cr, &bounds);
-  cairo_clip (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_clip (cr);
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
   k1 = self->factors[0];
@@ -99,26 +99,26 @@ gsk_arithmetic_node_draw (GskRenderNode *node,
   k3 = self->factors[2];
   k4 = self->factors[3];
 
-  cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
+  gdk_paint_push_group_with_content (cr, GDK_PAINT_CONTENT_COLOR_ALPHA);
   gsk_render_node_draw_full (self->first, cr, data);
-  first_pattern = cairo_pop_group (cr);
-  cairo_pattern_get_surface (first_pattern, &first_surface);
-  first_image = cairo_surface_map_to_image (first_surface, NULL);
-  first_data = cairo_image_surface_get_data (first_image);
-  first_width = cairo_image_surface_get_width (first_image);
-  first_height = cairo_image_surface_get_height (first_image);
-  first_stride = cairo_image_surface_get_stride (first_image);
+  first_pattern = gdk_paint_pop_group (cr);
+  gdk_paint_pattern_get_surface (first_pattern, &first_surface);
+  first_image = gdk_paint_surface_map_to_image (first_surface, NULL);
+  first_data = gdk_paint_image_surface_get_data (first_image);
+  first_width = gdk_paint_image_surface_get_width (first_image);
+  first_height = gdk_paint_image_surface_get_height (first_image);
+  first_stride = gdk_paint_image_surface_get_stride (first_image);
 
-  cairo_push_group_with_content (cr, CAIRO_CONTENT_COLOR_ALPHA);
+  gdk_paint_push_group_with_content (cr, GDK_PAINT_CONTENT_COLOR_ALPHA);
   gsk_render_node_draw_full (self->second, cr, data);
-  second_pattern = cairo_pop_group (cr);
-  cairo_pattern_get_surface (second_pattern, &second_surface);
-  second_image = cairo_surface_map_to_image (second_surface, NULL);
-  second_data = cairo_image_surface_get_data (second_image);
-  second_stride = cairo_image_surface_get_stride (second_image);
+  second_pattern = gdk_paint_pop_group (cr);
+  gdk_paint_pattern_get_surface (second_pattern, &second_surface);
+  second_image = gdk_paint_surface_map_to_image (second_surface, NULL);
+  second_data = gdk_paint_image_surface_get_data (second_image);
+  second_stride = gdk_paint_image_surface_get_stride (second_image);
 
-  g_assert (first_width == cairo_image_surface_get_width (second_image));
-  g_assert (first_height == cairo_image_surface_get_height (second_image));
+  g_assert (first_width == gdk_paint_image_surface_get_width (second_image));
+  g_assert (first_height == gdk_paint_image_surface_get_height (second_image));
 
   cs_equal = gdk_color_state_equal (data->ccs, self->color_state);
 
@@ -204,19 +204,19 @@ gsk_arithmetic_node_draw (GskRenderNode *node,
             }
 
           *(guint32 *)(first_data + y * first_stride + 4 * x) =
-              gdk_cairo_pixel_from_float ((float[4]) { r, g, b, a });
+              gdk_painter_pixel_from_float ((float[4]) { r, g, b, a });
         }
     }
 
-  cairo_surface_unmap_image (first_surface, first_image);
-  cairo_surface_unmap_image (second_surface, second_image);
+  gdk_paint_surface_unmap_image (first_surface, first_image);
+  gdk_paint_surface_unmap_image (second_surface, second_image);
 
-  cairo_set_source (cr, first_pattern);
+  gdk_paint_set_source (cr, first_pattern);
 
-  cairo_paint (cr);
+  gdk_paint_paint (cr);
 
-  cairo_pattern_destroy (first_pattern);
-  cairo_pattern_destroy (second_pattern);
+  gdk_paint_pattern_destroy (first_pattern);
+  gdk_paint_pattern_destroy (second_pattern);
 }
 
 static void

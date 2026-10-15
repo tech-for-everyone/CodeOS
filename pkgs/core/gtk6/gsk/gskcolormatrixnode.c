@@ -55,13 +55,13 @@ gsk_color_matrix_node_finalize (GskRenderNode *node)
 }
 
 void
-apply_color_matrix_to_pattern (cairo_pattern_t         *pattern,
+apply_color_matrix_to_pattern (GdkPaintPattern         *pattern,
                                const graphene_matrix_t *color_matrix,
                                const graphene_vec4_t   *color_offset,
                                GdkColorState           *color_state,
-                               GskCairoData            *cairo_data)
+                               GskCairoData            *gdk_paint_data)
 {
-  cairo_surface_t *surface, *image_surface;
+  GdkPaintSurface *surface, *image_surface;
   guchar *data;
   gsize x, y, width, height, stride;
   float alpha;
@@ -70,15 +70,15 @@ apply_color_matrix_to_pattern (cairo_pattern_t         *pattern,
   gboolean cs_equal;
   GdkColor c, l;
 
-  cairo_pattern_get_surface (pattern, &surface);
-  image_surface = cairo_surface_map_to_image (surface, NULL);
+  gdk_paint_pattern_get_surface (pattern, &surface);
+  image_surface = gdk_paint_surface_map_to_image (surface, NULL);
 
-  data = cairo_image_surface_get_data (image_surface);
-  width = cairo_image_surface_get_width (image_surface);
-  height = cairo_image_surface_get_height (image_surface);
-  stride = cairo_image_surface_get_stride (image_surface);
+  data = gdk_paint_image_surface_get_data (image_surface);
+  width = gdk_paint_image_surface_get_width (image_surface);
+  height = gdk_paint_image_surface_get_height (image_surface);
+  stride = gdk_paint_image_surface_get_stride (image_surface);
 
-  cs_equal = gdk_color_state_equal (cairo_data->ccs, color_state);
+  cs_equal = gdk_color_state_equal (gdk_paint_data->ccs, color_state);
 
   for (y = 0; y < height; y++)
     {
@@ -101,7 +101,7 @@ apply_color_matrix_to_pattern (cairo_pattern_t         *pattern,
 
               if (!cs_equal)
                 {
-                  gdk_color_init (&c, cairo_data->ccs, (float[]) { r, g, b, alpha });
+                  gdk_color_init (&c, gdk_paint_data->ccs, (float[]) { r, g, b, alpha });
                   gdk_color_convert (&l, color_state, &c);
 
                   r = l.r;
@@ -123,7 +123,7 @@ apply_color_matrix_to_pattern (cairo_pattern_t         *pattern,
 
               graphene_vec4_to_float (&pixel, v);
               gdk_color_init (&l, color_state, v);
-              gdk_color_convert (&c, cairo_data->ccs, &l);
+              gdk_color_convert (&c, gdk_paint_data->ccs, &l);
               graphene_vec4_init_from_float (&pixel, c.values);
             }
 
@@ -145,42 +145,42 @@ apply_color_matrix_to_pattern (cairo_pattern_t         *pattern,
       data += stride;
     }
 
-  cairo_surface_mark_dirty (image_surface);
-  cairo_surface_unmap_image (surface, image_surface);
+  gdk_paint_surface_mark_dirty (image_surface);
+  gdk_paint_surface_unmap_image (surface, image_surface);
   /* https://gitlab.freedesktop.org/cairo/cairo/-/merge_requests/487 */
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 }
 
 static void
 gsk_color_matrix_node_draw (GskRenderNode *node,
-                            cairo_t       *cr,
+                            GdkPainter       *cr,
                             GskCairoData  *data)
 {
   GskColorMatrixNode *self = (GskColorMatrixNode *) node;
-  cairo_pattern_t *pattern;
+  GdkPaintPattern *pattern;
   graphene_rect_t bounds;
 
   if (!gsk_cairo_rect_snap (cr, &node->bounds, self->snap, &bounds))
     return;
 
   /* clip so the push_group() creates a smaller surface */
-  gdk_cairo_rect (cr, &bounds);
-  cairo_clip (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_clip (cr);
 
-  if (gdk_cairo_is_all_clipped (cr))
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
-  cairo_push_group (cr);
+  gdk_paint_push_group (cr);
 
   gsk_render_node_draw_full (self->child, cr, data);
 
-  pattern = cairo_pop_group (cr);
+  pattern = gdk_paint_pop_group (cr);
   apply_color_matrix_to_pattern (pattern, &self->color_matrix, &self->color_offset, self->color_state, data);
 
-  cairo_set_source (cr, pattern);
-  cairo_paint (cr);
+  gdk_paint_set_source (cr, pattern);
+  gdk_paint_paint (cr);
 
-  cairo_pattern_destroy (pattern);
+  gdk_paint_pattern_destroy (pattern);
 }
 
 static void

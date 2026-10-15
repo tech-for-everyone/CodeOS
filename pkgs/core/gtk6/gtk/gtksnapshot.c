@@ -2958,17 +2958,17 @@ gtk_snapshot_append_node_scaled (GtkSnapshot     *snapshot,
  * Creates a new [class@Gsk.CairoNode] and appends it to the current
  * render node of @snapshot, without changing the current node.
  *
- * Returns: a `cairo_t` suitable for drawing the contents of
+ * Returns: a `GdkPainter` suitable for drawing the contents of
  *   the newly created render node
  */
-cairo_t *
+GdkPainter *
 gtk_snapshot_append_cairo (GtkSnapshot           *snapshot,
                            const graphene_rect_t *bounds)
 {
   GskRenderNode *node;
   graphene_rect_t real_bounds;
   float scale_x, scale_y, dx, dy;
-  cairo_t *cr;
+  GdkPainter *cr;
 
   g_return_val_if_fail (snapshot != NULL, NULL);
   g_return_val_if_fail (bounds != NULL, NULL);
@@ -2982,8 +2982,8 @@ gtk_snapshot_append_cairo (GtkSnapshot           *snapshot,
 
   cr = gsk_cairo_node_get_draw_context (node);
 
-  cairo_scale (cr, scale_x, scale_y);
-  cairo_translate (cr, dx, dy);
+  gdk_paint_scale (cr, scale_x, scale_y);
+  gdk_paint_translate (cr, dx, dy);
 
   return cr;
 }

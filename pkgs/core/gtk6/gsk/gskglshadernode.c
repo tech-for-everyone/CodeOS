@@ -63,14 +63,14 @@ gsk_gl_shader_node_finalize (GskRenderNode *node)
 
 static void
 gsk_gl_shader_node_draw (GskRenderNode *node,
-                         cairo_t       *cr,
+                         GdkPainter       *cr,
                          GskCairoData  *data)
 {
   GdkRGBA pink = { 255 / 255., 105 / 255., 180 / 255., 1.0 };
 
-  gdk_cairo_set_source_rgba_ccs (cr, data->ccs, &pink);
-  gdk_cairo_rect (cr, &node->bounds);
-  cairo_fill (cr);
+  gdk_painter_set_source_rgba_ccs (cr, data->ccs, &pink);
+  gdk_painter_rect (cr, &node->bounds);
+  gdk_paint_fill (cr);
 }
 
 static void

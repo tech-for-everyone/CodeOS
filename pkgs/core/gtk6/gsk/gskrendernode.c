@@ -387,39 +387,39 @@ gsk_render_node_get_bounds (GskRenderNode   *node,
 
 void
 gsk_render_node_draw_full (GskRenderNode *node,
-                           cairo_t       *cr,
+                           GdkPainter       *cr,
                            GskCairoData  *data)
 {
   /* Check that the calling function did pass a correct color state */
   g_assert (data->ccs == gdk_color_state_get_rendering_color_state (data->ccs));
 
-  cairo_save (cr);
+  gdk_paint_save (cr);
 
   GSK_RENDER_NODE_GET_CLASS (node)->draw (node, cr, data);
 
   if (GSK_DEBUG_CHECK (GEOMETRY))
     {
-      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-      cairo_rectangle (cr, node->bounds.origin.x - 1, node->bounds.origin.y - 1,
+      gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_OVER);
+      gdk_paint_rectangle (cr, node->bounds.origin.x - 1, node->bounds.origin.y - 1,
                        node->bounds.size.width + 2, node->bounds.size.height + 2);
-      cairo_set_line_width (cr, 2);
-      cairo_set_source_rgba (cr, 0, 0, 0, 0.5);
-      cairo_stroke (cr);
+      gdk_paint_set_line_width (cr, 2);
+      gdk_paint_set_source_rgba (cr, 0, 0, 0, 0.5);
+      gdk_paint_stroke (cr);
     }
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 
-  if (cairo_status (cr))
+  if (gdk_paint_status (cr))
     {
       g_warning ("drawing failure for render node %s: %s",
                  g_type_name_from_instance ((GTypeInstance *) node),
-                 cairo_status_to_string (cairo_status (cr)));
+                 gdk_paint_status_to_string (gdk_paint_status (cr)));
     }
 }
 
 void
 gsk_render_node_draw_with_color_state (GskRenderNode *node,
-                                       cairo_t       *cr,
+                                       GdkPainter       *cr,
                                        GdkColorState *color_state)
 {
   GskCairoData data;
@@ -434,18 +434,18 @@ gsk_render_node_draw_with_color_state (GskRenderNode *node,
     }
   else
     {
-      cairo_save (cr);
-      gdk_cairo_rect (cr, &node->bounds);
-      cairo_clip (cr);
-      cairo_push_group (cr);
+      gdk_paint_save (cr);
+      gdk_painter_rect (cr, &node->bounds);
+      gdk_paint_clip (cr);
+      gdk_paint_push_group (cr);
 
       gsk_render_node_draw_full (node, cr, &data);
-      gdk_cairo_surface_convert_color_state (cairo_get_group_target (cr),
+      gdk_painter_surface_convert_color_state (gdk_paint_get_group_target (cr),
                                              data.ccs,
                                              color_state);
-      cairo_pop_group_to_source (cr);
-      cairo_paint (cr);
-      cairo_restore (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_paint (cr);
+      gdk_paint_restore (cr);
     }
 
   gsk_render_node_unref (node);
@@ -467,11 +467,11 @@ gsk_render_node_draw_with_color_state (GskRenderNode *node,
  **/
 void
 gsk_render_node_draw (GskRenderNode *node,
-                      cairo_t       *cr)
+                      GdkPainter       *cr)
 {
   g_return_if_fail (GSK_IS_RENDER_NODE (node));
   g_return_if_fail (cr != NULL);
-  g_return_if_fail (cairo_status (cr) == CAIRO_STATUS_SUCCESS);
+  g_return_if_fail (gdk_paint_status (cr) == GDK_PAINT_STATUS_SUCCESS);
 
   gsk_render_node_draw_with_color_state (node, cr, GDK_COLOR_STATE_SRGB);
 }
@@ -492,7 +492,7 @@ gsk_render_node_draw (GskRenderNode *node,
  */
 void
 gsk_render_node_draw_fallback (GskRenderNode *node,
-                               cairo_t       *cr)
+                               GdkPainter       *cr)
 {
   gsk_render_node_draw (node, cr);
 
@@ -503,27 +503,27 @@ gsk_render_node_draw_fallback (GskRenderNode *node,
        */
       static const guint32 fallback_pixels[] = { 0xFFFF00CC, 0xFF000000,
                                                  0xFF000000, 0xFFFF00CC };
-      static const guint32 cairo_pixels[] = { 0xFF9900FF, 0xFF000000,
+      static const guint32 gdk_paint_pixels[] = { 0xFF9900FF, 0xFF000000,
                                               0xFF000000, 0xFF9900FF };
       const guint32 *pixels;
-      cairo_surface_t *surface;
+      GdkPaintSurface *surface;
 
-      cairo_save (cr);
+      gdk_paint_save (cr);
       if (GSK_RENDER_NODE_TYPE (node) == GSK_CAIRO_NODE)
-        pixels = cairo_pixels;
+        pixels = gdk_paint_pixels;
       else
         pixels = fallback_pixels;
-      surface = cairo_image_surface_create_for_data ((guchar *) pixels,
-                                                     CAIRO_FORMAT_ARGB32,
+      surface = gdk_paint_image_surface_create_for_data ((guchar *) pixels,
+                                                     GDK_PAINT_FORMAT_ARGB32,
                                                      2, 2,
                                                      2 * 4);
-      cairo_scale (cr, 10, 10);
-      cairo_set_source_surface (cr, surface, 0, 0);
-      cairo_pattern_set_filter (cairo_get_source (cr), CAIRO_FILTER_NEAREST);
-      cairo_pattern_set_extend (cairo_get_source (cr), CAIRO_EXTEND_REPEAT);
-      cairo_paint_with_alpha (cr, 0.6);
-      cairo_surface_destroy (surface);
-      cairo_restore (cr);
+      gdk_paint_scale (cr, 10, 10);
+      gdk_paint_set_source_surface (cr, surface, 0, 0);
+      gdk_paint_pattern_set_filter (gdk_paint_get_source (cr), GDK_PAINT_FILTER_NEAREST);
+      gdk_paint_pattern_set_extend (gdk_paint_get_source (cr), GDK_PAINT_EXTEND_REPEAT);
+      gdk_paint_paint_with_alpha (cr, 0.6);
+      gdk_paint_surface_destroy (surface);
+      gdk_paint_restore (cr);
     }
 }
 

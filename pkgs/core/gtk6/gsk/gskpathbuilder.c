@@ -430,14 +430,14 @@ gsk_path_builder_add_reverse_path (GskPathBuilder *self,
  *
  * Adds a Cairo path to the builder.
  *
- * You can use cairo_copy_path() to access the path
+ * You can use gdk_paint_copy_path() to access the path
  * from a Cairo context.
  *
  * Since: 4.14
  */
 void
 gsk_path_builder_add_cairo_path (GskPathBuilder     *self,
-                                 const cairo_path_t *path)
+                                 const GdkPaintPath *path)
 {
   GskAlignedPoint current;
 
@@ -448,26 +448,26 @@ gsk_path_builder_add_cairo_path (GskPathBuilder     *self,
 
   for (gsize i = 0; i < path->num_data; i += path->data[i].header.length)
     {
-      const cairo_path_data_t *data = &path->data[i];
+      const GdkPaintPathData *data = &path->data[i];
 
       switch (data->header.type)
         {
-        case CAIRO_PATH_MOVE_TO:
+        case GDK_PAINT_PATH_MOVE_TO:
           gsk_path_builder_move_to (self, data[1].point.x, data[1].point.y);
           break;
 
-        case CAIRO_PATH_LINE_TO:
+        case GDK_PAINT_PATH_LINE_TO:
           gsk_path_builder_line_to (self, data[1].point.x, data[1].point.y);
           break;
 
-        case CAIRO_PATH_CURVE_TO:
+        case GDK_PAINT_PATH_CURVE_TO:
           gsk_path_builder_cubic_to (self,
                                      data[1].point.x, data[1].point.y,
                                      data[2].point.x, data[2].point.y,
                                      data[3].point.x, data[3].point.y);
           break;
 
-        case CAIRO_PATH_CLOSE_PATH:
+        case GDK_PAINT_PATH_CLOSE_PATH:
           gsk_path_builder_close (self);
           break;
 
@@ -1612,21 +1612,21 @@ void
 gsk_path_builder_add_layout (GskPathBuilder *self,
                              PangoLayout    *layout)
 {
-  cairo_surface_t *surface;
-  cairo_t *cr;
-  cairo_path_t *cairo_path;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
+  GdkPaintPath *gdk_paint_path;
 
-  surface = cairo_recording_surface_create (CAIRO_CONTENT_COLOR_ALPHA, NULL);
-  cr = cairo_create (surface);
+  surface = gdk_paint_recording_surface_create (GDK_PAINT_CONTENT_COLOR_ALPHA, NULL);
+  cr = gdk_paint_create (surface);
 
   pango_cairo_layout_path (cr, layout);
-  cairo_path = cairo_copy_path (cr);
+  gdk_paint_path = gdk_paint_copy_path (cr);
 
-  gsk_path_builder_add_cairo_path (self, cairo_path);
+  gsk_path_builder_add_cairo_path (self, gdk_paint_path);
 
-  cairo_path_destroy (cairo_path);
-  cairo_destroy (cr);
-  cairo_surface_destroy (surface);
+  gdk_paint_path_destroy (gdk_paint_path);
+  gdk_paint_destroy (cr);
+  gdk_paint_surface_destroy (surface);
 }
 
 /**

@@ -5,7 +5,7 @@
 
 gboolean gsk_cairo_shadow_needs_blur (double radius);
 
-void gsk_cairo_shadow_draw (cairo_t              *cr,
+void gsk_cairo_shadow_draw (GdkPainter              *cr,
                             GdkColorState        *ccs,
                             gboolean              inset,
                             const GskRoundedRect *box,
@@ -21,7 +21,7 @@ typedef enum {
   LEFT
 } GskShadowSide;
 
-void gsk_cairo_shadow_draw_corner (cairo_t               *cr,
+void gsk_cairo_shadow_draw_corner (GdkPainter               *cr,
                                    GdkColorState         *ccs,
                                    gboolean               inset,
                                    const GskRoundedRect  *box,
@@ -31,7 +31,7 @@ void gsk_cairo_shadow_draw_corner (cairo_t               *cr,
                                    GskCorner              corner,
                                    GdkRectangle *drawn_rect);
 
-void gsk_cairo_shadow_draw_side (cairo_t               *cr,
+void gsk_cairo_shadow_draw_side (GdkPainter               *cr,
                                  GdkColorState         *ccs,
                                  gboolean               inset,
                                  const GskRoundedRect  *box,

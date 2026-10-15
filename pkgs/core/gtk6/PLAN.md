@@ -287,6 +287,43 @@ The port itself is not done. What it needs:
   that sets a cairo clip — which belongs to the drawing bridge. Verified by
   `tests/gdkregion.c` (compile-only probe over every signature) and a negative
   control: a TU naming `cairo_region_t` now fails with `unknown type name`.
+* **The cairo API is gone from the sources: `cairo_t` was the last wall.**
+  The ledger went from **52/620** (blocked by `cairo_t`, 443 files) to
+  **60/621**, and its top blocker is no longer cairo at all — it is
+  `PangoDirection` (440 files), then `gpu/gskgputypesprivate.h` (31) and
+  `gdk-pixbuf/gdk-pixbuf.h` (21). That is the point of the change: cairo was
+  not a library to link, it was the shape of GDK/GSK/GTK's drawing code
+  (`cairo_t`, `cairo_surface_t`, `cairo_pattern_t`, the operators, the path
+  API), woven through the kept files. GTK6 now owns that API instead.
+  `gdk/gdkpaint.h` restates it as GDK's own (`cairo_t` → `GdkPainter`,
+  `cairo_surface_t` → `GdkPaintSurface`, ...), with cairo's numeric enum values
+  because they are also the GSK render-node serialisation's. It is glib-free:
+  the C++ engine defines `__cplusplus`, so the header's optional GType block
+  stays off and `gdk/qt/gdkqtpaint.cpp` needs no glib. That engine is a
+  `QPainter` over a `QImage`-backed `GdkPaintSurface`, and
+  `gdk/gdkpaintenumtypes.c` (C, part of the GTK4 layer) supplies the four enum
+  GTypes that used to come from cairo-gobject.
+* **The cairo rename is a script, not a diff.** `scripts/gtk4-rename-cairo.py`
+  rewrites 124 files under `gdk|gsk|gtk`; its ordered rule table is the
+  specification, so re-running it is the audit trail:
+  `cairo_t`→`GdkPainter`, `cairo_surface_t`→`GdkPaintSurface`,
+  `cairo_pattern_t`→`GdkPaintPattern`, `cairo_matrix_t`→`GdkPaintMatrix`,
+  `cairo_font_options_t`→`GdkPaintFontOptions`, `cairo_scaled_font_t`,
+  `cairo_path_t`/`cairo_path_data_t`, `cairo_rectangle_t`,
+  `cairo_user_data_key_t`, `cairo_device_t`, `cairo_destroy_func_t`,
+  `cairo_write_func_t`, the status/enum/struct types, the region type,
+  `CAIRO_*`→`GDK_PAINT_*`, `cairo_<op>()`→`gdk_paint_<op>()`,
+  `cairo_region_*`→`gdk_region_*`, `gdk_cairo_<x>()`→`gdk_painter_<x>()`,
+  `GdkCairoContext`→`GdkPaintContext` (and the frame/private/struct-tag
+  spellings), `CAIRO_GOBJECT_TYPE_*`→`GDK_PAINT_TYPE_*`, `CAIRO_*` headers →
+  `<gdk/gdkpaint.h>`. Verified by `tests/gdkpaint.c` (compile-only probe over
+  every signature) and a negative control: a TU naming `cairo_t` now fails with
+  `unknown type name`. Files whose *name* is cairo (`gdk/gdkcairo.c`,
+  `gsk/gskcairo*.c`) keep it for now — the helper headers
+  (`gdk/gdkcairo.h`, `gdkcairoprivate.h`, `gdk/gdkgdkcairocontext.h`,
+  `gsk/gskcaironode.h`, `gsk/gskcairorenderer.h`) still carry
+  pango/gdk-pixbuf includes and are replaced as those walls fall, so renaming
+  them now would only churn; it is the first follow-up.
 * **The dropped libraries are woven through the kept files**, so removing them
   is per-file surgery rather than a directory delete. The whole public-header
   dependency is small and enumerated: cairo needs 14 types + 34 functions in
@@ -297,9 +334,9 @@ The port itself is not done. What it needs:
   `gdk.h` no longer pulls in `<gdk/gdkcairo.h>`, `<gdk/gdkpango.h>` or
   `<gdk/deprecated/gdkpixbuf.h>`. Those three headers still exist for the `.c`
   files that implement them and get removed as their call sites are ported; the
-  next walls are `cairo_t` and `PangoDirection`. The replacements are already
-  prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during the
-  bring-up.
+  next wall is `PangoDirection` (`cairo_t` is already gone, above). The
+  replacements are already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get
+  wired in during the bring-up.
 * **Upstream's `meson.build` files are imported as reference** but not used;
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's

@@ -113,7 +113,7 @@ gtk_css_style_snapshot_layout (GtkCssBoxes *boxes,
 }
 
 static void
-draw_insertion_cursor (cairo_t         *cr,
+draw_insertion_cursor (GdkPainter         *cr,
                        double           x,
                        double           y,
                        double           width,
@@ -128,10 +128,10 @@ draw_insertion_cursor (cairo_t         *cr,
   double dx, dy;
   double xx1, yy1, xx2, yy2;
 
-  cairo_save (cr);
-  cairo_new_path (cr);
+  gdk_paint_save (cr);
+  gdk_paint_new_path (cr);
 
-  gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, color);
+  gdk_painter_set_source_color (cr, GDK_COLOR_STATE_SRGB, color);
 
   stem_width = height * aspect_ratio + 1;
 
@@ -168,11 +168,11 @@ draw_insertion_cursor (cairo_t         *cr,
           x2 = x0 + 2 * dy - 3 * dx;
           y2 = y0 - 2 * dx - 3 * dy;
 
-          cairo_move_to (cr, xx1 + dx, yy1 + dy);
-          cairo_line_to (cr, xx2 + dx, yy2 + dy);
-          cairo_line_to (cr, x2, y2);
-          cairo_line_to (cr, x1, y1);
-          cairo_line_to (cr, xx1 - dx, yy1 - dy);
+          gdk_paint_move_to (cr, xx1 + dx, yy1 + dy);
+          gdk_paint_line_to (cr, xx2 + dx, yy2 + dy);
+          gdk_paint_line_to (cr, x2, y2);
+          gdk_paint_line_to (cr, x1, y1);
+          gdk_paint_line_to (cr, xx1 - dx, yy1 - dy);
         }
       else if (direction == PANGO_DIRECTION_LTR)
         {
@@ -186,26 +186,26 @@ draw_insertion_cursor (cairo_t         *cr,
           x2 = x0 + 2 * dy + 3 * dx;
           y2 = y0 - 2 * dx + 3 * dy;
 
-          cairo_move_to (cr, xx1 - dx, yy1 - dy);
-          cairo_line_to (cr, xx2 - dx, yy2 - dy);
-          cairo_line_to (cr, x2, y2);
-          cairo_line_to (cr, x1, y1);
-          cairo_line_to (cr, xx1 + dx, yy1 + dy);
+          gdk_paint_move_to (cr, xx1 - dx, yy1 - dy);
+          gdk_paint_line_to (cr, xx2 - dx, yy2 - dy);
+          gdk_paint_line_to (cr, x2, y2);
+          gdk_paint_line_to (cr, x1, y1);
+          gdk_paint_line_to (cr, xx1 + dx, yy1 + dy);
         }
       else
         g_assert_not_reached();
     }
   else
     {
-      cairo_move_to (cr, xx1 + dx, yy1 + dy);
-      cairo_line_to (cr, xx2 + dx, yy2 + dy);
-      cairo_line_to (cr, xx2 - dx, yy2 - dy);
-      cairo_line_to (cr, xx1 - dx, yy1 - dy);
+      gdk_paint_move_to (cr, xx1 + dx, yy1 + dy);
+      gdk_paint_line_to (cr, xx2 + dx, yy2 + dy);
+      gdk_paint_line_to (cr, xx2 - dx, yy2 - dy);
+      gdk_paint_line_to (cr, xx1 - dx, yy1 - dy);
     }
 
-  cairo_fill (cr);
+  gdk_paint_fill (cr);
 
-  cairo_restore (cr);
+  gdk_paint_restore (cr);
 }
 
 static void
@@ -247,7 +247,7 @@ snapshot_insertion_cursor (GtkSnapshot     *snapshot,
 
   if (width != 0 || draw_arrow)
     {
-      cairo_t *cr;
+      GdkPainter *cr;
       graphene_rect_t bounds;
 
       get_insertion_cursor_bounds (width, height, aspect_ratio, direction, draw_arrow, &bounds);
@@ -255,7 +255,7 @@ snapshot_insertion_cursor (GtkSnapshot     *snapshot,
 
       draw_insertion_cursor (cr, 0, 0, width, height, aspect_ratio, &color, direction, draw_arrow);
 
-      cairo_destroy (cr);
+      gdk_paint_destroy (cr);
     }
   else
     {

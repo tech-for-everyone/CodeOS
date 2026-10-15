@@ -24,7 +24,7 @@
 
 #include <gsk/gsktypes.h>
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_BEGIN_DECLS
 
@@ -37,9 +37,9 @@ GType                   gsk_cairo_node_get_type                 (void);
 GDK_AVAILABLE_IN_ALL
 GskRenderNode *         gsk_cairo_node_new                      (const graphene_rect_t    *bounds);
 GDK_AVAILABLE_IN_ALL
-cairo_t *               gsk_cairo_node_get_draw_context         (GskRenderNode            *node);
+GdkPainter *               gsk_cairo_node_get_draw_context         (GskRenderNode            *node);
 GDK_AVAILABLE_IN_ALL
-cairo_surface_t *       gsk_cairo_node_get_surface              (GskRenderNode            *node);
+GdkPaintSurface *       gsk_cairo_node_get_surface              (GskRenderNode            *node);
 
 G_END_DECLS
 

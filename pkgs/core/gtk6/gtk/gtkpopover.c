@@ -1425,7 +1425,7 @@ get_border (GtkCssNode *node,
 
 static void
 gtk_popover_apply_tail_path (GtkPopover *popover,
-                             cairo_t    *cr)
+                             GdkPainter    *cr)
 {
   GtkPopoverPrivate *priv = gtk_popover_get_instance_private (popover);
   int initial_x, initial_y;
@@ -1441,15 +1441,15 @@ gtk_popover_apply_tail_path (GtkPopover *popover,
 
   get_border (priv->arrow_node, &border);
 
-  cairo_set_line_width (cr, 1);
+  gdk_paint_set_line_width (cr, 1);
   gtk_popover_get_gap_coords (popover,
                               &initial_x, &initial_y,
                               &tip_x, &tip_y,
                               &final_x, &final_y);
 
-  cairo_move_to (cr, initial_x, initial_y);
-  cairo_line_to (cr, tip_x, tip_y);
-  cairo_line_to (cr, final_x, final_y);
+  gdk_paint_move_to (cr, initial_x, initial_y);
+  gdk_paint_line_to (cr, tip_x, tip_y);
+  gdk_paint_line_to (cr, final_x, final_y);
 }
 
 static void
@@ -1461,9 +1461,9 @@ gtk_popover_update_shape (GtkPopover *popover)
     {
       GtkCssBoxes content_css_boxes;
       const GskRoundedRect *box;
-      cairo_surface_t *cairo_surface;
+      GdkPaintSurface *gdk_paint_surface;
       GdkRegion *region;
-      cairo_t *cr;
+      GdkPainter *cr;
       graphene_point_t p;
       double native_x, native_y;
       int width, height, scale;
@@ -1475,30 +1475,30 @@ gtk_popover_update_shape (GtkPopover *popover)
       height = gdk_surface_get_height (priv->surface);
       scale = gdk_surface_get_scale_factor (priv->surface);
 
-      cairo_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width * scale, height * scale);
-      cairo_surface_set_device_scale (cairo_surface, scale, scale);
+      gdk_paint_surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width * scale, height * scale);
+      gdk_paint_surface_set_device_scale (gdk_paint_surface, scale, scale);
 
-      cr = cairo_create (cairo_surface);
+      cr = gdk_paint_create (gdk_paint_surface);
 
-      cairo_translate (cr, native_x, native_y);
+      gdk_paint_translate (cr, native_x, native_y);
 
-      cairo_set_source_rgba (cr, 0, 0, 0, 1);
+      gdk_paint_set_source_rgba (cr, 0, 0, 0, 1);
       gtk_popover_apply_tail_path (popover, cr);
-      cairo_close_path (cr);
-      cairo_fill (cr);
+      gdk_paint_close_path (cr);
+      gdk_paint_fill (cr);
 
       box = gtk_css_boxes_get_border_box (&content_css_boxes);
       if (!gtk_widget_compute_point (priv->contents_widget, GTK_WIDGET (popover),
                                      &GRAPHENE_POINT_INIT (0, 0), &p))
         graphene_point_init (&p, 0, 0);
 
-      cairo_translate (cr, p.x, p.y);
+      gdk_paint_translate (cr, p.x, p.y);
       gsk_rounded_rect_path (box, cr);
-      cairo_fill (cr);
-      cairo_destroy (cr);
+      gdk_paint_fill (cr);
+      gdk_paint_destroy (cr);
 
-      region = gdk_region_create_from_surface (cairo_surface);
-      cairo_surface_destroy (cairo_surface);
+      region = gdk_region_create_from_surface (gdk_paint_surface);
+      gdk_paint_surface_destroy (gdk_paint_surface);
 
       gdk_surface_set_input_region (priv->surface, region);
       gdk_region_destroy (region);
@@ -1678,7 +1678,7 @@ create_arrow_render_node (GtkPopover *popover)
   GtkPopoverPrivate *priv = gtk_popover_get_instance_private (popover);
   GtkWidget *widget = GTK_WIDGET (popover);
   GtkBorder border;
-  cairo_t *cr;
+  GdkPainter *cr;
   GtkSnapshot *snapshot;
   GtkSnapshot *bg_snapshot;
   GskRenderNode *node;
@@ -1695,9 +1695,9 @@ create_arrow_render_node (GtkPopover *popover)
                                   ));
 
   /* Clip to the arrow shape */
-  cairo_save (cr);
+  gdk_paint_save (cr);
   gtk_popover_apply_tail_path (popover, cr);
-  cairo_clip (cr);
+  gdk_paint_clip (cr);
 
   get_border (priv->arrow_node, &border);
 
@@ -1725,14 +1725,14 @@ create_arrow_render_node (GtkPopover *popover)
       border_color = gtk_css_color_value_get_rgba (style->used->border_left_color);
 
       gtk_popover_apply_tail_path (popover, cr);
-      gdk_cairo_set_source_rgba (cr, border_color);
+      gdk_painter_set_source_rgba (cr, border_color);
 
-      cairo_set_line_width (cr, border.bottom + 1);
-      cairo_stroke (cr);
+      gdk_paint_set_line_width (cr, border.bottom + 1);
+      gdk_paint_stroke (cr);
     }
 
-  cairo_restore (cr);
-  cairo_destroy (cr);
+  gdk_paint_restore (cr);
+  gdk_paint_destroy (cr);
 
   priv->arrow_render_node = gtk_snapshot_free_to_node (snapshot);
 }

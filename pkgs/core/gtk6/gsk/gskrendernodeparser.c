@@ -94,14 +94,14 @@
 #include "gdk/win32/gdkd3d12utilsprivate.h"
 #endif
 
-#ifdef CAIRO_HAS_SCRIPT_SURFACE
-#include <cairo-script.h>
+#ifdef GDK_PAINT_HAS_SCRIPT_SURFACE
+#include <gdk/gdkpaint.h>
 #endif
 #ifdef HAVE_CAIRO_SCRIPT_INTERPRETER
-#include <cairo-script-interpreter.h>
+#include <gdk/gdkpaint.h>
 #endif
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <pango/pangocairo.h>
 
 #ifdef HAVE_PANGOFT
@@ -1231,12 +1231,12 @@ struct _CairoHookData
 {
   GtkCssParser *parser;
   graphene_rect_t node_bounds;
-  cairo_surface_t *surface;
+  GdkPaintSurface *surface;
 };
 
-static cairo_surface_t *
+static GdkPaintSurface *
 csi_hooks_surface_create (void            *closure,
-                          cairo_content_t  content,
+                          GdkPaintContent  content,
                           double           width,
                           double           height,
                           long             uid)
@@ -1245,7 +1245,7 @@ csi_hooks_surface_create (void            *closure,
 
   if (hook->surface != NULL)
     {
-      return cairo_surface_create_similar (hook->surface,
+      return gdk_paint_surface_create_similar (hook->surface,
                                            content,
                                            width,
                                            height);
@@ -1262,47 +1262,47 @@ csi_hooks_surface_create (void            *closure,
                             width, height);
     }
 
-  hook->surface = cairo_recording_surface_create (content,
-                                                  &(cairo_rectangle_t) {
+  hook->surface = gdk_paint_recording_surface_create (content,
+                                                  &(GdkPaintRectangle) {
                                                       hook->node_bounds.origin.x,
                                                       hook->node_bounds.origin.y,
                                                       hook->node_bounds.size.width,
                                                       hook->node_bounds.size.height
                                                   });
 
-  return cairo_surface_reference (hook->surface);
+  return gdk_paint_surface_reference (hook->surface);
 }
 
-static cairo_surface_t *
+static GdkPaintSurface *
 interpret_cairo_script (GtkCssParser          *parser,
                         const graphene_rect_t *bounds,
                         GBytes                *script)
 {
 #ifdef HAVE_CAIRO_SCRIPT_INTERPRETER
-  cairo_script_interpreter_t *csi;
+  GdkPaintScriptInterpreter *csi;
   CairoHookData hook = { parser, *bounds, NULL };
-  cairo_script_interpreter_hooks_t hooks = {
+  GdkPaintScriptInterpreterHooks hooks = {
     .closure = &hook,
     .surface_create = csi_hooks_surface_create,
   };
 
-  csi = cairo_script_interpreter_create ();
-  cairo_script_interpreter_install_hooks (csi, &hooks);
-  cairo_script_interpreter_feed_string (csi, g_bytes_get_data (script, NULL), g_bytes_get_size (script));
+  csi = gdk_paint_script_interpreter_create ();
+  gdk_paint_script_interpreter_install_hooks (csi, &hooks);
+  gdk_paint_script_interpreter_feed_string (csi, g_bytes_get_data (script, NULL), g_bytes_get_size (script));
   if (hook.surface == NULL)
     {
       gtk_css_parser_error_value (parser, "Cairo script did not create a surface");
     }
-  else if (cairo_surface_status (hook.surface) != CAIRO_STATUS_SUCCESS)
+  else if (gdk_paint_surface_status (hook.surface) != GDK_PAINT_STATUS_SUCCESS)
     {
-      gtk_css_parser_error_value (parser, "Invalid Cairo script: %s", cairo_status_to_string (cairo_surface_status (hook.surface)));
-      cairo_script_interpreter_destroy (csi);
-      g_clear_pointer (&hook.surface, cairo_surface_destroy);
+      gtk_css_parser_error_value (parser, "Invalid Cairo script: %s", gdk_paint_status_to_string (gdk_paint_surface_status (hook.surface)));
+      gdk_paint_script_interpreter_destroy (csi);
+      g_clear_pointer (&hook.surface, gdk_paint_surface_destroy);
     }
-  if (cairo_script_interpreter_destroy (csi) != CAIRO_STATUS_SUCCESS)
+  if (gdk_paint_script_interpreter_destroy (csi) != GDK_PAINT_STATUS_SUCCESS)
     {
       gtk_css_parser_error_value (parser, "Invalid Cairo script");
-      g_clear_pointer (&hook.surface, cairo_surface_destroy);
+      g_clear_pointer (&hook.surface, gdk_paint_surface_destroy);
     }
 
   return hook.surface;
@@ -3359,7 +3359,7 @@ parse_cairo_node (GtkCssParser *parser,
 {
   graphene_rect_t bounds = GRAPHENE_RECT_INIT (0, 0, 50, 50);
   GdkTexture *pixels = NULL;
-  cairo_surface_t *surface;
+  GdkPaintSurface *surface;
   GBytes *bytes = NULL;
   const Declaration declarations[] = {
     { "bounds", parse_rect, NULL, &bounds },
@@ -3386,11 +3386,11 @@ parse_cairo_node (GtkCssParser *parser,
     }
   else if (pixels != NULL)
     {
-      cairo_t *cr = gsk_cairo_node_get_draw_context (node);
+      GdkPainter *cr = gsk_cairo_node_get_draw_context (node);
       surface = gdk_texture_download_surface (pixels, GDK_COLOR_STATE_SRGB);
-      cairo_set_source_surface (cr, surface, 0, 0);
-      cairo_paint (cr);
-      cairo_destroy (cr);
+      gdk_paint_set_source_surface (cr, surface, 0, 0);
+      gdk_paint_paint (cr);
+      gdk_paint_destroy (cr);
     }
   else
     {
@@ -3398,7 +3398,7 @@ parse_cairo_node (GtkCssParser *parser,
     }
 
   g_clear_object (&pixels);
-  g_clear_pointer (&surface, cairo_surface_destroy);
+  g_clear_pointer (&surface, gdk_paint_surface_destroy);
 
   return node;
 }
@@ -3669,15 +3669,15 @@ parse_hint_style (GtkCssParser *parser,
                   Context      *context,
                   gpointer      out)
 {
-  if (!parse_enum (parser, CAIRO_GOBJECT_TYPE_HINT_STYLE, out))
+  if (!parse_enum (parser, GDK_PAINT_TYPE_HINT_STYLE, out))
     return FALSE;
 
-  if (*(cairo_hint_style_t *) out != CAIRO_HINT_STYLE_NONE &&
-      *(cairo_hint_style_t *) out != CAIRO_HINT_STYLE_SLIGHT &&
-      *(cairo_hint_style_t *) out != CAIRO_HINT_STYLE_FULL)
+  if (*(GdkPaintHintStyle *) out != GDK_PAINT_HINT_STYLE_NONE &&
+      *(GdkPaintHintStyle *) out != GDK_PAINT_HINT_STYLE_SLIGHT &&
+      *(GdkPaintHintStyle *) out != GDK_PAINT_HINT_STYLE_FULL)
     {
       gtk_css_parser_error_value (parser, "Unsupported value for enum \"%s\"",
-                                  g_type_name (CAIRO_GOBJECT_TYPE_HINT_STYLE));
+                                  g_type_name (GDK_PAINT_TYPE_HINT_STYLE));
       return FALSE;
     }
 
@@ -3689,14 +3689,14 @@ parse_antialias (GtkCssParser *parser,
                  Context      *context,
                  gpointer      out)
 {
-  if (!parse_enum (parser, CAIRO_GOBJECT_TYPE_ANTIALIAS, out))
+  if (!parse_enum (parser, GDK_PAINT_TYPE_ANTIALIAS, out))
     return FALSE;
 
-  if (*(cairo_antialias_t *) out != CAIRO_ANTIALIAS_NONE &&
-      *(cairo_antialias_t *) out != CAIRO_ANTIALIAS_GRAY)
+  if (*(GdkPaintAntialias *) out != GDK_PAINT_ANTIALIAS_NONE &&
+      *(GdkPaintAntialias *) out != GDK_PAINT_ANTIALIAS_GRAY)
     {
       gtk_css_parser_error_value (parser, "Unsupported value for enum \"%s\"",
-                                  g_type_name (CAIRO_GOBJECT_TYPE_ANTIALIAS));
+                                  g_type_name (GDK_PAINT_TYPE_ANTIALIAS));
       return FALSE;
     }
 
@@ -3708,14 +3708,14 @@ parse_hint_metrics (GtkCssParser *parser,
                     Context      *context,
                     gpointer      out)
 {
-  if (!parse_enum (parser, CAIRO_GOBJECT_TYPE_HINT_METRICS, out))
+  if (!parse_enum (parser, GDK_PAINT_TYPE_HINT_METRICS, out))
     return FALSE;
 
-  if (*(cairo_hint_metrics_t *) out != CAIRO_HINT_METRICS_OFF &&
-      *(cairo_hint_metrics_t *) out != CAIRO_HINT_METRICS_ON)
+  if (*(GdkPaintHintMetrics *) out != GDK_PAINT_HINT_METRICS_OFF &&
+      *(GdkPaintHintMetrics *) out != GDK_PAINT_HINT_METRICS_ON)
     {
       gtk_css_parser_error_value (parser, "Unsupported value for enum \"%s\"",
-                                  g_type_name (CAIRO_GOBJECT_TYPE_HINT_METRICS));
+                                  g_type_name (GDK_PAINT_TYPE_HINT_METRICS));
       return FALSE;
     }
 
@@ -3730,9 +3730,9 @@ parse_text_node (GtkCssParser *parser,
   graphene_point_t offset = GRAPHENE_POINT_INIT (0, 0);
   GdkColor color = GDK_COLOR_SRGB (0, 0, 0, 1);
   PangoGlyphString *glyphs = NULL;
-  cairo_hint_style_t hint_style = CAIRO_HINT_STYLE_SLIGHT;
-  cairo_antialias_t antialias = CAIRO_ANTIALIAS_GRAY;
-  cairo_hint_metrics_t hint_metrics = CAIRO_HINT_METRICS_OFF;
+  GdkPaintHintStyle hint_style = GDK_PAINT_HINT_STYLE_SLIGHT;
+  GdkPaintAntialias antialias = GDK_PAINT_ANTIALIAS_GRAY;
+  GdkPaintHintMetrics hint_metrics = GDK_PAINT_HINT_METRICS_OFF;
   PangoFont *hinted;
   const Declaration declarations[] = {
     { "font", parse_font, clear_font, &font },
@@ -5808,18 +5808,18 @@ append_color_state_param (Printer       *p,
   g_string_append_c (p->str, '\n');
 }
 
-static cairo_status_t
-cairo_write_array (void                *closure,
+static GdkPaintStatus
+gdk_paint_write_array (void                *closure,
                    const unsigned char *data,
                    unsigned int         length)
 {
   g_byte_array_append (closure, data, length);
 
-  return CAIRO_STATUS_SUCCESS;
+  return GDK_PAINT_STATUS_SUCCESS;
 }
 
 static void
-cairo_destroy_array (gpointer array)
+gdk_paint_destroy_array (gpointer array)
 {
   g_byte_array_free (array, TRUE);
 }
@@ -6273,38 +6273,38 @@ gsk_text_node_serialize_font_options (GskRenderNode *node,
                                       Printer       *p)
 {
   PangoFont *font = gsk_text_node_get_font (node);
-  cairo_scaled_font_t *sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
-  cairo_font_options_t *options;
-  cairo_hint_style_t hint_style;
-  cairo_antialias_t antialias;
-  cairo_hint_metrics_t hint_metrics;
+  GdkPaintScaledFont *sf = pango_cairo_font_get_scaled_font (PANGO_CAIRO_FONT (font));
+  GdkPaintFontOptions *options;
+  GdkPaintHintStyle hint_style;
+  GdkPaintAntialias antialias;
+  GdkPaintHintMetrics hint_metrics;
 
-  options = cairo_font_options_create ();
-  cairo_scaled_font_get_font_options (sf, options);
-  hint_style = cairo_font_options_get_hint_style (options);
-  antialias = cairo_font_options_get_antialias (options);
-  hint_metrics = cairo_font_options_get_hint_metrics (options);
-  cairo_font_options_destroy (options);
+  options = gdk_paint_font_options_create ();
+  gdk_paint_scaled_font_get_font_options (sf, options);
+  hint_style = gdk_paint_font_options_get_hint_style (options);
+  antialias = gdk_paint_font_options_get_antialias (options);
+  hint_metrics = gdk_paint_font_options_get_hint_metrics (options);
+  gdk_paint_font_options_destroy (options);
 
   /* medium and full are identical in the absence of subpixel modes */
-  if (hint_style == CAIRO_HINT_STYLE_MEDIUM)
-    hint_style = CAIRO_HINT_STYLE_FULL;
+  if (hint_style == GDK_PAINT_HINT_STYLE_MEDIUM)
+    hint_style = GDK_PAINT_HINT_STYLE_FULL;
 
-  if (hint_style == CAIRO_HINT_STYLE_NONE ||
-      hint_style == CAIRO_HINT_STYLE_FULL)
-    append_enum_param (p, "hint-style", CAIRO_GOBJECT_TYPE_HINT_STYLE, hint_style);
+  if (hint_style == GDK_PAINT_HINT_STYLE_NONE ||
+      hint_style == GDK_PAINT_HINT_STYLE_FULL)
+    append_enum_param (p, "hint-style", GDK_PAINT_TYPE_HINT_STYLE, hint_style);
 
-  /* CAIRO_ANTIALIAS_NONE is the only value we ever emit here, since gray is the default,
+  /* GDK_PAINT_ANTIALIAS_NONE is the only value we ever emit here, since gray is the default,
    * and we don't accept any other values.
    */
-  if (antialias == CAIRO_ANTIALIAS_NONE)
-    append_enum_param (p, "antialias", CAIRO_GOBJECT_TYPE_ANTIALIAS, antialias);
+  if (antialias == GDK_PAINT_ANTIALIAS_NONE)
+    append_enum_param (p, "antialias", GDK_PAINT_TYPE_ANTIALIAS, antialias);
 
-  /* CAIRO_HINT_METRICS_ON is the only value we ever emit here, since off is the default,
+  /* GDK_PAINT_HINT_METRICS_ON is the only value we ever emit here, since off is the default,
    * and we don't accept any other values.
    */
-  if (hint_metrics == CAIRO_HINT_METRICS_ON)
-    append_enum_param (p, "hint-metrics", CAIRO_GOBJECT_TYPE_HINT_METRICS, CAIRO_HINT_METRICS_ON);
+  if (hint_metrics == GDK_PAINT_HINT_METRICS_ON)
+    append_enum_param (p, "hint-metrics", GDK_PAINT_TYPE_HINT_METRICS, GDK_PAINT_HINT_METRICS_ON);
 }
 
 void
@@ -7331,7 +7331,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
     case GSK_CAIRO_NODE:
       {
-        cairo_surface_t *surface = gsk_cairo_node_get_surface (node);
+        GdkPaintSurface *surface = gsk_cairo_node_get_surface (node);
         GByteArray *array;
         GBytes *bytes;
 
@@ -7341,8 +7341,8 @@ G_GNUC_END_IGNORE_DEPRECATIONS
         if (surface != NULL)
           {
             array = g_byte_array_new ();
-#if CAIRO_HAS_PNG_FUNCTIONS
-            cairo_surface_write_to_png_stream (surface, cairo_write_array, array);
+#if GDK_PAINT_HAS_PNG_FUNCTIONS
+            gdk_paint_surface_write_to_png_stream (surface, gdk_paint_write_array, array);
 #endif
             bytes = g_byte_array_free_to_bytes (array);
 
@@ -7350,16 +7350,16 @@ G_GNUC_END_IGNORE_DEPRECATIONS
 
             g_bytes_unref (bytes);
 
-#ifdef CAIRO_HAS_SCRIPT_SURFACE
-            if (cairo_surface_get_type (surface) == CAIRO_SURFACE_TYPE_RECORDING)
+#ifdef GDK_PAINT_HAS_SCRIPT_SURFACE
+            if (gdk_paint_surface_get_type (surface) == GDK_PAINT_SURFACE_TYPE_RECORDING)
               {
-                static const cairo_user_data_key_t cairo_is_stupid_key = { 0, };
-                cairo_device_t *script;
+                static const GdkPaintUserDataKey gdk_paint_is_stupid_key = { 0, };
+                GdkPaintDevice *script;
 
                 array = g_byte_array_new ();
-                script = cairo_script_create_for_stream (cairo_write_array, array);
+                script = gdk_paint_script_create_for_stream (gdk_paint_write_array, array);
 
-                if (cairo_script_from_recording_surface (script, surface) == CAIRO_STATUS_SUCCESS)
+                if (gdk_paint_script_from_recording_surface (script, surface) == GDK_PAINT_STATUS_SUCCESS)
                   {
                     g_byte_array_ref (array); /* Cairo... see below */
                     bytes = g_byte_array_free_to_bytes (array);
@@ -7373,8 +7373,8 @@ G_GNUC_END_IGNORE_DEPRECATIONS
                  * but have to
                  */
                 g_byte_array_set_size (array, 0);
-                cairo_device_set_user_data (script, &cairo_is_stupid_key, array, cairo_destroy_array);
-                cairo_device_destroy (script);
+                gdk_paint_device_set_user_data (script, &gdk_paint_is_stupid_key, array, gdk_paint_destroy_array);
+                gdk_paint_device_destroy (script);
               }
 #endif
           }

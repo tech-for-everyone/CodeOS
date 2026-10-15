@@ -74,7 +74,7 @@
 #include "a11y/gtkatspipangoprivate.h"
 
 #include <string.h>
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <glib/gi18n-lib.h>
 
 /**

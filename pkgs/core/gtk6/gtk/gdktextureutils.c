@@ -35,11 +35,11 @@ svg_to_texture (GtkSvg  *svg,
 {
   GtkSnapshot *snapshot;
   GskRenderNode *node;
-  cairo_surface_t *surface;
-  cairo_t *cr;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
   GdkTexture *texture;
 
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
 
   snapshot = gtk_snapshot_new ();
 
@@ -52,15 +52,15 @@ svg_to_texture (GtkSvg  *svg,
 
   if (node)
     {
-      cr = cairo_create (surface);
+      cr = gdk_paint_create (surface);
       gsk_render_node_draw (node, cr);
-      cairo_destroy (cr);
+      gdk_paint_destroy (cr);
 
       gsk_render_node_unref (node);
     }
 
   texture = gdk_texture_new_for_surface (surface);
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 
   return texture;
 }

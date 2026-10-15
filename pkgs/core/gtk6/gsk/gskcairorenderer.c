@@ -39,7 +39,7 @@ struct _GskCairoRenderer
 {
   GskRenderer parent_instance;
 
-  GdkCairoContext *cairo_context;
+  GdkPaintContext *gdk_paint_context;
 
   ProfileTimers profile_timers;
 };
@@ -62,11 +62,11 @@ gsk_cairo_renderer_realize (GskRenderer  *renderer,
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   if (surface)
-    self->cairo_context = gdk_surface_create_cairo_context (surface);
+    self->gdk_paint_context = gdk_surface_create_paint_context (surface);
 G_GNUC_END_IGNORE_DEPRECATIONS
-  if (attach && !gdk_draw_context_attach (GDK_DRAW_CONTEXT (self->cairo_context), error))
+  if (attach && !gdk_draw_context_attach (GDK_DRAW_CONTEXT (self->gdk_paint_context), error))
     {
-      g_clear_object (&self->cairo_context);
+      g_clear_object (&self->gdk_paint_context);
       return FALSE;
     }
 
@@ -78,11 +78,11 @@ gsk_cairo_renderer_unrealize (GskRenderer *renderer)
 {
   GskCairoRenderer *self = GSK_CAIRO_RENDERER (renderer);
 
-  if (self->cairo_context)
+  if (self->gdk_paint_context)
     {
-      gdk_draw_context_detach (GDK_DRAW_CONTEXT (self->cairo_context));
+      gdk_draw_context_detach (GDK_DRAW_CONTEXT (self->gdk_paint_context));
 
-      g_clear_object (&self->cairo_context);
+      g_clear_object (&self->gdk_paint_context);
     }
 }
 
@@ -92,8 +92,8 @@ gsk_cairo_renderer_render_texture (GskRenderer           *renderer,
                                    const graphene_rect_t *viewport)
 {
   GdkTexture *texture;
-  cairo_surface_t *surface;
-  cairo_t *cr;
+  GdkPaintSurface *surface;
+  GdkPainter *cr;
   int width, height;
   /* limit from cairo's source code */
 #define MAX_IMAGE_SIZE 32767
@@ -136,17 +136,17 @@ gsk_cairo_renderer_render_texture (GskRenderer           *renderer,
       return texture;
     }
 
-  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
-  cr = cairo_create (surface);
+  surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32, width, height);
+  cr = gdk_paint_create (surface);
 
-  cairo_translate (cr, - viewport->origin.x, - viewport->origin.y);
+  gdk_paint_translate (cr, - viewport->origin.x, - viewport->origin.y);
 
   gsk_render_node_draw_with_color_state (root, cr, GDK_COLOR_STATE_SRGB);
 
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
   texture = gdk_texture_new_for_surface (surface);
-  cairo_surface_destroy (surface);
+  gdk_paint_surface_destroy (surface);
 
   return texture;
 }
@@ -159,29 +159,29 @@ gsk_cairo_renderer_render (GskRenderer          *renderer,
   GskCairoRenderer *self = GSK_CAIRO_RENDERER (renderer);
   GdkDrawContext *draw_context;
   GdkDrawContextFrame *frame;
-  GdkCairoContextFrame *cframe;
-  cairo_t *cr;
+  GdkPaintContextFrame *cframe;
+  GdkPainter *cr;
   float scale;
 
-  draw_context = GDK_DRAW_CONTEXT (self->cairo_context);
+  draw_context = GDK_DRAW_CONTEXT (self->gdk_paint_context);
 
   frame = gdk_draw_context_begin_frame_full (draw_context,
                                              NULL,
                                              root,
                                              region);
-  cframe = (GdkCairoContextFrame *) frame;
+  cframe = (GdkPaintContextFrame *) frame;
 
-  cr = cairo_create (gdk_cairo_context_frame_get_surface (cframe));
+  cr = gdk_paint_create (gdk_paint_context_frame_get_surface (cframe));
 
-  gdk_cairo_region (cr, gdk_draw_context_frame_get_damage (frame));
-  cairo_clip (cr);
+  gdk_painter_region (cr, gdk_draw_context_frame_get_damage (frame));
+  gdk_paint_clip (cr);
 
-  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
-  cairo_paint (cr);
-  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+  gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_CLEAR);
+  gdk_paint_paint (cr);
+  gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_OVER);
 
   scale = gdk_surface_get_scale (gdk_draw_context_get_surface (draw_context));
-  cairo_scale (cr, scale, scale);
+  gdk_paint_scale (cr, scale, scale);
 
   g_return_if_fail (cr != NULL);
 
@@ -189,21 +189,21 @@ gsk_cairo_renderer_render (GskRenderer          *renderer,
     {
       GdkSurface *surface = gsk_renderer_get_surface (renderer);
 
-      cairo_save (cr);
-      cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-      cairo_rectangle (cr,
+      gdk_paint_save (cr);
+      gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_OVER);
+      gdk_paint_rectangle (cr,
                        0, 0,
                        gdk_surface_get_width (surface), gdk_surface_get_height (surface));
-      cairo_set_source_rgba (cr, 0, 0, 0.85, 0.5);
-      cairo_stroke (cr);
-      cairo_restore (cr);
+      gdk_paint_set_source_rgba (cr, 0, 0, 0.85, 0.5);
+      gdk_paint_stroke (cr);
+      gdk_paint_restore (cr);
     }
 
   gsk_render_node_draw_with_color_state (root, cr, gdk_draw_context_frame_get_color_state (frame));
 
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 
-  gdk_draw_context_end_frame_full (GDK_DRAW_CONTEXT (self->cairo_context), NULL);
+  gdk_draw_context_end_frame_full (GDK_DRAW_CONTEXT (self->gdk_paint_context), NULL);
 }
 
 static void

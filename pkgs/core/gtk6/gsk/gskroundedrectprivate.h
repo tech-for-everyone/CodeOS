@@ -4,7 +4,7 @@
 
 #include "gdk/gdkdihedralprivate.h"
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_BEGIN_DECLS
 
@@ -49,7 +49,7 @@ void                     gsk_rounded_rect_dihedral              (GskRoundedRect 
 gboolean                 gsk_rounded_rect_is_circular           (const GskRoundedRect     *self) G_GNUC_PURE;
 
 void                     gsk_rounded_rect_path                  (const GskRoundedRect     *self,
-                                                                 cairo_t                  *cr);
+                                                                 GdkPainter                  *cr);
 void                     gsk_rounded_rect_to_float              (const GskRoundedRect     *self,
                                                                  const graphene_point_t   *offset,
                                                                  float                     rect[12]);

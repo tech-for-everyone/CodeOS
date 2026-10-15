@@ -641,9 +641,9 @@ GDK_AVAILABLE_IN_ALL
 PangoContext *gtk_widget_get_pango_context    (GtkWidget   *widget);
 GDK_DEPRECATED_IN_4_16
 void gtk_widget_set_font_options (GtkWidget                  *widget,
-                                  const cairo_font_options_t *options);
+                                  const GdkPaintFontOptions *options);
 GDK_DEPRECATED_IN_4_16
-const cairo_font_options_t *gtk_widget_get_font_options (GtkWidget *widget);
+const GdkPaintFontOptions *gtk_widget_get_font_options (GtkWidget *widget);
 GDK_AVAILABLE_IN_ALL
 PangoLayout  *gtk_widget_create_pango_layout  (GtkWidget   *widget,
                                                const char *text);

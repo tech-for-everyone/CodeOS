@@ -461,26 +461,26 @@ gdk_texture_init (GdkTexture *self)
  * Returns: a new `GdkTexture`
  */
 GdkTexture *
-gdk_texture_new_for_surface (cairo_surface_t *surface)
+gdk_texture_new_for_surface (GdkPaintSurface *surface)
 {
   GdkTexture *texture;
   GBytes *bytes;
 
-  g_return_val_if_fail (cairo_surface_get_type (surface) == CAIRO_SURFACE_TYPE_IMAGE, NULL);
-  g_return_val_if_fail (cairo_image_surface_get_width (surface) > 0, NULL);
-  g_return_val_if_fail (cairo_image_surface_get_height (surface) > 0, NULL);
+  g_return_val_if_fail (gdk_paint_surface_get_type (surface) == GDK_PAINT_SURFACE_TYPE_IMAGE, NULL);
+  g_return_val_if_fail (gdk_paint_image_surface_get_width (surface) > 0, NULL);
+  g_return_val_if_fail (gdk_paint_image_surface_get_height (surface) > 0, NULL);
 
-  bytes = g_bytes_new_with_free_func (cairo_image_surface_get_data (surface),
-                                      cairo_image_surface_get_height (surface)
-                                      * cairo_image_surface_get_stride (surface),
-                                      (GDestroyNotify) cairo_surface_destroy,
-                                      cairo_surface_reference (surface));
+  bytes = g_bytes_new_with_free_func (gdk_paint_image_surface_get_data (surface),
+                                      gdk_paint_image_surface_get_height (surface)
+                                      * gdk_paint_image_surface_get_stride (surface),
+                                      (GDestroyNotify) gdk_paint_surface_destroy,
+                                      gdk_paint_surface_reference (surface));
 
-  texture = gdk_memory_texture_new (cairo_image_surface_get_width (surface),
-                                    cairo_image_surface_get_height (surface),
-                                    gdk_cairo_format_to_memory_format (cairo_image_surface_get_format (surface)),
+  texture = gdk_memory_texture_new (gdk_paint_image_surface_get_width (surface),
+                                    gdk_paint_image_surface_get_height (surface),
+                                    gdk_painter_format_to_memory_format (gdk_paint_image_surface_get_format (surface)),
                                     bytes,
-                                    cairo_image_surface_get_stride (surface));
+                                    gdk_paint_image_surface_get_stride (surface));
 
   g_bytes_unref (bytes);
 
@@ -945,14 +945,14 @@ gdk_texture_set_diff (GdkTexture     *self,
   g_mutex_unlock (&self->chain->lock);
 }
 
-cairo_surface_t *
+GdkPaintSurface *
 gdk_texture_download_surface (GdkTexture    *texture,
                               GdkColorState *color_state)
 {
   GdkMemoryDepth depth;
-  cairo_surface_t *surface;
-  cairo_status_t surface_status;
-  cairo_format_t surface_format;
+  GdkPaintSurface *surface;
+  GdkPaintStatus surface_status;
+  GdkPaintFormat surface_format;
   GdkTextureDownloader downloader;
 
   depth = gdk_texture_get_depth (texture);
@@ -962,28 +962,28 @@ gdk_texture_download_surface (GdkTexture    *texture,
     depth = gdk_memory_depth_merge (depth, gdk_color_state_get_depth (color_state));
 #endif
 
-  surface_format = gdk_cairo_format_for_depth (depth);
-  surface = cairo_image_surface_create (surface_format,
+  surface_format = gdk_painter_format_for_depth (depth);
+  surface = gdk_paint_image_surface_create (surface_format,
                                         texture->width, texture->height);
 
-  surface_status = cairo_surface_status (surface);
-  if (surface_status != CAIRO_STATUS_SUCCESS)
+  surface_status = gdk_paint_surface_status (surface);
+  if (surface_status != GDK_PAINT_STATUS_SUCCESS)
     {
       g_warning ("%s: surface error: %s", __FUNCTION__,
-                 cairo_status_to_string (surface_status));
+                 gdk_paint_status_to_string (surface_status));
       return surface;
     }
 
   gdk_texture_downloader_init (&downloader, texture);
   gdk_texture_downloader_set_format (&downloader,
-                                     gdk_cairo_format_to_memory_format (surface_format));
+                                     gdk_painter_format_to_memory_format (surface_format));
   gdk_texture_downloader_set_color_state (&downloader, color_state);
   gdk_texture_downloader_download_into (&downloader,
-                                        cairo_image_surface_get_data (surface),
-                                        cairo_image_surface_get_stride (surface));
+                                        gdk_paint_image_surface_get_data (surface),
+                                        gdk_paint_image_surface_get_stride (surface));
   gdk_texture_downloader_finish (&downloader);
 
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 
   return surface;
 }
@@ -1001,18 +1001,18 @@ gdk_texture_download_surface (GdkTexture    *texture,
  * may reside on a GPU or on a remote display server.
  *
  * The data format of the downloaded data is equivalent to
- * %CAIRO_FORMAT_ARGB32, so every downloaded pixel requires
+ * %GDK_PAINT_FORMAT_ARGB32, so every downloaded pixel requires
  * 4 bytes of memory.
  *
  * Downloading a texture into a Cairo image surface:
  * ```c
- * surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+ * surface = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_ARGB32,
  *                                       gdk_texture_get_width (texture),
  *                                       gdk_texture_get_height (texture));
  * gdk_texture_download (texture,
- *                       cairo_image_surface_get_data (surface),
- *                       cairo_image_surface_get_stride (surface));
- * cairo_surface_mark_dirty (surface);
+ *                       gdk_paint_image_surface_get_data (surface),
+ *                       gdk_paint_image_surface_get_stride (surface));
+ * gdk_paint_surface_mark_dirty (surface);
  * ```
  *
  * For more flexible download capabilities, see

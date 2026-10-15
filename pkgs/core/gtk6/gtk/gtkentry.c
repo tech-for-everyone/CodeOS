@@ -60,7 +60,7 @@
 #include "gtkwidgetpaintable.h"
 #include "gtkbuilderprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <string.h>
 
 /**

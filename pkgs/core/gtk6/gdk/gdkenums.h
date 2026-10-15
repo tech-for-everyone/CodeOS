@@ -468,7 +468,7 @@ typedef enum {
  * It describes formats by listing the contents of the memory passed to it.
  * So `GDK_MEMORY_A8R8G8B8` will be 1 byte (8 bits) of alpha, followed by a
  * byte each of red, green and blue. It is not endian-dependent, so
- * `CAIRO_FORMAT_ARGB32` is represented by different `GdkMemoryFormats`
+ * `GDK_PAINT_FORMAT_ARGB32` is represented by different `GdkMemoryFormats`
  * on architectures with different endiannesses.
  *
  * # A note on naming

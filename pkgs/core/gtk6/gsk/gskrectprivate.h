@@ -14,7 +14,7 @@
  */
 #define GSK_SNAP_EPSILON 0.001
 
-#define GSK_RECT_INIT_CAIRO(cairo_rect) GRAPHENE_RECT_INIT((cairo_rect)->x, (cairo_rect)->y, (cairo_rect)->width, (cairo_rect)->height)
+#define GSK_RECT_INIT_CAIRO(gdk_paint_rect) GRAPHENE_RECT_INIT((gdk_paint_rect)->x, (gdk_paint_rect)->y, (gdk_paint_rect)->width, (gdk_paint_rect)->height)
 
 static inline void
 gsk_rect_init (graphene_rect_t *r,
@@ -574,21 +574,21 @@ gsk_rect_dihedral (const graphene_rect_t *src,
 
 static inline void
 _graphene_rect_init_from_clip_extents (graphene_rect_t *rect,
-                                       cairo_t         *cr)
+                                       GdkPainter         *cr)
 {
   double x1c, y1c, x2c, y2c;
 
-  cairo_clip_extents (cr, &x1c, &y1c, &x2c, &y2c);
+  gdk_paint_clip_extents (cr, &x1c, &y1c, &x2c, &y2c);
   gsk_rect_init (rect, x1c, y1c, x2c - x1c, y2c - y1c);
 }
 
 static inline gboolean G_GNUC_WARN_UNUSED_RESULT
-gsk_cairo_rect_snap (cairo_t               *cr,
+gsk_cairo_rect_snap (GdkPainter               *cr,
                      const graphene_rect_t *src,
                      GskRectSnap            snap,
                      graphene_rect_t       *dest)
 {
-  cairo_matrix_t mat, cr_mat, target_mat;
+  GdkPaintMatrix mat, cr_mat, target_mat;
 
   if (snap == GSK_RECT_SNAP_NONE)
     {
@@ -597,10 +597,10 @@ gsk_cairo_rect_snap (cairo_t               *cr,
       return TRUE;
     }
 
-  cairo_get_matrix (cr, &cr_mat);
-  gdk_cairo_surface_get_device_matrix (cairo_get_group_target (cr), &target_mat);
+  gdk_paint_get_matrix (cr, &cr_mat);
+  gdk_painter_surface_get_device_matrix (gdk_paint_get_group_target (cr), &target_mat);
 
-  cairo_matrix_multiply (&mat, &target_mat, &cr_mat);
+  gdk_paint_matrix_multiply (&mat, &target_mat, &cr_mat);
 
   if (mat.xy == 0 && mat.yx == 0 && mat.xx != 0 && mat.yy != 0)
     {

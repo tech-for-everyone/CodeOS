@@ -66,43 +66,43 @@ gsk_shadow_node_finalize (GskRenderNode *node)
 
 static void
 gsk_shadow_node_draw (GskRenderNode *node,
-                      cairo_t       *cr,
+                      GdkPainter       *cr,
                       GskCairoData  *data)
 {
   GskShadowNode *self = (GskShadowNode *) node;
   gsize i;
 
   /* clip so the blur area stays small */
-  gdk_cairo_rectangle_snap_to_grid (cr, &node->bounds);
-  cairo_clip (cr);
-  if (gdk_cairo_is_all_clipped (cr))
+  gdk_painter_rectangle_snap_to_grid (cr, &node->bounds);
+  gdk_paint_clip (cr);
+  if (gdk_painter_is_all_clipped (cr))
     return;
 
   for (i = 0; i < self->n_shadows; i++)
     {
       GskShadowEntry *shadow = &self->shadows[i];
-      cairo_pattern_t *pattern;
+      GdkPaintPattern *pattern;
 
       /* We don't need to draw invisible shadows */
       if (gdk_color_is_clear (&shadow->color))
         continue;
 
-      cairo_save (cr);
+      gdk_paint_save (cr);
       cr = gsk_cairo_blur_start_drawing (cr, shadow->radius, GSK_BLUR_X | GSK_BLUR_Y);
 
-      cairo_save (cr);
-      cairo_translate (cr, shadow->offset.x, shadow->offset.y);
-      cairo_push_group (cr);
+      gdk_paint_save (cr);
+      gdk_paint_translate (cr, shadow->offset.x, shadow->offset.y);
+      gdk_paint_push_group (cr);
       gsk_render_node_draw_full (self->child, cr, data);
-      pattern = cairo_pop_group (cr);
-      cairo_reset_clip (cr);
-      gdk_cairo_set_source_color (cr, data->ccs, &shadow->color);
-      cairo_mask (cr, pattern);
-      cairo_pattern_destroy (pattern);
-      cairo_restore (cr);
+      pattern = gdk_paint_pop_group (cr);
+      gdk_paint_reset_clip (cr);
+      gdk_painter_set_source_color (cr, data->ccs, &shadow->color);
+      gdk_paint_mask (cr, pattern);
+      gdk_paint_pattern_destroy (pattern);
+      gdk_paint_restore (cr);
 
       cr = gsk_cairo_blur_finish_drawing (cr, data->ccs, shadow->radius, &shadow->color, GSK_BLUR_X | GSK_BLUR_Y);
-      cairo_restore (cr);
+      gdk_paint_restore (cr);
     }
 
   gsk_render_node_draw_full (self->child, cr, data);

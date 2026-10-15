@@ -31,7 +31,7 @@
    position according to the cairo translation. */
 
 /**
- * gdk_cairo_draw_from_gl:
+ * gdk_painter_draw_from_gl:
  * @cr: a cairo context
  * @surface: The surface we're rendering for (not necessarily into)
  * @source: The GL ID of the source buffer
@@ -48,9 +48,9 @@
  * id (@source_type == GL_TEXTURE) and draws it onto @cr with an OVER operation,
  * respecting the current clip. The top left corner of the rectangle specified
  * by @x, @y, @width and @height will be drawn at the current (0,0) position of
- * the `cairo_t`.
+ * the `GdkPainter`.
  *
- * This will work for *all* `cairo_t`, as long as @surface is realized, but the
+ * This will work for *all* `GdkPainter`, as long as @surface is realized, but the
  * fallback implementation that reads back the pixels from the buffer may be
  * used in the general case. In the case of direct drawing to a surface with
  * no special effects applied to @cr it will however use a more efficient
@@ -68,7 +68,7 @@
  *   image surface.
  */
 void
-gdk_cairo_draw_from_gl (cairo_t    *cr,
+gdk_painter_draw_from_gl (GdkPainter    *cr,
                         GdkSurface *surface,
                         int         source,
                         int         source_type,
@@ -79,7 +79,7 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
                         int         height)
 {
   GdkGLContext *paint_context;
-  cairo_surface_t *image;
+  GdkPaintSurface *image;
   guint framebuffer;
   int alpha_size = 0;
   gboolean es_use_bgra = FALSE;
@@ -87,7 +87,7 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
   paint_context = gdk_surface_get_paint_gl_context (surface, NULL);
   if (paint_context == NULL)
     {
-      g_warning ("gdk_cairo_draw_gl_render_buffer failed - no paint context");
+      g_warning ("gdk_painter_draw_gl_render_buffer failed - no paint context");
       return;
     }
 
@@ -118,11 +118,11 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
     }
 
   /* TODO: avoid reading back non-required data due to dest clip */
-  image = cairo_surface_create_similar_image (cairo_get_target (cr),
-                                              (alpha_size == 0) ? CAIRO_FORMAT_RGB24 : CAIRO_FORMAT_ARGB32,
+  image = gdk_paint_surface_create_similar_image (gdk_paint_get_target (cr),
+                                              (alpha_size == 0) ? GDK_PAINT_FORMAT_RGB24 : GDK_PAINT_FORMAT_ARGB32,
                                               width, height);
 
-  cairo_surface_set_device_scale (image, buffer_scale, buffer_scale);
+  gdk_paint_surface_set_device_scale (image, buffer_scale, buffer_scale);
 
   glBindFramebuffer (GL_FRAMEBUFFER, framebuffer);
 
@@ -140,15 +140,15 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
     }
 
   glPixelStorei (GL_PACK_ALIGNMENT, 4);
-  glPixelStorei (GL_PACK_ROW_LENGTH, cairo_image_surface_get_stride (image) / 4);
+  glPixelStorei (GL_PACK_ROW_LENGTH, gdk_paint_image_surface_get_stride (image) / 4);
 
   /* The implicit format conversion is going to make this path slower */
   if (!gdk_gl_context_get_use_es (paint_context))
     glReadPixels (x, y, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV,
-                  cairo_image_surface_get_data (image));
+                  gdk_paint_image_surface_get_data (image));
   else
     glReadPixels (x, y, width, height, es_use_bgra ? GL_BGRA : GL_RGBA, GL_UNSIGNED_BYTE,
-                  cairo_image_surface_get_data (image));
+                  gdk_paint_image_surface_get_data (image));
 
   glPixelStorei (GL_PACK_ROW_LENGTH, 0);
 
@@ -156,11 +156,11 @@ gdk_cairo_draw_from_gl (cairo_t    *cr,
 
   glDeleteFramebuffers (1, &framebuffer);
 
-  cairo_surface_mark_dirty (image);
+  gdk_paint_surface_mark_dirty (image);
 
-  cairo_set_source_surface (cr, image, 0, 0);
-  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
-  cairo_paint (cr);
+  gdk_paint_set_source_surface (cr, image, 0, 0);
+  gdk_paint_set_operator (cr, GDK_PAINT_OPERATOR_OVER);
+  gdk_paint_paint (cr);
 
-  cairo_surface_destroy (image);
+  gdk_paint_surface_destroy (image);
 }

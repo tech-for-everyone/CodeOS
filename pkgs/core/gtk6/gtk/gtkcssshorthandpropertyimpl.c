@@ -21,7 +21,7 @@
 
 #include "gtkcssshorthandpropertyprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <math.h>
 
 #include "gtkcssarrayvalueprivate.h"

@@ -78,7 +78,7 @@
 #include "gsk/gskdebugprivate.h"
 #include "gsk/gskrendererprivate.h"
 
-#include <cairo-gobject.h>
+#include <gdk/gdkpaint.h>
 #include <locale.h>
 #include <math.h>
 #include <stdarg.h>
@@ -6795,38 +6795,38 @@ gtk_widget_update_pango_context (GtkWidget        *widget,
   if (font_rendering == GTK_FONT_RENDERING_MANUAL)
     {
       gboolean hint_font_metrics;
-      cairo_font_options_t *font_options, *options;
+      GdkPaintFontOptions *font_options, *options;
 
-      options = cairo_font_options_copy (gtk_settings_get_font_options (settings));
-      font_options = (cairo_font_options_t *) g_object_get_qdata (G_OBJECT (widget), quark_font_options);
+      options = gdk_paint_font_options_copy (gtk_settings_get_font_options (settings));
+      font_options = (GdkPaintFontOptions *) g_object_get_qdata (G_OBJECT (widget), quark_font_options);
       if (font_options)
-        cairo_font_options_merge (options, font_options);
+        gdk_paint_font_options_merge (options, font_options);
 
       g_object_get (settings, "gtk-hint-font-metrics", &hint_font_metrics, NULL);
 
-      cairo_font_options_set_hint_metrics (options,
-                                           hint_font_metrics == 1 ? CAIRO_HINT_METRICS_ON
-                                                                  : CAIRO_HINT_METRICS_OFF);
+      gdk_paint_font_options_set_hint_metrics (options,
+                                           hint_font_metrics == 1 ? GDK_PAINT_HINT_METRICS_ON
+                                                                  : GDK_PAINT_HINT_METRICS_OFF);
 
       pango_context_set_round_glyph_positions (context, hint_font_metrics);
       pango_cairo_context_set_font_options (context, options);
 
-      cairo_font_options_destroy (options);
+      gdk_paint_font_options_destroy (options);
     }
   else
     {
-      cairo_font_options_t *options;
+      GdkPaintFontOptions *options;
 
-      options = cairo_font_options_create ();
+      options = gdk_paint_font_options_create ();
 
-      cairo_font_options_set_antialias (options, CAIRO_ANTIALIAS_GRAY);
-      cairo_font_options_set_hint_metrics (options, CAIRO_HINT_METRICS_OFF);
-      cairo_font_options_set_hint_style (options, CAIRO_HINT_STYLE_SLIGHT);
+      gdk_paint_font_options_set_antialias (options, GDK_PAINT_ANTIALIAS_GRAY);
+      gdk_paint_font_options_set_hint_metrics (options, GDK_PAINT_HINT_METRICS_OFF);
+      gdk_paint_font_options_set_hint_style (options, GDK_PAINT_HINT_STYLE_SLIGHT);
 
       pango_context_set_round_glyph_positions (context, FALSE);
       pango_cairo_context_set_font_options (context, options);
 
-      cairo_font_options_destroy (options);
+      gdk_paint_font_options_destroy (options);
     }
 
   return old_serial != pango_context_get_serial (context);
@@ -6847,10 +6847,10 @@ gtk_widget_update_default_pango_context (GtkWidget *widget)
 /**
  * gtk_widget_set_font_options:
  * @widget: a widget
- * @options: (nullable): a `cairo_font_options_t` struct
+ * @options: (nullable): a `GdkPaintFontOptions` struct
  *   to unset any previously set default font options
  *
- * Sets the `cairo_font_options_t` used for text rendering
+ * Sets the `GdkPaintFontOptions` used for text rendering
  * in the widget.
  *
  * When not set, the default font options for the `GdkDisplay`
@@ -6860,19 +6860,19 @@ gtk_widget_update_default_pango_context (GtkWidget *widget)
  */
 void
 gtk_widget_set_font_options (GtkWidget                  *widget,
-                             const cairo_font_options_t *options)
+                             const GdkPaintFontOptions *options)
 {
-  cairo_font_options_t *font_options;
+  GdkPaintFontOptions *font_options;
 
   g_return_if_fail (GTK_IS_WIDGET (widget));
 
-  font_options = (cairo_font_options_t *)g_object_get_qdata (G_OBJECT (widget), quark_font_options);
+  font_options = (GdkPaintFontOptions *)g_object_get_qdata (G_OBJECT (widget), quark_font_options);
   if (font_options != options)
     {
       g_object_set_qdata_full (G_OBJECT (widget),
                                quark_font_options,
-                               options ? cairo_font_options_copy (options) : NULL,
-                               (GDestroyNotify)cairo_font_options_destroy);
+                               options ? gdk_paint_font_options_copy (options) : NULL,
+                               (GDestroyNotify)gdk_paint_font_options_destroy);
 
       gtk_widget_update_default_pango_context (widget);
     }
@@ -6882,20 +6882,20 @@ gtk_widget_set_font_options (GtkWidget                  *widget,
  * gtk_widget_get_font_options:
  * @widget: a widget
  *
- * Returns the `cairo_font_options_t` of the widget.
+ * Returns the `GdkPaintFontOptions` of the widget.
  *
  * Seee [method@Gtk.Widget.set_font_options].
  *
- * Returns: (transfer none) (nullable): the `cairo_font_options_t` of widget
+ * Returns: (transfer none) (nullable): the `GdkPaintFontOptions` of widget
  *
  * Deprecated: 4.16
  */
-const cairo_font_options_t *
+const GdkPaintFontOptions *
 gtk_widget_get_font_options (GtkWidget *widget)
 {
   g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
 
-  return (cairo_font_options_t *)g_object_get_qdata (G_OBJECT (widget), quark_font_options);
+  return (GdkPaintFontOptions *)g_object_get_qdata (G_OBJECT (widget), quark_font_options);
 }
 
 static void

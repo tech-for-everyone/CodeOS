@@ -895,40 +895,40 @@ gsk_rounded_rect_intersection (const GskRoundedRect *a,
 }
 
 static void
-append_arc (cairo_t *cr, double angle1, double angle2, gboolean negative)
+append_arc (GdkPainter *cr, double angle1, double angle2, gboolean negative)
 {
   if (negative)
-    cairo_arc_negative (cr, 0.0, 0.0, 1.0, angle1, angle2);
+    gdk_paint_arc_negative (cr, 0.0, 0.0, 1.0, angle1, angle2);
   else
-    cairo_arc (cr, 0.0, 0.0, 1.0, angle1, angle2);
+    gdk_paint_arc (cr, 0.0, 0.0, 1.0, angle1, angle2);
 }
 
 static void
-_cairo_ellipsis (cairo_t *cr,
+_cairo_ellipsis (GdkPainter *cr,
 	         double xc, double yc,
 	         double xradius, double yradius,
 	         double angle1, double angle2)
 {
-  cairo_matrix_t save;
+  GdkPaintMatrix save;
 
   if (xradius <= 0.0 || yradius <= 0.0)
     {
-      cairo_line_to (cr, xc, yc);
+      gdk_paint_line_to (cr, xc, yc);
       return;
     }
 
-  cairo_get_matrix (cr, &save);
-  cairo_translate (cr, xc, yc);
-  cairo_scale (cr, xradius, yradius);
+  gdk_paint_get_matrix (cr, &save);
+  gdk_paint_translate (cr, xc, yc);
+  gdk_paint_scale (cr, xradius, yradius);
   append_arc (cr, angle1, angle2, FALSE);
-  cairo_set_matrix (cr, &save);
+  gdk_paint_set_matrix (cr, &save);
 }
 
 void
 gsk_rounded_rect_path (const GskRoundedRect *self,
-                       cairo_t              *cr)
+                       GdkPainter              *cr)
 {
-  cairo_new_sub_path (cr);
+  gdk_paint_new_sub_path (cr);
 
   _cairo_ellipsis (cr,
                    self->bounds.origin.x + self->corner[GSK_CORNER_TOP_LEFT].width,
@@ -955,7 +955,7 @@ gsk_rounded_rect_path (const GskRoundedRect *self,
                    self->corner[GSK_CORNER_BOTTOM_LEFT].height,
                    G_PI_2, G_PI);
 
-  cairo_close_path (cr);
+  gdk_paint_close_path (cr);
 }
 
 /*< private >

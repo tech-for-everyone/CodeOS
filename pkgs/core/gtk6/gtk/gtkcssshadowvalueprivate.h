@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include <pango/pango.h>
 
 #include <gtk/css/gtkcss.h>

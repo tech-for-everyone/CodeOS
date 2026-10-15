@@ -24,7 +24,7 @@
 #pragma once
 
 #include <gdk/gdk.h>
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 #include "gdkcolorprivate.h"
 
 G_BEGIN_DECLS
@@ -36,15 +36,15 @@ typedef enum {
   GSK_BLUR_REPEAT = 1<<2
 } GskBlurFlags;
 
-void            gsk_cairo_blur_surface          (cairo_surface_t *surface,
+void            gsk_cairo_blur_surface          (GdkPaintSurface *surface,
                                                  double           radius,
                                                  GskBlurFlags     flags);
 int             gsk_cairo_blur_compute_pixels   (double           radius);
 
-cairo_t *       gsk_cairo_blur_start_drawing    (cairo_t         *cr,
+GdkPainter *       gsk_cairo_blur_start_drawing    (GdkPainter         *cr,
                                                  float            radius,
                                                  GskBlurFlags     blur_flags);
-cairo_t *       gsk_cairo_blur_finish_drawing   (cairo_t         *cr,
+GdkPainter *       gsk_cairo_blur_finish_drawing   (GdkPainter         *cr,
                                                  GdkColorState   *ccs,
                                                  float            radius,
                                                  const GdkColor  *color,

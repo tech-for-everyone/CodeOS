@@ -137,7 +137,7 @@ struct _GtkSettings
   int font_size;
   gboolean font_size_absolute;
   char *font_family;
-  cairo_font_options_t *font_options;
+  GdkPaintFontOptions *font_options;
 };
 
 struct _GtkSettingsClass
@@ -1118,7 +1118,7 @@ gtk_settings_finalize (GObject *object)
   g_slist_free_full (settings->style_cascades, g_object_unref);
 
   if (settings->font_options)
-    cairo_font_options_destroy (settings->font_options);
+    gdk_paint_font_options_destroy (settings->font_options);
 
   g_free (settings->font_family);
 
@@ -1597,13 +1597,13 @@ settings_update_font_options (GtkSettings *settings)
 {
   int hinting;
   char *hint_style_str;
-  cairo_hint_style_t hint_style;
+  GdkPaintHintStyle hint_style;
   int antialias;
-  cairo_antialias_t antialias_mode;
+  GdkPaintAntialias antialias_mode;
   gboolean hint_font_metrics;
 
   if (settings->font_options)
-    cairo_font_options_destroy (settings->font_options);
+    gdk_paint_font_options_destroy (settings->font_options);
 
   g_object_get (settings,
                 "gtk-xft-antialias", &antialias,
@@ -1612,42 +1612,42 @@ settings_update_font_options (GtkSettings *settings)
                 "gtk-hint-font-metrics", &hint_font_metrics,
                 NULL);
 
-  settings->font_options = cairo_font_options_create ();
+  settings->font_options = gdk_paint_font_options_create ();
 
-  cairo_font_options_set_hint_metrics (settings->font_options,
-                                       hint_font_metrics ? CAIRO_HINT_METRICS_ON
-                                                         : CAIRO_HINT_METRICS_OFF);
+  gdk_paint_font_options_set_hint_metrics (settings->font_options,
+                                       hint_font_metrics ? GDK_PAINT_HINT_METRICS_ON
+                                                         : GDK_PAINT_HINT_METRICS_OFF);
 
-  hint_style = CAIRO_HINT_STYLE_DEFAULT;
+  hint_style = GDK_PAINT_HINT_STYLE_DEFAULT;
   if (hinting == 0)
     {
-      hint_style = CAIRO_HINT_STYLE_NONE;
+      hint_style = GDK_PAINT_HINT_STYLE_NONE;
     }
   else if (hinting == 1)
     {
       if (hint_style_str)
         {
           if (strcmp (hint_style_str, "hintnone") == 0)
-            hint_style = CAIRO_HINT_STYLE_NONE;
+            hint_style = GDK_PAINT_HINT_STYLE_NONE;
           else if (strcmp (hint_style_str, "hintslight") == 0)
-            hint_style = CAIRO_HINT_STYLE_SLIGHT;
+            hint_style = GDK_PAINT_HINT_STYLE_SLIGHT;
           else if (strcmp (hint_style_str, "hintmedium") == 0)
-            hint_style = CAIRO_HINT_STYLE_MEDIUM;
+            hint_style = GDK_PAINT_HINT_STYLE_MEDIUM;
           else if (strcmp (hint_style_str, "hintfull") == 0)
-            hint_style = CAIRO_HINT_STYLE_FULL;
+            hint_style = GDK_PAINT_HINT_STYLE_FULL;
         }
     }
 
   g_free (hint_style_str);
 
-  cairo_font_options_set_hint_style (settings->font_options, hint_style);
+  gdk_paint_font_options_set_hint_style (settings->font_options, hint_style);
 
   if (antialias == 0)
-    antialias_mode = CAIRO_ANTIALIAS_NONE;
+    antialias_mode = GDK_PAINT_ANTIALIAS_NONE;
   else
-    antialias_mode = CAIRO_ANTIALIAS_GRAY;
+    antialias_mode = GDK_PAINT_ANTIALIAS_GRAY;
 
-  cairo_font_options_set_antialias (settings->font_options, antialias_mode);
+  gdk_paint_font_options_set_antialias (settings->font_options, antialias_mode);
 }
 
 static gboolean
@@ -1802,7 +1802,7 @@ settings_update_theme (GtkSettings *settings)
   g_free (theme_variant);
 }
 
-const cairo_font_options_t *
+const GdkPaintFontOptions *
 gtk_settings_get_font_options (GtkSettings *settings)
 {
   return settings->font_options;

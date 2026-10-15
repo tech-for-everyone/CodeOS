@@ -25,20 +25,20 @@
 #include <math.h>
 
 /**
- * gdk_cairo_set_source_rgba:
+ * gdk_painter_set_source_rgba:
  * @cr: a cairo context
  * @rgba: a `GdkRGBA`
  *
  * Sets the specified `GdkRGBA` as the source color of @cr.
  */
 void
-gdk_cairo_set_source_rgba (cairo_t       *cr,
+gdk_painter_set_source_rgba (GdkPainter       *cr,
                            const GdkRGBA *rgba)
 {
   g_return_if_fail (cr != NULL);
   g_return_if_fail (rgba != NULL);
 
-  cairo_set_source_rgba (cr,
+  gdk_paint_set_source_rgba (cr,
                          rgba->red,
                          rgba->green,
                          rgba->blue,
@@ -46,83 +46,83 @@ gdk_cairo_set_source_rgba (cairo_t       *cr,
 }
 
 /**
- * gdk_cairo_rectangle:
+ * gdk_painter_rectangle:
  * @cr: a cairo context
  * @rectangle: a `GdkRectangle`
  *
  * Adds the given rectangle to the current path of @cr.
  */
 void
-gdk_cairo_rectangle (cairo_t            *cr,
+gdk_painter_rectangle (GdkPainter            *cr,
                      const GdkRectangle *rectangle)
 {
   g_return_if_fail (cr != NULL);
   g_return_if_fail (rectangle != NULL);
 
-  cairo_rectangle (cr,
+  gdk_paint_rectangle (cr,
                    rectangle->x,     rectangle->y,
                    rectangle->width, rectangle->height);
 }
 
 /**
- * gdk_cairo_region:
+ * gdk_painter_region:
  * @cr: a cairo context
- * @region: a `cairo_region_t`
+ * @region: a `GdkRegion`
  *
  * Adds the given region to the current path of @cr.
  */
 void
-gdk_cairo_region (cairo_t              *cr,
-                  const cairo_region_t *region)
+gdk_painter_region (GdkPainter              *cr,
+                  const GdkRegion *region)
 {
-  cairo_rectangle_int_t box;
+  GdkRectangle box;
   int n_boxes, i;
 
   g_return_if_fail (cr != NULL);
   g_return_if_fail (region != NULL);
 
-  n_boxes = cairo_region_num_rectangles (region);
+  n_boxes = gdk_region_num_rectangles (region);
 
   for (i = 0; i < n_boxes; i++)
     {
-      cairo_region_get_rectangle (region, i, &box);
-      cairo_rectangle (cr, box.x, box.y, box.width, box.height);
+      gdk_region_get_rectangle (region, i, &box);
+      gdk_paint_rectangle (cr, box.x, box.y, box.width, box.height);
     }
 }
 
 static void
-gdk_cairo_surface_paint_pixbuf (cairo_surface_t *surface,
+gdk_painter_surface_paint_pixbuf (GdkPaintSurface *surface,
                                 const GdkPixbuf *pixbuf)
 {
   GdkTexture *texture;
 
-  if (cairo_surface_status (surface) != CAIRO_STATUS_SUCCESS)
+  if (gdk_paint_surface_status (surface) != GDK_PAINT_STATUS_SUCCESS)
     return;
 
   /* This function can't just copy any pixbuf to any surface, be
    * sure to read the invariants here before calling it */
 
-  g_assert (cairo_surface_get_type (surface) == CAIRO_SURFACE_TYPE_IMAGE);
-  g_assert (cairo_image_surface_get_format (surface) == CAIRO_FORMAT_RGB24 ||
-            cairo_image_surface_get_format (surface) == CAIRO_FORMAT_ARGB32);
-  g_assert (cairo_image_surface_get_width (surface) == gdk_pixbuf_get_width (pixbuf));
-  g_assert (cairo_image_surface_get_height (surface) == gdk_pixbuf_get_height (pixbuf));
+  g_assert (gdk_paint_surface_get_type (surface) == GDK_PAINT_SURFACE_TYPE_IMAGE);
+  g_assert (gdk_paint_image_surface_get_format (surface) == GDK_PAINT_FORMAT_RGB24 ||
+            gdk_paint_image_surface_get_format (surface) == GDK_PAINT_FORMAT_ARGB32);
+  g_assert (gdk_paint_image_surface_get_width (surface) == gdk_pixbuf_get_width (pixbuf));
+  g_assert (gdk_paint_image_surface_get_height (surface) == gdk_pixbuf_get_height (pixbuf));
 
-  cairo_surface_flush (surface);
+  gdk_paint_surface_flush (surface);
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   texture = gdk_texture_new_for_pixbuf (GDK_PIXBUF (pixbuf));
 G_GNUC_END_IGNORE_DEPRECATIONS
   gdk_texture_download (texture,
-                        cairo_image_surface_get_data (surface),
-                        cairo_image_surface_get_stride (surface));
+                        gdk_paint_image_surface_get_data (surface),
+                        gdk_paint_image_surface_get_stride (surface));
   g_object_unref (texture);
 
-  cairo_surface_mark_dirty (surface);
+  gdk_paint_surface_mark_dirty (surface);
 }
 
 /**
- * gdk_cairo_set_source_pixbuf:
+ * gdk_painter_set_source_pixbuf:
  * @cr: a cairo context
  * @pixbuf: a `GdkPixbuf`
  * @pixbuf_x: X coordinate of location to place upper left corner of @pixbuf
@@ -130,34 +130,34 @@ G_GNUC_END_IGNORE_DEPRECATIONS
  *
  * Sets the given pixbuf as the source pattern for @cr.
  *
- * The pattern has an extend mode of %CAIRO_EXTEND_NONE and is aligned
+ * The pattern has an extend mode of %GDK_PAINT_EXTEND_NONE and is aligned
  * so that the origin of @pixbuf is @pixbuf_x, @pixbuf_y.
  *
- * Deprecated: 4.20: Use cairo_set_source_surface() and gdk_texture_download()
+ * Deprecated: 4.20: Use gdk_paint_set_source_surface() and gdk_texture_download()
  */
 void
-gdk_cairo_set_source_pixbuf (cairo_t         *cr,
+gdk_painter_set_source_pixbuf (GdkPainter         *cr,
                              const GdkPixbuf *pixbuf,
                              double           pixbuf_x,
                              double           pixbuf_y)
 {
-  cairo_format_t format;
-  cairo_surface_t *surface;
+  GdkPaintFormat format;
+  GdkPaintSurface *surface;
 
   if (gdk_pixbuf_get_n_channels (pixbuf) == 3)
-    format = CAIRO_FORMAT_RGB24;
+    format = GDK_PAINT_FORMAT_RGB24;
   else
-    format = CAIRO_FORMAT_ARGB32;
+    format = GDK_PAINT_FORMAT_ARGB32;
 
-  surface = cairo_surface_create_similar_image (cairo_get_target (cr),
+  surface = gdk_paint_surface_create_similar_image (gdk_paint_get_target (cr),
                                                 format,
                                                 gdk_pixbuf_get_width (pixbuf),
                                                 gdk_pixbuf_get_height (pixbuf));
 
-  gdk_cairo_surface_paint_pixbuf (surface, pixbuf);
+  gdk_painter_surface_paint_pixbuf (surface, pixbuf);
 
-  cairo_set_source_surface (cr, surface, pixbuf_x, pixbuf_y);
-  cairo_surface_destroy (surface);
+  gdk_paint_set_source_surface (cr, surface, pixbuf_x, pixbuf_y);
+  gdk_paint_surface_destroy (surface);
 }
 
 /*
@@ -176,18 +176,18 @@ gdk_cairo_set_source_pixbuf (cairo_t         *cr,
  * Returns: %TRUE if the extents fit in a `GdkRectangle`, %FALSE if not
  */
 static gboolean
-_gdk_cairo_surface_extents (cairo_surface_t *surface,
+_gdk_cairo_surface_extents (GdkPaintSurface *surface,
                             GdkRectangle    *extents)
 {
   double x1, x2, y1, y2;
-  cairo_t *cr;
+  GdkPainter *cr;
 
   g_return_val_if_fail (surface != NULL, FALSE);
   g_return_val_if_fail (extents != NULL, FALSE);
 
-  cr = cairo_create (surface);
-  cairo_clip_extents (cr, &x1, &y1, &x2, &y2);
-  cairo_destroy (cr);
+  cr = gdk_paint_create (surface);
+  gdk_paint_clip_extents (cr, &x1, &y1, &x2, &y2);
+  gdk_paint_destroy (cr);
 
   x1 = floor (x1);
   y1 = floor (y1);
@@ -219,53 +219,53 @@ _gdk_cairo_surface_extents (cairo_surface_t *surface,
  * bitmaps (and not pixmaps), with zero pixels being transparent.
  */
 /**
- * gdk_cairo_region_create_from_surface:
+ * gdk_painter_region_create_from_surface:
  * @surface: a cairo surface
  *
  * Creates region that covers the area where the given
  * @surface is more than 50% opaque.
  *
  * This function takes into account device offsets that might be
- * set with cairo_surface_set_device_offset().
+ * set with gdk_paint_surface_set_device_offset().
  *
- * Returns: (transfer full): A `cairo_region_t`
+ * Returns: (transfer full): A `GdkRegion`
  */
-cairo_region_t *
-gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
+GdkRegion *
+gdk_painter_region_create_from_surface (GdkPaintSurface *surface)
 {
-  cairo_region_t *region;
+  GdkRegion *region;
   GdkRectangle extents, rect;
-  cairo_surface_t *image;
-  cairo_t *cr;
+  GdkPaintSurface *image;
+  GdkPainter *cr;
   int x, y, stride;
   guchar *data;
 
   _gdk_cairo_surface_extents (surface, &extents);
 
-  if (cairo_surface_get_content (surface) == CAIRO_CONTENT_COLOR)
-    return cairo_region_create_rectangle (&extents);
+  if (gdk_paint_surface_get_content (surface) == GDK_PAINT_CONTENT_COLOR)
+    return gdk_region_create_rectangle (&extents);
 
-  if (cairo_surface_get_type (surface) != CAIRO_SURFACE_TYPE_IMAGE ||
-      cairo_image_surface_get_format (surface) != CAIRO_FORMAT_A1)
+  if (gdk_paint_surface_get_type (surface) != GDK_PAINT_SURFACE_TYPE_IMAGE ||
+      gdk_paint_image_surface_get_format (surface) != GDK_PAINT_FORMAT_A1)
     {
       /* coerce to an A1 image */
-      image = cairo_image_surface_create (CAIRO_FORMAT_A1,
+      image = gdk_paint_image_surface_create (GDK_PAINT_FORMAT_A1,
                                           extents.width, extents.height);
-      cr = cairo_create (image);
-      cairo_set_source_surface (cr, surface, -extents.x, -extents.y);
-      cairo_paint (cr);
-      cairo_destroy (cr);
+      cr = gdk_paint_create (image);
+      gdk_paint_set_source_surface (cr, surface, -extents.x, -extents.y);
+      gdk_paint_paint (cr);
+      gdk_paint_destroy (cr);
     }
   else
-    image = cairo_surface_reference (surface);
+    image = gdk_paint_surface_reference (surface);
 
   /* Flush the surface to make sure that the rendering is up to date. */
-  cairo_surface_flush (image);
+  gdk_paint_surface_flush (image);
 
-  data = cairo_image_surface_get_data (image);
-  stride = cairo_image_surface_get_stride (image);
+  data = gdk_paint_image_surface_get_data (image);
+  stride = gdk_paint_image_surface_get_stride (image);
 
-  region = cairo_region_create ();
+  region = gdk_region_create ();
 
   for (y = 0; y < extents.height; y++)
     {
@@ -295,15 +295,15 @@ gdk_cairo_region_create_from_surface (cairo_surface_t *surface)
               rect.y = y;
               rect.height = 1;
 
-              cairo_region_union_rectangle (region, &rect);
+              gdk_region_union_rectangle (region, &rect);
             }
         }
       data += stride;
     }
 
-  cairo_surface_destroy (image);
+  gdk_paint_surface_destroy (image);
 
-  cairo_region_translate (region, extents.x, extents.y);
+  gdk_region_translate (region, extents.x, extents.y);
 
   return region;
 }

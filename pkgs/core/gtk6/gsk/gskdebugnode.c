@@ -55,7 +55,7 @@ gsk_debug_node_finalize (GskRenderNode *node)
 
 static void
 gsk_debug_node_draw (GskRenderNode *node,
-                     cairo_t       *cr,
+                     GdkPainter       *cr,
                      GskCairoData  *data)
 {
   GskDebugNode *self = (GskDebugNode *) node;

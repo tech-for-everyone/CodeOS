@@ -36,7 +36,7 @@
 #include <math.h>
 
 #include <pango/pango.h>
-#include <cairo.h>
+#include <gdk/gdkpaint.h>
 
 G_DEFINE_TYPE (GskPangoRenderer, gsk_pango_renderer, PANGO_TYPE_RENDERER)
 
@@ -87,12 +87,12 @@ get_color (GskPangoRenderer *crenderer,
 static void
 set_color (GskPangoRenderer *crenderer,
            PangoRenderPart   part,
-           cairo_t          *cr)
+           GdkPainter          *cr)
 {
   GdkColor color;
 
   get_color (crenderer, part, &color);
-  gdk_cairo_set_source_color (cr, GDK_COLOR_STATE_SRGB, &color);
+  gdk_painter_set_source_color (cr, GDK_COLOR_STATE_SRGB, &color);
   gdk_color_finish (&color);
 }
 
@@ -249,7 +249,7 @@ gsk_pango_renderer_draw_trapezoid (PangoRenderer   *renderer,
   GskPangoRenderer *crenderer = (GskPangoRenderer *) (renderer);
   PangoLayout *layout;
   PangoRectangle ink_rect;
-  cairo_t *cr;
+  GdkPainter *cr;
   double x, y;
 
   layout = pango_renderer_get_layout (renderer);
@@ -263,19 +263,19 @@ gsk_pango_renderer_draw_trapezoid (PangoRenderer   *renderer,
   set_color (crenderer, part, cr);
 
   x = y = 0;
-  cairo_user_to_device_distance (cr, &x, &y);
-  cairo_identity_matrix (cr);
-  cairo_translate (cr, x, y);
+  gdk_paint_user_to_device_distance (cr, &x, &y);
+  gdk_paint_identity_matrix (cr);
+  gdk_paint_translate (cr, x, y);
 
-  cairo_move_to (cr, x11, y1_);
-  cairo_line_to (cr, x21, y1_);
-  cairo_line_to (cr, x22, y2);
-  cairo_line_to (cr, x12, y2);
-  cairo_close_path (cr);
+  gdk_paint_move_to (cr, x11, y1_);
+  gdk_paint_line_to (cr, x21, y1_);
+  gdk_paint_line_to (cr, x22, y2);
+  gdk_paint_line_to (cr, x12, y2);
+  gdk_paint_close_path (cr);
 
-  cairo_fill (cr);
+  gdk_paint_fill (cr);
 
-  cairo_destroy (cr);
+  gdk_paint_destroy (cr);
 }
 
 static void
@@ -356,7 +356,7 @@ gsk_pango_renderer_draw_shape (PangoRenderer  *renderer,
 
   if (!handled)
     {
-      cairo_t *cr;
+      GdkPainter *cr;
       PangoRectangle ink_rect;
 
       layout = pango_renderer_get_layout (renderer);
@@ -372,17 +372,17 @@ gsk_pango_renderer_draw_shape (PangoRenderer  *renderer,
 
       if (!shape_renderer)
         {
-          cairo_destroy (cr);
+          gdk_paint_destroy (cr);
           return;
         }
 
       set_color (crenderer, PANGO_RENDER_PART_FOREGROUND, cr);
 
-      cairo_move_to (cr, base_x, base_y);
+      gdk_paint_move_to (cr, base_x, base_y);
 
       shape_renderer (cr, attr, FALSE, shape_renderer_data);
 
-      cairo_destroy (cr);
+      gdk_paint_destroy (cr);
     }
 }
 

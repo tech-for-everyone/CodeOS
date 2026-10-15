@@ -29,13 +29,13 @@
 
 G_BEGIN_DECLS
 
-#define GDK_TYPE_CAIRO_CONTEXT (gdk_cairo_context_get_type ())
+#define GDK_TYPE_PAINT_CONTEXT (gdk_paint_context_get_type ())
 
 GDK_AVAILABLE_IN_ALL
-GDK_DECLARE_INTERNAL_TYPE (GdkCairoContext, gdk_cairo_context, GDK, CAIRO_CONTEXT, GdkDrawContext)
+GDK_DECLARE_INTERNAL_TYPE (GdkPaintContext, gdk_paint_context, GDK, PAINT_CONTEXT, GdkDrawContext)
 
 GDK_DEPRECATED_IN_4_18_FOR(gsk_cairo_node_get_draw_context)
-cairo_t *               gdk_cairo_context_cairo_create                  (GdkCairoContext        *self);
+GdkPainter *               gdk_paint_context_get_painter                  (GdkPaintContext        *self);
 
 G_END_DECLS
 

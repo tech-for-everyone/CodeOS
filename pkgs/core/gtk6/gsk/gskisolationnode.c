@@ -62,24 +62,24 @@ gsk_isolation_node_finalize (GskRenderNode *node)
 
 static void
 gsk_isolation_node_draw (GskRenderNode *node,
-                         cairo_t       *cr,
+                         GdkPainter       *cr,
                          GskCairoData  *data)
 {
   GskIsolationNode *self = (GskIsolationNode *) node;
 
   if (gsk_isolation_node_is_isolating (self, GSK_ISOLATION_BACKGROUND))
     {
-      gdk_cairo_rectangle_snap_to_grid (cr, &node->bounds);
-      cairo_clip (cr);
-      cairo_push_group (cr);
+      gdk_painter_rectangle_snap_to_grid (cr, &node->bounds);
+      gdk_paint_clip (cr);
+      gdk_paint_push_group (cr);
     }
 
   gsk_render_node_draw_full (self->child, cr, data);
 
   if (gsk_isolation_node_is_isolating (self, GSK_ISOLATION_BACKGROUND))
     {
-      cairo_pop_group_to_source (cr);
-      cairo_paint (cr);
+      gdk_paint_pop_group_to_source (cr);
+      gdk_paint_paint (cr);
     }
 }
 

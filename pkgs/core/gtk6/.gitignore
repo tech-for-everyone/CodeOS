@@ -3,6 +3,9 @@ build/
 tests/*.o
 tests/*.d
 
+# Imported pycache from the scripts that generate headers / below
+scripts/__pycache__/
+
 # Staged glib + graphene (glibconfig.h et al. come from build/glib); see
 # PLAN.md "Install the sysroot".  Regenerable, so not tracked.
 sysroot/

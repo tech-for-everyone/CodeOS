@@ -93,20 +93,20 @@ add_color_stop_to_pattern (float          offset,
                            float          values[4],
                            gpointer       data)
 {
-  cairo_pattern_t *pattern = data;
+  GdkPaintPattern *pattern = data;
 
-  cairo_pattern_add_color_stop_rgba (pattern, offset, values[0], values[1], values[2], values[3]);
+  gdk_paint_pattern_add_color_stop_rgba (pattern, offset, values[0], values[1], values[2], values[3]);
 }
 
 static void
 gsk_linear_gradient_node_draw (GskRenderNode *node,
-                               cairo_t       *cr,
+                               GdkPainter       *cr,
                                GskCairoData  *data)
 {
   GskLinearGradientNode *self = (GskLinearGradientNode *) node;
   GskGradient *gradient = &self->gradient;
   graphene_rect_t bounds;
-  cairo_pattern_t *pattern;
+  GdkPaintPattern *pattern;
   gsize n_stops;
   gsize i;
 
@@ -137,9 +137,9 @@ gsk_linear_gradient_node_draw (GskRenderNode *node,
                                          0.5 * (start.values[1] + end.values[1]),
                                          0.5 * (start.values[2] + end.values[2]),
                                          0.5 * (start.values[3] + end.values[3]) });
-            gdk_cairo_set_source_color (cr, data->ccs, &color);
-            gdk_cairo_rect (cr, &bounds);
-            cairo_fill (cr);
+            gdk_painter_set_source_color (cr, data->ccs, &color);
+            gdk_painter_rect (cr, &bounds);
+            gdk_paint_fill (cr);
           }
           break;
 
@@ -148,9 +148,9 @@ gsk_linear_gradient_node_draw (GskRenderNode *node,
           {
             GdkColor color;
             gsk_gradient_get_average_color (gradient, &color);
-            gdk_cairo_set_source_color (cr, data->ccs, &color);
-            gdk_cairo_rect (cr, &bounds);
-            cairo_fill (cr);
+            gdk_painter_set_source_color (cr, data->ccs, &color);
+            gdk_painter_rect (cr, &bounds);
+            gdk_paint_fill (cr);
             gdk_color_finish (&color);
             return;
           }
@@ -161,16 +161,16 @@ gsk_linear_gradient_node_draw (GskRenderNode *node,
         }
     }
 
-  pattern = cairo_pattern_create_linear (self->start.x, self->start.y,
+  pattern = gdk_paint_pattern_create_linear (self->start.x, self->start.y,
                                          self->end.x, self->end.y);
 
   if (gsk_render_node_get_node_type (node) == GSK_REPEATING_LINEAR_GRADIENT_NODE)
-    cairo_pattern_set_extend (pattern, CAIRO_EXTEND_REPEAT);
+    gdk_paint_pattern_set_extend (pattern, GDK_PAINT_EXTEND_REPEAT);
   else
-    cairo_pattern_set_extend (pattern, gsk_repeat_to_cairo (gsk_gradient_get_repeat (gradient)));
+    gdk_paint_pattern_set_extend (pattern, gsk_repeat_to_cairo (gsk_gradient_get_repeat (gradient)));
 
   if (gsk_gradient_get_stop_offset (gradient, 0) > 0.0)
-    gdk_cairo_pattern_add_color_stop_color (pattern,
+    gdk_painter_pattern_add_color_stop_color (pattern,
                                             data->ccs,
                                             0.0,
                                             gsk_gradient_get_stop_color (gradient, 0));
@@ -191,7 +191,7 @@ gsk_linear_gradient_node_draw (GskRenderNode *node,
                                            add_color_stop_to_pattern,
                                            pattern);
 
-      gdk_cairo_pattern_add_color_stop_color (pattern,
+      gdk_painter_pattern_add_color_stop_color (pattern,
                                               data->ccs,
                                               gsk_gradient_get_stop_offset (gradient, i),
                                               gsk_gradient_get_stop_color (gradient, i));
@@ -211,17 +211,17 @@ gsk_linear_gradient_node_draw (GskRenderNode *node,
                                            add_color_stop_to_pattern,
                                            pattern);
 
-      gdk_cairo_pattern_add_color_stop_color (pattern,
+      gdk_painter_pattern_add_color_stop_color (pattern,
                                               data->ccs,
                                               1.0,
                                               gsk_gradient_get_stop_color (gradient, n_stops - 1));
     }
 
-  cairo_set_source (cr, pattern);
-  cairo_pattern_destroy (pattern);
+  gdk_paint_set_source (cr, pattern);
+  gdk_paint_pattern_destroy (pattern);
 
-  gdk_cairo_rect (cr, &bounds);
-  cairo_fill (cr);
+  gdk_painter_rect (cr, &bounds);
+  gdk_paint_fill (cr);
 }
 
 static void
