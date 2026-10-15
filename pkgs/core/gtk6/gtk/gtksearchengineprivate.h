@@ -1,0 +1,90 @@
+/*
+ * Copyright (C) 2005 Novell, Inc.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Author: Anders Carlsson <andersca@imendio.com> 
+ *
+ * Based on nautilus-search-engine.h
+ */
+
+#pragma once
+
+#include "gtkqueryprivate.h"
+#include "gtkfilesystemmodelprivate.h"
+#include "gdktypes.h"
+#include <gio/gio.h>
+
+G_BEGIN_DECLS
+
+#define GTK_TYPE_SEARCH_ENGINE (gtk_search_engine_get_type ())
+
+GDK_DECLARE_INTERNAL_TYPE (GtkSearchEngine, gtk_search_engine, GTK, SEARCH_ENGINE, GObject)
+
+typedef struct _GtkSearchEnginePrivate GtkSearchEnginePrivate;
+typedef struct _GtkSearchHit GtkSearchHit;
+
+struct _GtkSearchHit
+{
+  GFile *file;
+  GFileInfo *info; /* may be NULL */
+};
+
+struct _GtkSearchEngine
+{
+  GObject parent;
+
+  GtkSearchEnginePrivate *priv;
+};
+
+struct _GtkSearchEngineClass
+{
+  GObjectClass parent_class;
+
+  /* VTable */
+  void     (*set_query)       (GtkSearchEngine *engine, 
+			       GtkQuery        *query);
+  void     (*start)           (GtkSearchEngine *engine);
+  void     (*stop)            (GtkSearchEngine *engine);
+  
+  /* Signals */
+  void     (*hits_added)      (GtkSearchEngine *engine, 
+			       GList           *hits);
+  void     (*finished)        (GtkSearchEngine *engine,
+                               gboolean         got_results);
+  void     (*error)           (GtkSearchEngine *engine, 
+			       const char      *error_message);
+};
+
+GtkSearchEngine* _gtk_search_engine_new             (void);
+
+void             _gtk_search_engine_set_query       (GtkSearchEngine *engine, 
+                                                     GtkQuery        *query);
+void	         _gtk_search_engine_start           (GtkSearchEngine *engine);
+void	         _gtk_search_engine_stop            (GtkSearchEngine *engine);
+
+void	         _gtk_search_engine_hits_added      (GtkSearchEngine *engine, 
+						     GList           *hits);
+void             _gtk_search_engine_finished        (GtkSearchEngine *engine,
+                                                     gboolean         got_results);
+void	         _gtk_search_engine_error           (GtkSearchEngine *engine, 
+						     const char      *error_message);
+
+void             _gtk_search_hit_free (GtkSearchHit *hit);
+GtkSearchHit    *_gtk_search_hit_dup (GtkSearchHit *hit);
+
+void             _gtk_search_engine_set_model       (GtkSearchEngine    *engine,
+                                                     GtkFileSystemModel *model);
+
+G_END_DECLS

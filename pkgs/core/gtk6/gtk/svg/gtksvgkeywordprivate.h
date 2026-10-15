@@ -1,0 +1,41 @@
+/*
+ * Copyright © 2025 Red Hat, Inc
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors: Matthias Clasen <mclasen@redhat.com>
+ */
+
+#pragma once
+
+#include "gtksvgtypesprivate.h"
+
+G_BEGIN_DECLS
+
+SvgValue * svg_inherit_new      (void);
+SvgValue * svg_initial_new      (void);
+SvgValue * svg_current_new      (void);
+SvgValue * svg_auto_new         (void);
+SvgValue * svg_unset_new        (void);
+
+gboolean   svg_value_is_keyword (const SvgValue *value);
+gboolean   svg_value_is_inherit (const SvgValue *value);
+gboolean   svg_value_is_initial (const SvgValue *value);
+gboolean   svg_value_is_current (const SvgValue *value);
+gboolean   svg_value_is_auto    (const SvgValue *value);
+gboolean   svg_value_is_unset   (const SvgValue *value);
+
+G_END_DECLS

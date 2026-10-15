@@ -1,0 +1,158 @@
+/*
+ * Copyright © 2025 Red Hat, Inc
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors: Matthias Clasen <mclasen@redhat.com>
+ */
+
+#pragma once
+
+#include "gdk/gdkenums.h"
+#include "gsk/gskenums.h"
+#include "gsk/gskgradientprivate.h"
+#include "gtksvgvalueprivate.h"
+#include "gtksvgenumsprivate.h"
+#include "gtk/css/gtkcssparserprivate.h"
+
+G_BEGIN_DECLS
+
+SvgValue *   svg_fill_rule_new               (GskFillRule           value);
+SvgValue *   svg_mask_type_new               (GskMaskMode           value);
+SvgValue *   svg_linecap_new                 (GskLineCap            value);
+SvgValue *   svg_linejoin_new                (GskLineJoin           value);
+SvgValue *   svg_visibility_new              (Visibility            value);
+SvgValue *   svg_display_new                 (SvgDisplay            value);
+SvgValue *   svg_spread_method_new           (GskRepeat             value);
+SvgValue *   svg_coord_units_new             (CoordUnits            value);
+SvgValue *   svg_paint_order_new             (PaintOrder            value);
+SvgValue *   svg_overflow_new                (SvgOverflow           value);
+SvgValue *   svg_isolation_new               (Isolation             value);
+SvgValue *   svg_blend_mode_new              (GskBlendMode          value);
+SvgValue *   svg_text_anchor_new             (TextAnchor            value);
+SvgValue *   svg_dominant_baseline_new       (DominantBaseline      value);
+SvgValue *   svg_marker_units_new            (MarkerUnits           value);
+SvgValue *   svg_unicode_bidi_new            (UnicodeBidi           value);
+SvgValue *   svg_direction_new               (PangoDirection        value);
+SvgValue *   svg_writing_mode_new            (WritingMode           value);
+SvgValue *   svg_font_style_new              (PangoStyle            value);
+SvgValue *   svg_font_variant_new            (PangoVariant          value);
+SvgValue *   svg_font_width_new              (PangoWidth            value);
+SvgValue *   svg_font_size_new               (FontSize              value);
+SvgValue *   svg_font_weight_new             (FontWeight            value);
+SvgValue *   svg_edge_mode_new               (EdgeMode              value);
+SvgValue *   svg_stitch_tiles_new            (StitchTiles           value);
+SvgValue *   svg_blend_composite_new         (BlendComposite        value);
+SvgValue *   svg_color_matrix_type_new       (ColorMatrixType       value);
+SvgValue *   svg_composite_operator_new      (CompositeOperator     value);
+SvgValue *   svg_rgba_channel_new            (GdkColorChannel       value);
+SvgValue *   svg_component_transfer_type_new (ComponentTransferType value);
+SvgValue *   svg_turbulence_type_new         (TurbulenceType        value);
+SvgValue *   svg_vector_effect_new           (VectorEffect          value);
+SvgValue *   svg_color_interpolation_new     (ColorInterpolation    value);
+SvgValue *   svg_transform_box_new           (TransformBox          value);
+SvgValue *   svg_shape_rendering_new         (ShapeRendering        value);
+SvgValue *   svg_text_rendering_new          (TextRendering         value);
+SvgValue *   svg_image_rendering_new         (ImageRendering        value);
+SvgValue *   svg_pointer_events_new          (PointerEvents         value);
+SvgValue *   svg_xml_space_new               (XmlSpace              value);
+SvgValue *   svg_baseline_shift_new          (BaselineShift         value);
+
+unsigned int svg_enum_get (const SvgValue *value);
+
+SvgValue *   svg_fill_rule_parse               (GtkCssParser     *parser);
+SvgValue *   svg_mask_type_parse               (GtkCssParser     *parser);
+SvgValue *   svg_linecap_parse                 (GtkCssParser     *parser);
+SvgValue *   svg_linejoin_parse                (GtkCssParser     *parser);
+SvgValue *   svg_visibility_parse              (GtkCssParser     *parser);
+SvgValue *   svg_display_parse                 (GtkCssParser     *parser);
+SvgValue *   svg_spread_method_parse           (GtkCssParser     *parser);
+SvgValue *   svg_coord_units_parse             (GtkCssParser     *parser);
+SvgValue *   svg_paint_order_parse             (GtkCssParser     *parser);
+SvgValue *   svg_overflow_parse                (GtkCssParser     *parser);
+SvgValue *   svg_isolation_parse               (GtkCssParser     *parser);
+SvgValue *   svg_blend_mode_parse              (GtkCssParser     *parser);
+SvgValue *   svg_text_anchor_parse             (GtkCssParser     *parser);
+SvgValue *   svg_dominant_baseline_parse       (GtkCssParser     *parser);
+SvgValue *   svg_marker_units_parse            (GtkCssParser     *parser);
+SvgValue *   svg_unicode_bidi_parse            (GtkCssParser     *parser);
+SvgValue *   svg_direction_parse               (GtkCssParser     *parser);
+SvgValue *   svg_writing_mode_parse            (GtkCssParser     *parser);
+SvgValue *   svg_font_style_parse              (GtkCssParser     *parser);
+SvgValue *   svg_font_variant_parse            (GtkCssParser     *parser);
+SvgValue *   svg_font_width_parse              (GtkCssParser     *parser);
+SvgValue *   svg_font_size_parse               (GtkCssParser     *parser);
+SvgValue *   svg_font_weight_parse             (GtkCssParser     *parser);
+SvgValue *   svg_edge_mode_parse               (GtkCssParser     *parser);
+SvgValue *   svg_stitch_tiles_parse            (GtkCssParser     *parser);
+SvgValue *   svg_blend_composite_parse         (GtkCssParser     *parser);
+SvgValue *   svg_color_matrix_type_parse       (GtkCssParser     *parser);
+SvgValue *   svg_composite_operator_parse      (GtkCssParser     *parser);
+SvgValue *   svg_rgba_channel_parse            (GtkCssParser     *parser);
+SvgValue *   svg_component_transfer_type_parse (GtkCssParser     *parser);
+SvgValue *   svg_turbulence_type_parse         (GtkCssParser     *parser);
+SvgValue *   svg_vector_effect_parse           (GtkCssParser     *parser);
+SvgValue *   svg_color_interpolation_parse     (GtkCssParser     *parser);
+SvgValue *   svg_transform_box_parse           (GtkCssParser     *parser);
+SvgValue *   svg_shape_rendering_parse         (GtkCssParser     *parser);
+SvgValue *   svg_text_rendering_parse          (GtkCssParser     *parser);
+SvgValue *   svg_image_rendering_parse         (GtkCssParser     *parser);
+SvgValue *   svg_pointer_events_parse          (GtkCssParser     *parser);
+SvgValue *   svg_xml_space_parse               (GtkCssParser     *parser);
+SvgValue *   svg_baseline_shift_parse          (GtkCssParser     *parser);
+
+SvgValue *   svg_fill_rule_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_mask_type_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_linecap_try_parse                 (GtkCssParser     *parser);
+SvgValue *   svg_linejoin_try_parse                (GtkCssParser     *parser);
+SvgValue *   svg_visibility_try_parse              (GtkCssParser     *parser);
+SvgValue *   svg_display_try_parse                 (GtkCssParser     *parser);
+SvgValue *   svg_spread_method_try_parse           (GtkCssParser     *parser);
+SvgValue *   svg_coord_units_try_parse             (GtkCssParser     *parser);
+SvgValue *   svg_paint_order_try_parse             (GtkCssParser     *parser);
+SvgValue *   svg_overflow_try_parse                (GtkCssParser     *parser);
+SvgValue *   svg_isolation_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_blend_mode_try_parse              (GtkCssParser     *parser);
+SvgValue *   svg_text_anchor_try_parse             (GtkCssParser     *parser);
+SvgValue *   svg_dominant_baseline_try_parse       (GtkCssParser     *parser);
+SvgValue *   svg_marker_units_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_unicode_bidi_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_direction_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_writing_mode_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_font_style_try_parse              (GtkCssParser     *parser);
+SvgValue *   svg_font_variant_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_font_width_try_parse              (GtkCssParser     *parser);
+SvgValue *   svg_font_size_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_font_weight_try_parse             (GtkCssParser     *parser);
+SvgValue *   svg_edge_mode_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_stitch_tiles_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_blend_composite_try_parse         (GtkCssParser     *parser);
+SvgValue *   svg_color_matrix_type_try_parse       (GtkCssParser     *parser);
+SvgValue *   svg_composite_operator_try_parse      (GtkCssParser     *parser);
+SvgValue *   svg_rgba_channel_try_parse            (GtkCssParser     *parser);
+SvgValue *   svg_component_transfer_type_try_parse (GtkCssParser     *parser);
+SvgValue *   svg_turbulence_type_try_parse         (GtkCssParser     *parser);
+SvgValue *   svg_vector_effect_try_parse           (GtkCssParser     *parser);
+SvgValue *   svg_color_interpolation_try_parse     (GtkCssParser     *parser);
+SvgValue *   svg_transform_box_try_parse           (GtkCssParser     *parser);
+SvgValue *   svg_shape_rendering_try_parse         (GtkCssParser     *parser);
+SvgValue *   svg_text_rendering_try_parse          (GtkCssParser     *parser);
+SvgValue *   svg_image_rendering_try_parse         (GtkCssParser     *parser);
+SvgValue *   svg_pointer_events_try_parse          (GtkCssParser     *parser);
+SvgValue *   svg_xml_space_try_parse               (GtkCssParser     *parser);
+SvgValue *   svg_baseline_shift_try_parse          (GtkCssParser     *parser);
+
+G_END_DECLS

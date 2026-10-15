@@ -1,0 +1,122 @@
+/*
+ * Copyright © 2025 Red Hat, Inc
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors: Matthias Clasen <mclasen@redhat.com>
+ */
+
+#pragma once
+
+#include <glib-object.h>
+#include "gtksvgprivate.h"
+
+G_BEGIN_DECLS
+
+struct _SvgComputeContext
+{
+  GtkSvg *svg;
+  const graphene_rect_t *viewport;
+  SvgElement *parent; /* Can be different from the actual parent, for <use> */
+  int64_t current_time;
+  const GdkRGBA *colors;
+  size_t n_colors;
+  GdkColorState *interpolation;
+  unsigned int clone_count;
+  GHashTable *shadow_tree_map;
+  gboolean animations_only;
+};
+
+typedef struct _SvgValueClass SvgValueClass;
+struct _SvgValueClass
+{
+  const char *name;
+
+  void       (* free)        (SvgValue              *value);
+  gboolean   (* equal)       (const SvgValue        *value0,
+                              const SvgValue        *value1);
+  SvgValue * (* interpolate) (const SvgValue        *value0,
+                              const SvgValue        *value1,
+                              SvgComputeContext     *context,
+                              double                 t);
+  SvgValue * (* accumulate)  (const SvgValue        *value0,
+                              const SvgValue        *value1,
+                              SvgComputeContext     *context,
+                              int                    n);
+  void       (* print)       (const SvgValue        *value,
+                              GString               *string);
+  double     (* distance)    (const SvgValue        *value0,
+                              const SvgValue        *value1);
+  SvgValue * (* resolve)     (const SvgValue        *value,
+                              SvgProperty              attr,
+                              unsigned int           idx,
+                              SvgElement           *shape,
+                              SvgComputeContext     *context);
+};
+
+struct _SvgValue
+{
+  const SvgValueClass *class;
+  int ref_count;
+};
+
+GType      svg_value_get_type     (void);
+
+SvgValue * svg_value_ref          (SvgValue       *value);
+void       svg_value_unref        (SvgValue       *value);
+
+gboolean   svg_value_equal        (const SvgValue *self,
+                                   const SvgValue *other);
+char *     svg_value_to_string    (const SvgValue *self);
+
+SvgValue * svg_value_interpolate (const SvgValue    *value0,
+                                  const SvgValue    *value1,
+                                  SvgComputeContext *context,
+                                  double             t);
+SvgValue * svg_value_accumulate  (const SvgValue    *value0,
+                                  const SvgValue    *value1,
+                                  SvgComputeContext *context,
+                                  int                n);
+void       svg_value_print       (const SvgValue    *value,
+                                  GString           *string);
+double     svg_value_distance    (const SvgValue    *value0,
+                                  const SvgValue    *value1);
+SvgValue * svg_value_resolve     (const SvgValue    *value,
+                                  SvgProperty          attr,
+                                  unsigned int       idx,
+                                  SvgElement        *shape,
+                                  SvgComputeContext *context);
+
+
+SvgValue * svg_value_alloc            (const SvgValueClass *class,
+                                       size_t               size);
+
+gboolean   svg_value_is_immortal      (const SvgValue      *value);
+
+void       svg_value_default_free     (SvgValue            *value);
+
+double     svg_value_default_distance (const SvgValue      *value0,
+                                       const SvgValue      *value1);
+
+SvgValue * svg_value_default_resolve  (const SvgValue      *value,
+                                       SvgProperty          attr,
+                                       unsigned int         idx,
+                                       SvgElement          *shape,
+                                       SvgComputeContext   *context);
+
+gboolean   svg_value_is_set           (const SvgValue *value);
+
+G_END_DECLS

@@ -1,0 +1,80 @@
+/* GSK - The GTK Scene Kit
+ * Copyright 2016  Endless 
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
+#define __GSK_H_INSIDE__
+
+#include <gdk/gdk.h>
+
+#include <gsk/gskblendnode.h>
+#include <gsk/gskblurnode.h>
+#include <gsk/gskbordernode.h>
+#include <gsk/gskcaironode.h>
+#include <gsk/gskclipnode.h>
+#include <gsk/gskcolormatrixnode.h>
+#include <gsk/gskcolornode.h>
+#include <gsk/gskcomponenttransfer.h>
+#include <gsk/gskcomponenttransfernode.h>
+#include <gsk/gskcompositenode.h>
+#include <gsk/gskconicgradientnode.h>
+#include <gsk/gskcopynode.h>
+#include <gsk/gskcontainernode.h>
+#include <gsk/gskcrossfadenode.h>
+#include <gsk/gskdebugnode.h>
+#include <gsk/gskenums.h>
+#include <gsk/gskfillnode.h>
+#include <gsk/gskglshadernode.h>
+#include <gsk/gskinsetshadownode.h>
+#include <gsk/gskisolationnode.h>
+#include <gsk/gsklineargradientnode.h>
+#include <gsk/gskmasknode.h>
+#include <gsk/gskopacitynode.h>
+#include <gsk/gskoutsetshadownode.h>
+#include <gsk/gskpastenode.h>
+#include <gsk/gskpath.h>
+#include <gsk/gskpathbuilder.h>
+#include <gsk/gskpathmeasure.h>
+#include <gsk/gskpathpoint.h>
+#include <gsk/gskradialgradientnode.h>
+#include <gsk/gskrectsnap.h>
+#include <gsk/gskrenderer.h>
+#include <gsk/gskrendernode.h>
+#include <gsk/gskrenderreplay.h>
+#include <gsk/gskrepeatnode.h>
+#include <gsk/gskroundedclipnode.h>
+#include <gsk/gskroundedrect.h>
+#include <gsk/gskshadownode.h>
+#include <gsk/gskstroke.h>
+#include <gsk/gskstrokenode.h>
+#include <gsk/gsksubsurfacenode.h>
+#include <gsk/gsktextnode.h>
+#include <gsk/gsktexturenode.h>
+#include <gsk/gsktexturescalenode.h>
+#include <gsk/gsktransform.h>
+#include <gsk/gsktransformnode.h>
+#include <gsk/gskglshader.h>
+
+#include <gsk/gskcairorenderer.h>
+#include <gsk/gpu/gskvulkanrenderer.h>
+#include <gsk/gpu/gskglrenderer.h>
+
+#include <gsk/gsktypes.h>
+#include <gsk/gskenumtypes.h>
+
+#undef __GSK_H_INSIDE__
+

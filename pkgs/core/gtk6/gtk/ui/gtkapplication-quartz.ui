@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface domain="gtk40">
+  <menu id="app-menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">About %s</attribute>
+        <attribute name="action">app.about</attribute>
+        <attribute name="gtk-macos-special">replace-appname</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Preferences</attribute>
+        <attribute name="action">app.preferences</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Services</attribute>
+        <attribute name="gtk-macos-special">services-submenu</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Hide %s</attribute>
+        <attribute name="gtk-macos-special">hide-this</attribute>
+        <attribute name="action">gtkinternal.hide</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Hide Others</attribute>
+        <attribute name="gtk-macos-special">hide-others</attribute>
+        <attribute name="action">gtkinternal.hide-others</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Show All</attribute>
+        <attribute name="gtk-macos-special">show-all</attribute>
+        <attribute name="action">gtkinternal.show-all</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Quit %s</attribute>
+        <attribute name="action">app.quit</attribute>
+        <attribute name="gtk-macos-special">replace-appname</attribute>
+      </item>
+    </section>
+  </menu>
+  <menu id="default-menu">
+    <submenu>
+      <attribute name="label" translatable="yes">_Edit</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Undo</attribute>
+          <attribute name="action">text.undo</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Redo</attribute>
+          <attribute name="action">text.redo</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Cut</attribute>
+          <attribute name="action">clipboard.cut</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Copy</attribute>
+          <attribute name="action">clipboard.copy</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Paste</attribute>
+          <attribute name="action">clipboard.paste</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Delete</attribute>
+          <attribute name="action">selection.delete</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Select All</attribute>
+          <attribute name="action">selection.select-all</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">_Window</attribute>
+      <attribute name="gtk-macos-special">window-submenu</attribute>
+    </submenu>
+  </menu>
+</interface>

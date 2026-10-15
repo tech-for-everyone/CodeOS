@@ -1,0 +1,105 @@
+/* GDK - The GIMP Drawing Kit
+ * Copyright (C) 1995-1997 Peter Mattis, Spencer Kimball and Josh MacDonald
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * Modified by the GTK+ Team and others 1997-2010.  See the AUTHORS
+ * file for a list of people on the GTK+ Team.  See the ChangeLog
+ * files for a list of changes.  These files are distributed with
+ * GTK+ at ftp://ftp.gtk.org/pub/gtk/.
+ */
+
+/* Uninstalled header, internal to GDK */
+
+#pragma once
+
+#include <gdk/gdkframeclock.h>
+
+#include "gdkdrawcontextprivate.h"
+
+G_BEGIN_DECLS
+
+/**
+ * GdkFrameClock:
+ * @parent_instance: The parent instance.
+ */
+struct _GdkFrameClock
+{
+  GObject parent_instance;
+};
+
+/**
+ * GdkFrameClockClass:
+ * @parent_class: The parent class.
+
+ * @get_frame_time: Gets the time that should currently be used for
+ *    animations.
+ * @request_phase: Asks the frame clock to run a particular phase.
+ * @begin_updating: Starts updates for an animation.
+ * @end_updating: Stops updates for an animation.
+ * @freeze: 
+ * @thaw: 
+ */
+struct _GdkFrameClockClass
+{
+  GObjectClass parent_class;
+
+  /*< public >*/
+
+  uint64_t              (* compute_frame_time)                  (GdkFrameClock          *self,
+                                                                 uint64_t                now,
+                                                                 gboolean                for_frame_start);
+  uint64_t              (* predict_presentation_time)           (GdkFrameClock          *self,
+                                                                 uint64_t                now);
+
+  void                  (* request_phase)                       (GdkFrameClock          *self,
+                                                                 GdkFrameClockPhase      phase);
+  void                  (* begin_updating)                      (GdkFrameClock          *self);
+  void                  (* end_updating)                        (GdkFrameClock          *self);
+  /* not emitted while in frame */
+  void                  (* stop_throttling)                     (GdkFrameClock          *self,
+                                                                 gint64                  frame_counter);
+
+  void                  (* start)                               (GdkFrameClock          *self);
+  void                  (* stop)                                (GdkFrameClock          *self);
+};
+
+void                    gdk_frame_clock_start                   (GdkFrameClock          *clock);
+void                    gdk_frame_clock_stop                    (GdkFrameClock          *clock);
+gboolean                gdk_frame_clock_is_stopped              (GdkFrameClock          *clock);
+gboolean                gdk_frame_clock_is_updating             (GdkFrameClock          *self);
+gboolean                gdk_frame_clock_is_in_frame             (GdkFrameClock          *self);
+GdkFrameClockPhase      gdk_frame_clock_get_requested           (GdkFrameClock          *self);
+gsize                   gdk_frame_clock_get_throttling          (GdkFrameClock          *self);
+
+void                    gdk_frame_clock_frame                   (GdkFrameClock          *self);
+
+void                    gdk_frame_clock_add_frame               (GdkFrameClock          *self,
+                                                                 GdkDrawContextFrame    *frame);
+void                    gdk_frame_clock_remove_frame            (GdkFrameClock          *self,
+                                                                 GdkDrawContextFrame    *frame);
+void                    gdk_frame_clock_remove_frames           (GdkFrameClock          *self,
+                                                                 GdkDrawContext         *context);
+void                    gdk_frame_clock_foreach_frame           (GdkFrameClock          *self,
+                                                                 gint64                  frame_counter,
+                                                                 void                  (*func) (GdkDrawContextFrame *, gpointer),
+                                                                 gpointer                user_data);
+
+uint64_t        gdk_frame_clock_get_refresh_interval            (GdkFrameClock          *self);
+uint64_t        gdk_frame_clock_get_latest_presentation_time    (GdkFrameClock          *self);
+
+G_END_DECLS
+

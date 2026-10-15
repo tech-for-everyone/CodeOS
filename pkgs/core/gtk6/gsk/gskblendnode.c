@@ -1,0 +1,350 @@
+/* GSK - The GTK Scene Kit
+ *
+ * Copyright 2016  Endless
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "config.h"
+
+#include "gskblendnodeprivate.h"
+
+#include "gskrendernodeprivate.h"
+#include "gskrenderreplay.h"
+#include "gskcontainernode.h"
+#include "gskrectprivate.h"
+
+#include "gdk/gdkcairoprivate.h"
+
+/**
+ * GskBlendNode:
+ *
+ * A render node applying a blending function between its two child nodes.
+ */
+struct _GskBlendNode
+{
+  GskRenderNode render_node;
+
+  union {
+    GskRenderNode *children[2];
+    struct {
+      GskRenderNode *bottom;
+      GskRenderNode *top;
+    };
+  };
+  GdkColorState *color_state;
+  GskBlendMode blend_mode;
+};
+
+static cairo_operator_t
+gsk_blend_mode_to_cairo_operator (GskBlendMode blend_mode)
+{
+  switch (blend_mode)
+    {
+    default:
+      g_assert_not_reached ();
+    case GSK_BLEND_MODE_DEFAULT:
+      return CAIRO_OPERATOR_OVER;
+    case GSK_BLEND_MODE_MULTIPLY:
+      return CAIRO_OPERATOR_MULTIPLY;
+    case GSK_BLEND_MODE_SCREEN:
+      return CAIRO_OPERATOR_SCREEN;
+    case GSK_BLEND_MODE_OVERLAY:
+      return CAIRO_OPERATOR_OVERLAY;
+    case GSK_BLEND_MODE_DARKEN:
+      return CAIRO_OPERATOR_DARKEN;
+    case GSK_BLEND_MODE_LIGHTEN:
+      return CAIRO_OPERATOR_LIGHTEN;
+    case GSK_BLEND_MODE_COLOR_DODGE:
+      return CAIRO_OPERATOR_COLOR_DODGE;
+    case GSK_BLEND_MODE_COLOR_BURN:
+      return CAIRO_OPERATOR_COLOR_BURN;
+    case GSK_BLEND_MODE_HARD_LIGHT:
+      return CAIRO_OPERATOR_HARD_LIGHT;
+    case GSK_BLEND_MODE_SOFT_LIGHT:
+      return CAIRO_OPERATOR_SOFT_LIGHT;
+    case GSK_BLEND_MODE_DIFFERENCE:
+      return CAIRO_OPERATOR_DIFFERENCE;
+    case GSK_BLEND_MODE_EXCLUSION:
+      return CAIRO_OPERATOR_EXCLUSION;
+    case GSK_BLEND_MODE_COLOR:
+      return CAIRO_OPERATOR_HSL_COLOR;
+    case GSK_BLEND_MODE_HUE:
+      return CAIRO_OPERATOR_HSL_HUE;
+    case GSK_BLEND_MODE_SATURATION:
+      return CAIRO_OPERATOR_HSL_SATURATION;
+    case GSK_BLEND_MODE_LUMINOSITY:
+      return CAIRO_OPERATOR_HSL_LUMINOSITY;
+    }
+}
+
+static void
+gsk_blend_node_finalize (GskRenderNode *node)
+{
+  GskBlendNode *self = (GskBlendNode *) node;
+  GskRenderNodeClass *parent_class = g_type_class_peek (g_type_parent (GSK_TYPE_BLEND_NODE));
+
+  gdk_color_state_unref (self->color_state);
+  gsk_render_node_unref (self->bottom);
+  gsk_render_node_unref (self->top);
+
+  parent_class->finalize (node);
+}
+
+static void
+gsk_blend_node_draw (GskRenderNode *node,
+                     cairo_t       *cr,
+                     GskCairoData  *data)
+{
+  GskBlendNode *self = (GskBlendNode *) node;
+
+  if (gdk_cairo_is_all_clipped (cr))
+    return;
+
+  if (!gdk_color_state_equal (data->ccs, GDK_COLOR_STATE_SRGB))
+    g_warning ("blend node in non-srgb colorstate isn't implemented yet.");
+
+  cairo_push_group (cr);
+  gsk_render_node_draw_full (self->bottom, cr, data);
+
+  cairo_push_group (cr);
+  gsk_render_node_draw_full (self->top, cr, data);
+
+  cairo_pop_group_to_source (cr);
+  cairo_set_operator (cr, gsk_blend_mode_to_cairo_operator (self->blend_mode));
+  cairo_paint (cr);
+
+  cairo_pop_group_to_source (cr); /* resets operator */
+  cairo_paint (cr);
+}
+
+static void
+gsk_blend_node_diff (GskRenderNode *node1,
+                     GskRenderNode *node2,
+                     GskDiffData   *data)
+{
+  GskBlendNode *self1 = (GskBlendNode *) node1;
+  GskBlendNode *self2 = (GskBlendNode *) node2;
+
+  if (self1->blend_mode == self2->blend_mode &&
+      gdk_color_state_equal (self1->color_state, self2->color_state))
+    {
+      gsk_render_node_diff (self1->top, self2->top, data);
+      gsk_render_node_diff (self1->bottom, self2->bottom, data);
+    }
+  else
+    {
+      gsk_render_node_diff_impossible (node1, node2, data);
+    }
+}
+
+static GskRenderNode **
+gsk_blend_node_get_children (GskRenderNode *node,
+                             gsize         *n_children)
+{
+  GskBlendNode *self = (GskBlendNode *) node;
+
+  *n_children = G_N_ELEMENTS (self->children);
+
+  return self->children;
+}
+
+static GskRenderNode *
+gsk_blend_node_replay (GskRenderNode   *node,
+                       GskRenderReplay *replay)
+{
+  GskBlendNode *self = (GskBlendNode *) node;
+  GskRenderNode *result, *top, *bottom;
+
+  top = gsk_render_replay_filter_node (replay, self->top);
+  bottom = gsk_render_replay_filter_node (replay, self->bottom);
+
+  if (top == NULL)
+    {
+      if (bottom == NULL)
+        return NULL;
+
+      top = gsk_container_node_new (NULL, 0);
+    }
+  else if (bottom == NULL)
+    {
+      bottom = gsk_container_node_new (NULL, 0);
+    }
+
+  if (top == self->top && bottom == self->bottom)
+    result = gsk_render_node_ref (node);
+  else
+    result = gsk_blend_node_new2 (bottom, top,
+                                  self->color_state,
+                                  self->blend_mode);
+
+  gsk_render_node_unref (top);
+  gsk_render_node_unref (bottom);
+
+  return result;
+}
+
+static void
+gsk_blend_node_class_init (gpointer g_class,
+                           gpointer class_data)
+{
+  GskRenderNodeClass *node_class = g_class;
+
+  node_class->node_type = GSK_BLEND_NODE;
+
+  node_class->finalize = gsk_blend_node_finalize;
+  node_class->draw = gsk_blend_node_draw;
+  node_class->diff = gsk_blend_node_diff;
+  node_class->get_children = gsk_blend_node_get_children;
+  node_class->replay = gsk_blend_node_replay;
+}
+
+GSK_DEFINE_RENDER_NODE_TYPE (GskBlendNode, gsk_blend_node)
+
+/**
+ * gsk_blend_node_new:
+ * @bottom: The bottom node to be drawn
+ * @top: The node to be blended onto the @bottom node
+ * @blend_mode: The blend mode to use
+ *
+ * Creates a `GskRenderNode` that will use @blend_mode to blend the @top
+ * node onto the @bottom node.
+ *
+ * Returns: (transfer full) (type GskBlendNode): A new `GskRenderNode`
+ */
+GskRenderNode *
+gsk_blend_node_new (GskRenderNode *bottom,
+                    GskRenderNode *top,
+                    GskBlendMode   blend_mode)
+{
+  return gsk_blend_node_new2 (bottom, top, GDK_COLOR_STATE_SRGB, blend_mode);
+}
+
+/*< private >
+ * gsk_blend_node_new2:
+ * @bottom: The bottom node to be drawn
+ * @top: The node to be blended onto the @bottom node
+ * @color_state: The color state to blend in
+ * @blend_mode: The blend mode to use
+ *
+ * Creates a `GskRenderNode` that will use @blend_mode to blend the @top
+ * node onto the @bottom node.
+ *
+ * Returns: (transfer full) (type GskBlendNode): A new `GskRenderNode`
+ */
+GskRenderNode *
+gsk_blend_node_new2 (GskRenderNode *bottom,
+                     GskRenderNode *top,
+                     GdkColorState *color_state,
+                     GskBlendMode   blend_mode)
+{
+  GskBlendNode *self;
+  GskRenderNode *node;
+
+  g_return_val_if_fail (GSK_IS_RENDER_NODE (bottom), NULL);
+  g_return_val_if_fail (GSK_IS_RENDER_NODE (top), NULL);
+  g_return_val_if_fail (GDK_IS_DEFAULT_COLOR_STATE (color_state), NULL);
+
+  self = gsk_render_node_alloc (GSK_TYPE_BLEND_NODE);
+  node = (GskRenderNode *) self;
+
+  self->bottom = gsk_render_node_ref (bottom);
+  self->top = gsk_render_node_ref (top);
+  self->color_state = gdk_color_state_ref (color_state);
+  self->blend_mode = blend_mode;
+
+  graphene_rect_union (&bottom->bounds, &top->bounds, &node->bounds);
+
+  node->preferred_depth = gdk_memory_depth_merge (gsk_render_node_get_preferred_depth (bottom),
+                                                  gsk_render_node_get_preferred_depth (top));
+  node->is_hdr = gsk_render_node_is_hdr (bottom) ||
+                 gsk_render_node_is_hdr (top);
+  node->fully_opaque = gsk_render_node_is_fully_opaque (bottom) &&
+                       gsk_render_node_is_fully_opaque (top) &&
+                       gsk_rect_equal (&bottom->bounds, &top->bounds);
+  node->bilevel_opacity = node->fully_opaque;
+  node->isolates_background = TRUE;
+  node->contains_subsurface_node = gsk_render_node_contains_subsurface_node (bottom) ||
+                                   gsk_render_node_contains_subsurface_node (top);
+  node->contains_paste_node = gsk_render_node_contains_paste_node (bottom) ||
+                              gsk_render_node_contains_paste_node (top);
+
+
+  return node;
+}
+
+/**
+ * gsk_blend_node_get_bottom_child:
+ * @node: (type GskBlendNode): a blending `GskRenderNode`
+ *
+ * Retrieves the bottom `GskRenderNode` child of the @node.
+ *
+ * Returns: (transfer none): the bottom child node
+ */
+GskRenderNode *
+gsk_blend_node_get_bottom_child (const GskRenderNode *node)
+{
+  const GskBlendNode *self = (const GskBlendNode *) node;
+
+  return self->bottom;
+}
+
+/**
+ * gsk_blend_node_get_top_child:
+ * @node: (type GskBlendNode): a blending `GskRenderNode`
+ *
+ * Retrieves the top `GskRenderNode` child of the @node.
+ *
+ * Returns: (transfer none): the top child node
+ */
+GskRenderNode *
+gsk_blend_node_get_top_child (const GskRenderNode *node)
+{
+  const GskBlendNode *self = (const GskBlendNode *) node;
+
+  return self->top;
+}
+
+/**
+ * gsk_blend_node_get_blend_mode:
+ * @node: (type GskBlendNode): a blending `GskRenderNode`
+ *
+ * Retrieves the blend mode used by @node.
+ *
+ * Returns: the blend mode
+ */
+GskBlendMode
+gsk_blend_node_get_blend_mode (const GskRenderNode *node)
+{
+  const GskBlendNode *self = (const GskBlendNode *) node;
+
+  return self->blend_mode;
+}
+
+
+/*< private >
+ * gsk_blend_node_get_color_state:
+ * @node: (type GskBlendNode): a `GskRenderNode`
+ *
+ * Retrieves the color state of the @node.
+ *
+ * Returns: (transfer none): the color state
+ */
+GdkColorState *
+gsk_blend_node_get_color_state (const GskRenderNode *node)
+{
+  const GskBlendNode *self = (const GskBlendNode *) node;
+
+  return self->color_state;
+}

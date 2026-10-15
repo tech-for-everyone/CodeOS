@@ -1,0 +1,891 @@
+/* GTK - The GIMP Toolkit
+ * Copyright (C) 1995-1997 Peter Mattis, Spencer Kimball and Josh MacDonald
+ *
+ * GtkAspectFrame: Ensure that the child window has a specified aspect ratio
+ *    or, if obey_child, has the same aspect ratio as its requested size
+ *
+ *     Copyright Owen Taylor                          4/9/97
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * Modified by the GTK+ Team and others 1997-2001.  See the AUTHORS
+ * file for a list of people on the GTK+ Team.  See the ChangeLog
+ * files for a list of changes.  These files are distributed with
+ * GTK+ at ftp://ftp.gtk.org/pub/gtk/.
+ */
+
+/**
+ * GtkAspectFrame:
+ *
+ * Preserves the aspect ratio of its child.
+ *
+ * The frame can respect the aspect ratio of the child widget,
+ * or use its own aspect ratio.
+ *
+ * # CSS nodes
+ *
+ * `GtkAspectFrame` uses a CSS node with name `aspectframe`.
+ *
+ * # Accessibility
+ *
+ * Until GTK 4.10, `GtkAspectFrame` used the [enum@Gtk.AccessibleRole.group] role.
+ *
+ * Starting from GTK 4.12, `GtkAspectFrame` uses the [enum@Gtk.AccessibleRole.generic] role.
+
+ */
+
+#include "config.h"
+
+#include "gtkaspectframe.h"
+
+#include "gtksizerequest.h"
+
+#include "gtkbuildable.h"
+
+#include "gtkwidgetprivate.h"
+#include "gtkprivate.h"
+#include "gtkbuilderprivate.h"
+
+
+typedef struct _GtkAspectFrameClass GtkAspectFrameClass;
+
+struct _GtkAspectFrame
+{
+  GtkWidget parent_instance;
+
+  GtkWidget    *child;
+  float         xalign;
+  float         yalign;
+  float         ratio;
+  int           cached_min_size[2];
+  int           cached_min_baseline;
+  gboolean      obey_child;
+};
+
+struct _GtkAspectFrameClass
+{
+  GtkWidgetClass parent_class;
+};
+
+enum {
+  PROP_0,
+  PROP_XALIGN,
+  PROP_YALIGN,
+  PROP_RATIO,
+  PROP_OBEY_CHILD,
+  PROP_CHILD,
+  N_PROPS
+};
+
+static GParamSpec *props[N_PROPS] = { NULL, };
+
+static void gtk_aspect_frame_dispose      (GObject         *object);
+static void gtk_aspect_frame_set_property (GObject         *object,
+                                           guint            prop_id,
+                                           const GValue    *value,
+                                           GParamSpec      *pspec);
+static void gtk_aspect_frame_get_property (GObject         *object,
+                                           guint            prop_id,
+                                           GValue          *value,
+                                           GParamSpec      *pspec);
+static void gtk_aspect_frame_size_allocate (GtkWidget      *widget,
+                                            int             width,
+                                            int             height,
+                                            int             baseline);
+static void gtk_aspect_frame_measure       (GtkWidget      *widget,
+                                            GtkOrientation  orientation,
+                                            int             for_size,
+                                            int             *minimum,
+                                            int             *natural,
+                                            int             *minimum_baseline,
+                                            int             *natural_baseline);
+
+static void gtk_aspect_frame_compute_expand (GtkWidget     *widget,
+                                             gboolean      *hexpand,
+                                             gboolean      *vexpand);
+static GtkSizeRequestMode
+            gtk_aspect_frame_get_request_mode (GtkWidget *widget);
+
+static void gtk_aspect_frame_buildable_init (GtkBuildableIface *iface);
+
+#define MAX_RATIO 10000.0
+#define MIN_RATIO 0.0001
+
+
+G_DEFINE_TYPE_WITH_CODE (GtkAspectFrame, gtk_aspect_frame, GTK_TYPE_WIDGET,
+                         G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE,
+                                                gtk_aspect_frame_buildable_init))
+
+
+static void
+gtk_aspect_frame_class_init (GtkAspectFrameClass *class)
+{
+  GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
+
+  gobject_class->dispose = gtk_aspect_frame_dispose;
+  gobject_class->set_property = gtk_aspect_frame_set_property;
+  gobject_class->get_property = gtk_aspect_frame_get_property;
+
+  widget_class->measure = gtk_aspect_frame_measure;
+  widget_class->size_allocate = gtk_aspect_frame_size_allocate;
+  widget_class->compute_expand = gtk_aspect_frame_compute_expand;
+  widget_class->get_request_mode = gtk_aspect_frame_get_request_mode;
+
+  /**
+   * GtkAspectFrame:xalign:
+   *
+   * The horizontal alignment of the child.
+   */
+  props[PROP_XALIGN] = g_param_spec_float ("xalign", NULL, NULL,
+                                           0.0, 1.0, 0.5,
+                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  /**
+   * GtkAspectFrame:yalign:
+   *
+   * The vertical alignment of the child.
+   */
+  props[PROP_YALIGN] = g_param_spec_float ("yalign", NULL, NULL,
+                                           0.0, 1.0, 0.5,
+                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  /**
+   * GtkAspectFrame:ratio:
+   *
+   * The aspect ratio to be used by the `GtkAspectFrame`.
+   *
+   * This property is only used if
+   * [property@Gtk.AspectFrame:obey-child] is set to %FALSE.
+   */
+  props[PROP_RATIO] = g_param_spec_float ("ratio", NULL, NULL,
+                                          MIN_RATIO, MAX_RATIO, 1.0,
+                                          G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  /**
+   * GtkAspectFrame:obey-child:
+   *
+   * Whether the `GtkAspectFrame` should use the aspect ratio of its child.
+   */
+  props[PROP_OBEY_CHILD] = g_param_spec_boolean ("obey-child", NULL, NULL,
+                                                 TRUE,
+                                                 G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+  /**
+   * GtkAspectFrame:child:
+   *
+   * The child widget.
+   */
+  props[PROP_CHILD] = g_param_spec_object ("child", NULL, NULL,
+                                           GTK_TYPE_WIDGET,
+                                           G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+
+  g_object_class_install_properties (gobject_class, N_PROPS, props);
+
+  gtk_widget_class_set_css_name (GTK_WIDGET_CLASS (class), I_("aspectframe"));
+  gtk_widget_class_set_accessible_role (GTK_WIDGET_CLASS (class), GTK_ACCESSIBLE_ROLE_GENERIC);
+}
+
+static void
+gtk_aspect_frame_resize_func (GtkWidget *widget)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (widget);
+
+  self->cached_min_size[GTK_ORIENTATION_VERTICAL] = -1;
+  self->cached_min_size[GTK_ORIENTATION_HORIZONTAL] = -1;
+  self->cached_min_baseline = -1;
+}
+
+static void
+gtk_aspect_frame_init (GtkAspectFrame *self)
+{
+  GtkWidget *widget = GTK_WIDGET (self);
+
+  self->xalign = 0.5;
+  self->yalign = 0.5;
+  self->ratio = 1.0;
+  self->obey_child = TRUE;
+
+  widget->priv->resize_func = gtk_aspect_frame_resize_func;
+}
+
+static void
+gtk_aspect_frame_dispose (GObject *object)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (object);
+
+  g_clear_pointer (&self->child, gtk_widget_unparent);
+
+  G_OBJECT_CLASS (gtk_aspect_frame_parent_class)->dispose (object);
+}
+
+static void
+gtk_aspect_frame_set_property (GObject         *object,
+                               guint            prop_id,
+                               const GValue    *value,
+                               GParamSpec      *pspec)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (object);
+
+  switch (prop_id)
+    {
+      /* g_object_notify is handled by the _frame_set function */
+    case PROP_XALIGN:
+      gtk_aspect_frame_set_xalign (self, g_value_get_float (value));
+      break;
+    case PROP_YALIGN:
+      gtk_aspect_frame_set_yalign (self, g_value_get_float (value));
+      break;
+    case PROP_RATIO:
+      gtk_aspect_frame_set_ratio (self, g_value_get_float (value));
+      break;
+    case PROP_OBEY_CHILD:
+      gtk_aspect_frame_set_obey_child (self, g_value_get_boolean (value));
+      break;
+    case PROP_CHILD:
+      gtk_aspect_frame_set_child (self, g_value_get_object (value));
+      break;
+    default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
+}
+
+static void
+gtk_aspect_frame_get_property (GObject         *object,
+                               guint            prop_id,
+                               GValue          *value,
+                               GParamSpec      *pspec)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (object);
+
+  switch (prop_id)
+    {
+    case PROP_XALIGN:
+      g_value_set_float (value, self->xalign);
+      break;
+    case PROP_YALIGN:
+      g_value_set_float (value, self->yalign);
+      break;
+    case PROP_RATIO:
+      g_value_set_float (value, self->ratio);
+      break;
+    case PROP_OBEY_CHILD:
+      g_value_set_boolean (value, self->obey_child);
+      break;
+    case PROP_CHILD:
+      g_value_set_object (value, gtk_aspect_frame_get_child (self));
+      break;
+    default:
+       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+      break;
+    }
+}
+
+static GtkBuildableIface *parent_buildable_iface;
+
+static void
+gtk_aspect_frame_buildable_add_child (GtkBuildable *buildable,
+                                      GtkBuilder   *builder,
+                                      GObject      *child,
+                                      const char   *type)
+{
+  if (GTK_IS_WIDGET (child))
+    {
+      gtk_buildable_child_deprecation_warning (buildable, builder, NULL, "child");
+      gtk_aspect_frame_set_child (GTK_ASPECT_FRAME (buildable), GTK_WIDGET (child));
+    }
+  else
+    {
+      parent_buildable_iface->add_child (buildable, builder, child, type);
+    }
+}
+
+static void
+gtk_aspect_frame_buildable_init (GtkBuildableIface *iface)
+{
+  parent_buildable_iface = g_type_interface_peek_parent (iface);
+
+  iface->add_child = gtk_aspect_frame_buildable_add_child;
+}
+
+/**
+ * gtk_aspect_frame_new:
+ * @xalign: Horizontal alignment of the child within the parent.
+ *   Ranges from 0.0 (left aligned) to 1.0 (right aligned)
+ * @yalign: Vertical alignment of the child within the parent.
+ *   Ranges from 0.0 (top aligned) to 1.0 (bottom aligned)
+ * @ratio: The desired aspect ratio.
+ * @obey_child: If %TRUE, @ratio is ignored, and the aspect
+ *   ratio is taken from the requistion of the child.
+ *
+ * Create a new `GtkAspectFrame`.
+ *
+ * Returns: the new `GtkAspectFrame`.
+ */
+GtkWidget *
+gtk_aspect_frame_new (float    xalign,
+                      float    yalign,
+                      float    ratio,
+                      gboolean obey_child)
+{
+  GtkAspectFrame *self;
+
+  self = g_object_new (GTK_TYPE_ASPECT_FRAME, NULL);
+
+  self->xalign = CLAMP (xalign, 0.0, 1.0);
+  self->yalign = CLAMP (yalign, 0.0, 1.0);
+  self->ratio = CLAMP (ratio, MIN_RATIO, MAX_RATIO);
+  self->obey_child = obey_child != FALSE;
+
+  return GTK_WIDGET (self);
+}
+
+/**
+ * gtk_aspect_frame_set_xalign:
+ * @self: a `GtkAspectFrame`
+ * @xalign: horizontal alignment, from 0.0 (left aligned) to 1.0 (right aligned)
+ *
+ * Sets the horizontal alignment of the child within the allocation
+ * of the `GtkAspectFrame`.
+ */
+void
+gtk_aspect_frame_set_xalign (GtkAspectFrame *self,
+                             float           xalign)
+{
+  g_return_if_fail (GTK_IS_ASPECT_FRAME (self));
+
+  xalign = CLAMP (xalign, 0.0, 1.0);
+
+  if (self->xalign == xalign)
+    return;
+
+  self->xalign = xalign;
+
+  g_object_notify_by_pspec (G_OBJECT (self), props[PROP_XALIGN]);
+  gtk_widget_queue_allocate (GTK_WIDGET (self));
+}
+
+/**
+ * gtk_aspect_frame_get_xalign:
+ * @self: a `GtkAspectFrame`
+ *
+ * Returns the horizontal alignment of the child within the
+ * allocation of the `GtkAspectFrame`.
+ *
+ * Returns: the horizontal alignment
+ */
+float
+gtk_aspect_frame_get_xalign (GtkAspectFrame *self)
+{
+  g_return_val_if_fail (GTK_IS_ASPECT_FRAME (self), 0.5);
+
+  return self->xalign;
+}
+
+/**
+ * gtk_aspect_frame_set_yalign:
+ * @self: a `GtkAspectFrame`
+ * @yalign: horizontal alignment, from 0.0 (top aligned) to 1.0 (bottom aligned)
+ *
+ * Sets the vertical alignment of the child within the allocation
+ * of the `GtkAspectFrame`.
+ */
+void
+gtk_aspect_frame_set_yalign (GtkAspectFrame *self,
+                             float           yalign)
+{
+  g_return_if_fail (GTK_IS_ASPECT_FRAME (self));
+
+  yalign = CLAMP (yalign, 0.0, 1.0);
+
+  if (self->yalign == yalign)
+    return;
+
+  self->yalign = yalign;
+
+  g_object_notify_by_pspec (G_OBJECT (self), props[PROP_YALIGN]);
+  if (self->cached_min_baseline != -1)
+    gtk_widget_queue_resize (GTK_WIDGET (self));
+  else
+    gtk_widget_queue_allocate (GTK_WIDGET (self));
+}
+
+/**
+ * gtk_aspect_frame_get_yalign:
+ * @self: a `GtkAspectFrame`
+ *
+ * Returns the vertical alignment of the child within the
+ * allocation of the `GtkAspectFrame`.
+ *
+ * Returns: the vertical alignment
+ */
+float
+gtk_aspect_frame_get_yalign (GtkAspectFrame *self)
+{
+  g_return_val_if_fail (GTK_IS_ASPECT_FRAME (self), 0.5);
+
+  return self->yalign;
+}
+
+/**
+ * gtk_aspect_frame_set_ratio:
+ * @self: a `GtkAspectFrame`
+ * @ratio: aspect ratio of the child
+ *
+ * Sets the desired aspect ratio of the child.
+ */
+void
+gtk_aspect_frame_set_ratio (GtkAspectFrame *self,
+                            float           ratio)
+{
+  g_return_if_fail (GTK_IS_ASPECT_FRAME (self));
+
+  ratio = CLAMP (ratio, MIN_RATIO, MAX_RATIO);
+
+  if (self->ratio == ratio)
+    return;
+
+  self->ratio = ratio;
+
+  g_object_notify_by_pspec (G_OBJECT (self), props[PROP_RATIO]);
+  if (!self->obey_child)
+    gtk_widget_queue_resize (GTK_WIDGET (self));
+}
+
+/**
+ * gtk_aspect_frame_get_ratio:
+ * @self: a `GtkAspectFrame`
+ *
+ * Returns the desired aspect ratio of the child.
+ *
+ * Returns: the desired aspect ratio
+ */
+float
+gtk_aspect_frame_get_ratio (GtkAspectFrame *self)
+{
+  g_return_val_if_fail (GTK_IS_ASPECT_FRAME (self), 1.0);
+
+  return self->ratio;
+}
+
+/**
+ * gtk_aspect_frame_set_obey_child:
+ * @self: a `GtkAspectFrame`
+ * @obey_child: If %TRUE, @ratio is ignored, and the aspect
+ *    ratio is taken from the requisition of the child.
+ *
+ * Sets whether the aspect ratio of the child's size
+ * request should override the set aspect ratio of
+ * the `GtkAspectFrame`.
+ */
+void
+gtk_aspect_frame_set_obey_child (GtkAspectFrame *self,
+                                 gboolean        obey_child)
+{
+  g_return_if_fail (GTK_IS_ASPECT_FRAME (self));
+
+  if (self->obey_child == obey_child)
+    return;
+
+  self->obey_child = obey_child;
+
+  g_object_notify_by_pspec (G_OBJECT (self), props[PROP_OBEY_CHILD]);
+  gtk_widget_queue_resize (GTK_WIDGET (self));
+
+}
+
+/**
+ * gtk_aspect_frame_get_obey_child:
+ * @self: a `GtkAspectFrame`
+ *
+ * Returns whether the child's size request should override
+ * the set aspect ratio of the `GtkAspectFrame`.
+ *
+ * Returns: whether to obey the child's size request
+ */
+gboolean
+gtk_aspect_frame_get_obey_child (GtkAspectFrame *self)
+{
+  g_return_val_if_fail (GTK_IS_ASPECT_FRAME (self), TRUE);
+
+  return self->obey_child;
+}
+
+static double
+get_effective_ratio (GtkAspectFrame *self)
+{
+  double ratio;
+  GtkRequisition child_requisition;
+
+  if (!self->obey_child || !self->child)
+    return self->ratio;
+
+  gtk_widget_get_preferred_size (self->child, NULL, &child_requisition);
+
+  if (child_requisition.height != 0)
+    {
+      ratio = ((double) child_requisition.width /
+               child_requisition.height);
+      if (ratio < MIN_RATIO)
+        ratio = MIN_RATIO;
+    }
+  else if (child_requisition.width != 0)
+    ratio = MAX_RATIO;
+  else
+    ratio = 1.0;
+
+  return ratio;
+}
+
+static void
+get_full_allocation (GtkAspectFrame *self,
+                     GtkAllocation  *child_allocation)
+{
+  child_allocation->x = 0;
+  child_allocation->y = 0;
+  child_allocation->width = gtk_widget_get_width (GTK_WIDGET (self));
+  child_allocation->height = gtk_widget_get_height (GTK_WIDGET (self));
+}
+
+static void
+compute_child_allocation (GtkAspectFrame *self,
+                          GtkAllocation  *child_allocation)
+{
+  double ratio;
+
+  if (self->child && gtk_widget_get_visible (self->child))
+    {
+      GtkAllocation full_allocation;
+
+      get_full_allocation (self, &full_allocation);
+      ratio = get_effective_ratio (self);
+
+      if (ratio * full_allocation.height > full_allocation.width)
+        {
+          child_allocation->width = full_allocation.width;
+          child_allocation->height = full_allocation.width / ratio + 0.5;
+        }
+      else
+        {
+          child_allocation->width = ratio * full_allocation.height + 0.5;
+          child_allocation->height = full_allocation.height;
+        }
+
+      child_allocation->x = full_allocation.x + self->xalign * (full_allocation.width - child_allocation->width);
+      child_allocation->y = full_allocation.y + self->yalign * (full_allocation.height - child_allocation->height);
+    }
+  else
+    get_full_allocation (self, child_allocation);
+}
+
+static inline double
+apply_ratio (int            for_size,
+             double         ratio,
+             GtkOrientation orientation)
+{
+  if (orientation == GTK_ORIENTATION_HORIZONTAL)
+    /* width = height * ratio */
+    return for_size * ratio;
+  else
+    /* height = width / ratio */
+    return for_size / ratio;
+}
+
+static void
+gtk_aspect_frame_compute_minimum_size (GtkAspectFrame *self,
+                                       double          ratio)
+{
+  GtkSizeRequestMode request_mode;
+  GtkOrientation orientation, opposite_orientation;
+  int start_size, end_size, opposite_size, baseline;
+
+  /* From an allocation that GtkAspectFrame itself receives, it carves
+   * out an allocation for its child that has the desired aspect ratio.
+   * The possible sizes allocated to the child are ones that have that
+   * aspect ratio; effectively the possible child size varies with a
+   * single degree of freedom as opposed to the usual two.  Therefore,
+   * there is a single minimum size for the child allocation: it is the
+   * smallest among sizes having the desired aspect ratio that is still
+   * acceptable to the child.
+   *
+   * While GtkAspectFrame is not constant-size because our natural size
+   * proportionally depends on the size in the opposite orientation,
+   * its minimum width and height don't depend on the available size in
+   * the opposite orientation.  This is why we can compute this minimum
+   * size once, and then use the cached values whenever we're measured.
+   */
+
+  request_mode = gtk_widget_get_request_mode (self->child);
+  if (request_mode == GTK_SIZE_REQUEST_CONSTANT_SIZE)
+    {
+      int min_width, min_height, min_baseline;
+
+      gtk_widget_measure (self->child, GTK_ORIENTATION_HORIZONTAL, -1,
+                          &min_width, NULL, NULL, NULL);
+      gtk_widget_measure (self->child, GTK_ORIENTATION_VERTICAL, -1,
+                          &min_height, NULL, &min_baseline, NULL);
+      self->cached_min_size[GTK_ORIENTATION_HORIZONTAL] = MAX (min_width, ceil (min_height * ratio));
+      self->cached_min_size[GTK_ORIENTATION_VERTICAL] = MAX (min_height, ceil (min_width / ratio));
+
+      if (min_baseline != -1)
+        self->cached_min_baseline = min_baseline + round (self->yalign *
+          (self->cached_min_size[GTK_ORIENTATION_VERTICAL] - min_height));
+      else
+        self->cached_min_baseline = -1;
+      return;
+    }
+  else if (request_mode == GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH)
+    {
+      orientation = GTK_ORIENTATION_HORIZONTAL;
+      opposite_orientation = GTK_ORIENTATION_VERTICAL;
+    }
+  else
+    {
+      orientation = GTK_ORIENTATION_VERTICAL;
+      opposite_orientation = GTK_ORIENTATION_HORIZONTAL;
+    }
+
+  /* Search, among sizes that are acceptable to the child, for the one
+   * that fits the desired ratio best.
+   *
+   * Start from the overall minimum size along this orientation.
+   */
+  gtk_widget_measure (self->child, orientation,
+                      -1, &start_size, NULL, NULL, NULL);
+  gtk_widget_measure (self->child, opposite_orientation,
+                      start_size, &opposite_size, NULL, NULL, NULL);
+
+  end_size = apply_ratio (opposite_size, ratio, orientation);
+  /* See if the minimum size in fact already fits */
+  if (start_size >= end_size)
+    {
+      end_size = start_size;
+      goto found;
+    }
+  /* Otherwise, we know that end_size is certain to fit.
+   *
+   * Binary search for the minimum size that fits.
+   *
+   * Invariant: start_size doesn't fit, end_size does.
+   */
+  while (start_size + 1 < end_size)
+    {
+      int mid_size;
+
+      mid_size = (start_size + 1 + end_size) / 2;
+      g_assert (mid_size > start_size);
+      gtk_widget_measure (self->child, opposite_orientation,
+                          mid_size, &opposite_size, NULL, NULL, NULL);
+      if (mid_size >= apply_ratio (opposite_size, ratio, orientation))
+        end_size = mid_size;
+      else
+        start_size = mid_size;
+    }
+
+found:
+  self->cached_min_size[orientation] = end_size;
+  self->cached_min_size[opposite_orientation] =
+    ceil (apply_ratio (end_size, ratio, opposite_orientation));
+
+  /* Now compute the baseline */
+  gtk_widget_measure (self->child, GTK_ORIENTATION_VERTICAL,
+                      self->cached_min_size[GTK_ORIENTATION_HORIZONTAL],
+                      &opposite_size, NULL, &baseline, NULL);
+  g_assert (opposite_size <= self->cached_min_size[GTK_ORIENTATION_VERTICAL]);
+  if (baseline != -1)
+    self->cached_min_baseline = baseline + round (self->yalign *
+      (self->cached_min_size[GTK_ORIENTATION_VERTICAL] - opposite_size));
+  else
+    self->cached_min_baseline = -1;
+}
+
+static void
+gtk_aspect_frame_measure (GtkWidget      *widget,
+                          GtkOrientation  orientation,
+                          int             for_size,
+                          int             *minimum,
+                          int             *natural,
+                          int             *minimum_baseline,
+                          int             *natural_baseline)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (widget);
+  double ratio;
+  int natural_constraint;
+
+  if (!self->child || !gtk_widget_get_visible (self->child))
+    {
+      *minimum = *natural = 0;
+      *minimum_baseline = *natural_baseline = -1;
+      return;
+    }
+
+  ratio = get_effective_ratio (self);
+
+  if (self->cached_min_size[orientation] == -1)
+    gtk_aspect_frame_compute_minimum_size (self, ratio);
+
+  *minimum = self->cached_min_size[orientation];
+  if (orientation == GTK_ORIENTATION_VERTICAL)
+    *minimum_baseline = self->cached_min_baseline;
+
+  if (for_size != -1)
+    {
+      /* For any specific size, our natural size follows the ratio */
+      if (orientation == GTK_ORIENTATION_HORIZONTAL)
+        *natural = ceil (for_size * ratio);
+      else
+        *natural = floor (for_size / ratio);
+      /* Note that (*natural) < (*minimum) could happen due to us
+       * finding a close, but imprecise, ratio.
+       */
+      *natural = MAX (*natural, *minimum);
+
+      if (orientation == GTK_ORIENTATION_VERTICAL && *minimum_baseline != -1)
+        {
+          int child_min, child_nat;
+          int child_min_baseline;
+
+          gtk_widget_measure (self->child, GTK_ORIENTATION_VERTICAL,
+                              for_size, &child_min, &child_nat,
+                              &child_min_baseline, natural_baseline);
+          if (*natural >= child_nat)
+            *natural_baseline += round ((*natural - child_nat) * self->yalign);
+          else
+            {
+              /* Interpolate from child's min baseline to its nat baseline */
+              double progress = ((double) (*natural - child_min)) / (child_nat - child_min);
+              *natural_baseline = child_min_baseline + round ((*natural_baseline - child_min_baseline) * progress);
+            }
+        }
+    }
+  else
+    {
+      /* Our overall natural size is such that we can fit the child
+       * at its natural size, in both orientations.
+       */
+      gtk_widget_measure (self->child, orientation, -1,
+                          NULL, natural,
+                          NULL, natural_baseline);
+      if (!self->obey_child)
+        {
+          int natural_opposite;
+
+          gtk_widget_measure (self->child,
+                              OPPOSITE_ORIENTATION (orientation), -1,
+                              NULL, &natural_opposite, NULL, NULL);
+          natural_constraint = ceil (apply_ratio (natural_opposite, ratio, orientation));
+          natural_constraint = MAX (natural_constraint, *minimum);
+
+          if (*natural_baseline != -1 && natural_constraint > *natural)
+            *natural_baseline += round ((natural_constraint - *natural) * self->yalign);
+          *natural = MAX (*natural, natural_constraint);
+        }
+    }
+}
+
+static void
+gtk_aspect_frame_size_allocate (GtkWidget *widget,
+                                int        width,
+                                int        height,
+                                int        baseline)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (widget);
+  GtkAllocation new_allocation;
+
+  compute_child_allocation (self, &new_allocation);
+
+  if (self->child && gtk_widget_get_visible (self->child))
+    gtk_widget_size_allocate (self->child, &new_allocation, -1);
+}
+
+static void
+gtk_aspect_frame_compute_expand (GtkWidget *widget,
+                                 gboolean  *hexpand,
+                                 gboolean  *vexpand)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (widget);
+
+  if (self->child)
+    {
+      *hexpand = gtk_widget_compute_expand (self->child, GTK_ORIENTATION_HORIZONTAL);
+      *vexpand = gtk_widget_compute_expand (self->child, GTK_ORIENTATION_VERTICAL);
+    }
+  else
+    {
+      *hexpand = FALSE;
+      *vexpand = FALSE;
+    }
+}
+
+static GtkSizeRequestMode
+gtk_aspect_frame_get_request_mode (GtkWidget *widget)
+{
+  GtkAspectFrame *self = GTK_ASPECT_FRAME (widget);
+  GtkSizeRequestMode request_mode;
+
+  if (!self->child || !gtk_widget_get_visible (self->child))
+    return GTK_SIZE_REQUEST_CONSTANT_SIZE;
+
+  /* Our natural size always depends on for-size, so we're never
+   * constant-size, even when our child is.
+   */
+
+  request_mode = gtk_widget_get_request_mode (self->child);
+  if (request_mode != GTK_SIZE_REQUEST_CONSTANT_SIZE)
+    return request_mode;
+  return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
+}
+
+/**
+ * gtk_aspect_frame_set_child:
+ * @self: a `GtkAspectFrame`
+ * @child: (nullable): the child widget
+ *
+ * Sets the child widget of @self.
+ */
+void
+gtk_aspect_frame_set_child (GtkAspectFrame  *self,
+                            GtkWidget       *child)
+{
+  g_return_if_fail (GTK_IS_ASPECT_FRAME (self));
+  g_return_if_fail (child == NULL || self->child == child || gtk_widget_get_parent (child) == NULL);
+
+  if (self->child == child)
+    return;
+
+  g_clear_pointer (&self->child, gtk_widget_unparent);
+
+  if (child)
+    {
+      self->child = child;
+      gtk_widget_set_parent (child, GTK_WIDGET (self));
+    }
+
+  g_object_notify_by_pspec (G_OBJECT (self), props[PROP_CHILD]);
+}
+
+/**
+ * gtk_aspect_frame_get_child:
+ * @self: a `GtkAspectFrame`
+ *
+ * Gets the child widget of @self.
+ *
+ * Returns: (nullable) (transfer none): the child widget of @self
+ */
+GtkWidget *
+gtk_aspect_frame_get_child (GtkAspectFrame *self)
+{
+  g_return_val_if_fail (GTK_IS_ASPECT_FRAME (self), NULL);
+
+  return self->child;
+}

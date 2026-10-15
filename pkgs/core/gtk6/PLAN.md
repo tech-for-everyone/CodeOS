@@ -140,17 +140,23 @@ generates into `build/glib/gobject/`.
    `subprojects/pcre2-10.46/libpcre2-8.a`,
    `subprojects/libffi-3.5.2/src/libffi.a`, `subprojects/zlib-1.3.1/libz.a`.
    Nothing is taken from the host.
-2. **Install glib into a `gtk6/sysroot`.** GTK's build needs
-   `glib-2.0.pc`/`gobject-2.0.pc`/`gio-2.0.pc` + headers. Add an install step that
-   stages headers/`.pc` files so meson can find glib as a target dependency.
-3. **graphene** — small, portable; build it against the staged glib and add
-   `graphene-gobject-1.0.pc`.
+2. **Stage glib into `gtk6/sysroot/`.** DONE for headers and libs:
+   `sysroot/usr/include/glib/` (128 headers) and
+   `sysroot/usr/lib/lib{glib,gobject,gio,gmodule,gthread}-2.0.a` are staged, and
+   `build/glib/glib/glibconfig.h` is on the include path. Still wanted:
+   `glib-2.0.pc`/`gobject-2.0.pc`/`gio-2.0.pc` so a consumer can ask for glib as
+   a *target* dependency, and a script that reproduces the staging (today the
+   copy is manual).
+3. **graphene** — DONE: `sysroot/usr/lib/libgraphene-1.0.a`,
+   `sysroot/usr/include/graphene-1.0/` and
+   `sysroot/usr/lib/pkgconfig/graphene-1.0.pc` are staged.
+   `graphene-gobject-1.0.pc` is still wanted.
 
 Then Phases 2–6 (`gdk/qt`, `gsk/qt`, text bridge, widgets, prune) can start.
 
 ### Phases 2–4 — the Qt backends exist and build
 
-`make -C gtk6 check` builds `build/libgtk6qt.a` from three real (not integer)
+`make -C pkgs/core/gtk6 check` builds `build/libgtk6qt.a` from three real (not integer)
 modules and compiles `tests/linkcheck.cpp` against their headers:
 
     gdk/qt/gdkqt.cpp   Phase 2  GdkQtDisplay / GdkQtSurface on QRasterWindow
@@ -176,13 +182,53 @@ modules and compiles `tests/linkcheck.cpp` against their headers:
 
 Not yet wired up:
 
-* The GTK4 sources (`gdk/gdk*.c`, `gsk/gsk*.c`, `gtk/*.c`) are not in the tree
-  yet. Phases 2–4 will call these modules from GTK's GObject backends
-  (`G_DEFINE_TYPE`d `GdkQt*`/`GskQt*`) once the sources are imported and
-  pruned; until then the modules are standalone and freestanding-verified by
-  `tests/linkcheck.cpp`.
+* The GTK4 sources are imported and pruned (see Phases 5–6 below) but not on
+  the build: `gtk/*.c`, `gdk/*.c` and `gsk/*.c` still want the Qt-backed
+  `gdk/qt` / `gsk/qt` / `qt` modules behind `G_DEFINE_TYPE`d `GdkQt*`/`GskQt*`
+  backends, plus the removed libs' replacements.
 * glib 2.90's pcre2/libffi/zlib now build for the CodeOS target from the forced
   subprojects (see "Remaining substrate work"); they are not yet linked into
   the kernel image.
 * `sysroot/` is staged but not tracked; see ".gitignore".
+
+### Phases 5–6 — GTK4 imported and pruned, not yet built
+
+`scripts/import-gtk4.sh` vendors upstream GTK4 into the package, from the CodeOS
+tree's `gtk4/` by default:
+
+    gtk/   28M   the widget layer (641 .c)
+    gdk/  3.2M   GDK core + gtk6's own gdk/qt
+    gdk/gsk/qt survives because it is not in upstream
+    gsk/  2.2M   GSK core + gtk6's own gsk/qt
+
+Pruned at import (the "Dependency surgery" table):
+
+    gdk/{x11,wayland,broadway,macos,win32,android,deprecated,loaders}
+    gsk/{gl,gpu,broadway}
+    gtk/{a11y,inspector,print,media,deprecated}
+
+The import is additive — upstream files land next to gtk6's own `gdk/qt`,
+`gsk/qt` and `qt/`, which have no upstream counterpart.
+
+The port itself is not done. What it needs:
+
+* **Generated headers do not exist yet.** Upstream produces `gdkconfig.h`,
+  `gdk/gdkenumtypes.[ch]`, `gtk/gtktypebuiltins.[ch]`,
+  `gtk/gtkprivatetypebuiltins.[ch]`, `gsk/gskenumtypes.[ch]`, the
+  `*.c`/`*.h` from `*.template` (the `.template` files are imported), and the
+  gleaned enums/marshalers/resources with the host's `glib-mkenums`/
+  `glib-genmarshal`/`glib-compile-resources`. Nothing in the import compiles
+  without them, so this is the first build task.
+* **The dropped libraries are woven through the kept files**, so removing them
+  is per-file surgery rather than a directory delete: every `gdk/*.c` includes
+  `<cairo-gobject.h>`, and `gtk/*.c` uses pango (text), cairo (drawing) and
+  gdk-pixbuf (images). The replacements are already prototyped
+  (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get wired in during the bring-up.
+* **Upstream's `meson.build` files are imported as reference** but not used;
+  gtk6's freestanding `Makefile` owns the build.
+* **Re-licensing is deferred.** The imported headers still carry upstream's
+  `LGPL-2.1-or-later`; the glib tree was swept to `GPL-3.0-or-later` and the
+  GTK4 trees should be swept the same way once the file list settles.
+
+`make -C pkgs/core/gtk6 check` still builds only the three Qt modules.
 

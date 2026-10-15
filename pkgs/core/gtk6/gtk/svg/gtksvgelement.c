@@ -1,0 +1,3429 @@
+/*
+ * Copyright © 2025 Red Hat, Inc
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Authors: Matthias Clasen <mclasen@redhat.com>
+ */
+
+#include "config.h"
+
+#include "gtksvgelementinternal.h"
+
+#include "gtksvgutilsprivate.h"
+#include "gtksvgpathutilsprivate.h"
+#include "gtksvgvalueprivate.h"
+#include "gtksvgcolorstopprivate.h"
+#include "gtksvgfilterprivate.h"
+#include "gtksvghrefprivate.h"
+#include "gtksvgtransformprivate.h"
+#include "gtksvgenumprivate.h"
+#include "gtksvgnumberprivate.h"
+#include "gtksvgnumbersprivate.h"
+#include "gtksvgpathprivate.h"
+#include "gtksvgstringlistprivate.h"
+#include "gtksvglanguageprivate.h"
+#include "gtksvgkeywordprivate.h"
+#include "gtksvganimationprivate.h"
+#include "gtksvgpaintprivate.h"
+#include "gtksvgfilterfunctionsprivate.h"
+#include "gtksvgclipprivate.h"
+#include "gtksvgmaskprivate.h"
+#include "gtksvgfilterprivate.h"
+#include "gtkmain.h"
+#include "gsk/gskpathprivate.h"
+#include "gsk/gskrectprivate.h"
+
+#define CLONE_LIMIT 15000
+
+struct _SvgElementClass
+{
+  GObjectClass parent_class;
+};
+
+enum
+{
+  SVG_ELEMENT_PROP_ELEMENT_TYPE = 1,
+  SVG_ELEMENT_PROP_ID,
+  SVG_ELEMENT_NUM_PROPERTIES,
+};
+
+static unsigned int changed_signal = 0;
+
+static void
+svg_element_changed (SvgElement *self,
+                     SvgProperty attr)
+{
+  g_signal_emit (self, changed_signal, 0, attr);
+}
+
+static GParamSpec *svg_element_prop[NUM_PROPERTIES];
+
+G_DEFINE_TYPE (SvgElement, svg_element, G_TYPE_OBJECT)
+
+static void
+svg_element_init (SvgElement *self)
+{
+  self->type = SVG_ELEMENT_PATH;
+}
+
+static void
+svg_element_get_property (GObject      *object,
+                          unsigned int  property_id,
+                          GValue       *value,
+                          GParamSpec   *pspec)
+{
+  SvgElement *self = SVG_ELEMENT (object);
+
+  switch (property_id)
+    {
+    case SVG_ELEMENT_PROP_ELEMENT_TYPE:
+      g_value_set_uint (value, self->type);
+      break;
+
+    case SVG_ELEMENT_PROP_ID:
+      g_value_set_string (value, self->id);
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void
+svg_element_set_property (GObject      *object,
+                          unsigned int  property_id,
+                          const GValue *value,
+                          GParamSpec   *pspec)
+{
+  SvgElement *self = SVG_ELEMENT (object);
+
+  switch (property_id)
+    {
+    case SVG_ELEMENT_PROP_ID:
+      svg_element_set_id (self, g_value_get_string (value));
+      break;
+
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+    }
+}
+
+static void svg_element_finalize (GObject *object);
+
+static void
+svg_element_dispose (GObject *object)
+{
+  SvgElement *self = SVG_ELEMENT (object);
+  gpointer next;
+
+  if (self->child_observer)
+    gtk_list_list_model_clear (self->child_observer);
+
+  for (SvgElement *s = self->first_child; s; s = (SvgElement *) next)
+    {
+      next = s->next_sibling;
+      g_object_unref (s);
+    }
+
+  if (self->animation_observer)
+    gtk_list_list_model_clear (self->animation_observer);
+
+  if (self->filter_observer)
+    gtk_array_list_model_clear (self->filter_observer);
+
+  if (self->color_stop_observer)
+    gtk_array_list_model_clear (self->color_stop_observer);
+
+  G_OBJECT_CLASS (svg_element_parent_class)->dispose (object);
+}
+
+static void
+svg_element_class_init (SvgElementClass *class)
+{
+  GObjectClass *object_class = G_OBJECT_CLASS (class);
+
+  object_class->dispose = svg_element_dispose;
+  object_class->finalize = svg_element_finalize;
+  object_class->get_property = svg_element_get_property;
+  object_class->set_property = svg_element_set_property;
+
+  svg_element_prop[SVG_ELEMENT_PROP_ELEMENT_TYPE] =
+    g_param_spec_uint ("element-type", NULL, NULL,
+                       SVG_ELEMENT_LINE, SVG_ELEMENT_VIEW,
+                       SVG_ELEMENT_PATH,
+                       G_PARAM_READABLE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+
+  svg_element_prop[SVG_ELEMENT_PROP_ID] =
+    g_param_spec_string ("id", NULL, NULL,
+                         NULL,
+                         G_PARAM_READWRITE | G_PARAM_STATIC_NAME | G_PARAM_EXPLICIT_NOTIFY);
+
+  g_object_class_install_properties (object_class, SVG_ELEMENT_NUM_PROPERTIES, svg_element_prop);
+
+  /*< private>
+   * SvgElement:changed:
+   * @element: the element
+   * @attr: the property that was changed
+   *
+   * This signal is emitted when a specified value is changed.
+   */
+  changed_signal =
+    g_signal_new_class_handler ("changed",
+                                G_TYPE_FROM_CLASS (object_class),
+                                G_SIGNAL_RUN_LAST,
+                                NULL,
+                                NULL, NULL,
+                                NULL,
+                                G_TYPE_NONE, 1,
+                                G_TYPE_UINT);
+}
+
+static void
+text_node_clear (TextNode *self)
+{
+  switch (self->type)
+    {
+    case TEXT_NODE_SHAPE:
+      // shape node not owned
+      break;
+    case TEXT_NODE_CHARACTERS:
+      g_clear_pointer (&self->characters.chunks, g_array_unref);
+      g_free (self->characters.text);
+      break;
+    default:
+      g_assert_not_reached ();
+    }
+}
+
+void
+text_chunk_clear (TextChunk *self)
+{
+  g_clear_object (&self->layout);
+}
+
+void
+property_value_clear (PropertyValue *v)
+{
+  g_clear_pointer (&v->value, svg_value_unref);
+}
+
+static void
+style_elt_free (gpointer p)
+{
+  StyleElt *e = (StyleElt *) p;
+
+  g_bytes_unref (e->content);
+  g_free (e->media);
+  g_free (e);
+}
+
+static void
+lang_string_clear (LangString *l)
+{
+  g_clear_pointer (&l->string, g_free);
+  l->lang = NULL;
+  l->type = NULL;
+}
+
+static void
+svg_element_finalize (GObject *object)
+{
+  SvgElement *element = SVG_ELEMENT (object);
+
+  g_clear_pointer (&element->id, g_free);
+  g_clear_pointer (&element->style, g_free);
+  g_clear_pointer (&element->classes, g_strfreev);
+  g_clear_pointer (&element->lang_strings, g_array_unref);
+  g_clear_pointer (&element->title, g_free);
+  g_clear_pointer (&element->description, g_free);
+  g_clear_object (&element->css_node);
+
+  g_clear_pointer (&element->specified, g_array_unref);
+  g_clear_pointer (&element->inline_styles, g_array_unref);
+
+  for (SvgProperty attr = FIRST_SVG_PROPERTY; attr <= LAST_SVG_PROPERTY; attr++)
+    {
+      g_clear_pointer (&element->base[attr], svg_value_unref);
+      g_clear_pointer (&element->current[attr], svg_value_unref);
+    }
+
+  g_clear_pointer (&element->styles, g_ptr_array_unref);
+  g_clear_pointer (&element->animations, g_ptr_array_unref);
+  g_clear_pointer (&element->color_stops, g_ptr_array_unref);
+  g_clear_pointer (&element->filters, g_ptr_array_unref);
+  g_clear_pointer (&element->deps, g_ptr_array_unref);
+
+  g_clear_pointer (&element->path, gsk_path_unref);
+  g_clear_pointer (&element->measure, gsk_path_measure_unref);
+  g_clear_pointer (&element->render_cache_node, gsk_render_node_unref);
+
+  g_clear_pointer (&element->text, g_array_unref);
+
+  if (element->type == SVG_ELEMENT_POLYLINE || element->type == SVG_ELEMENT_POLYGON)
+    g_clear_pointer (&element->path_for.polyline.points, svg_value_unref);
+
+  g_clear_pointer (&element->gpa.fill, svg_value_unref);
+  g_clear_pointer (&element->gpa.stroke, svg_value_unref);
+  g_clear_pointer (&element->gpa.width, svg_value_unref);
+  g_free (element->gpa.attach.ref);
+
+  _gtk_bitmask_free (element->attrs);
+
+  G_OBJECT_CLASS (svg_element_parent_class)->finalize (object);
+}
+
+static SvgElement *
+svg_element_setup (SvgElement     *element,
+                   SvgElement     *parent,
+                   SvgElementType  type)
+{
+  element->type = type;
+  element->parent = parent;
+
+  element->lang_strings = array_new_with_clear_func (sizeof (LangString), (GDestroyNotify) lang_string_clear);
+
+  element->attrs = _gtk_bitmask_new ();
+  element->important = _gtk_bitmask_new ();
+
+  element->specified = array_new_with_clear_func (sizeof (PropertyValue), (GDestroyNotify) property_value_clear);
+
+  element->inline_styles = array_new_with_clear_func (sizeof (PropertyValue), (GDestroyNotify) property_value_clear);
+
+  for (SvgProperty attr = FIRST_SVG_PROPERTY; attr <= LAST_SVG_PROPERTY; attr++)
+    {
+      element->base[attr] = svg_property_ref_initial_value (attr, type, parent != NULL);
+      element->current[attr] = svg_value_ref (element->base[attr]);
+    }
+
+  if (svg_element_type_is_gradient (type))
+    element->color_stops = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+
+  if (svg_element_type_is_filter (type))
+    element->filters = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+
+  if (svg_element_type_is_text (type))
+    element->text = array_new_with_clear_func (sizeof (TextNode), (GDestroyNotify) text_node_clear);
+
+  if (svg_element_type_is_path (type))
+    {
+      element->gpa.states = ALL_STATES;
+    }
+
+  element->styles = g_ptr_array_new_with_free_func (style_elt_free);
+
+  element->focusable = svg_element_get_initial_focusable (element);
+
+  element->css_node = gtk_css_node_new ();
+  gtk_css_node_set_name (element->css_node, g_quark_from_static_string (svg_element_type_get_name (type)));
+  if (parent)
+    gtk_css_node_set_parent (element->css_node, parent->css_node);
+
+  if (type == SVG_ELEMENT_LINK)
+    gtk_css_node_set_state (element->css_node, GTK_STATE_FLAG_LINK);
+
+  return element;
+}
+
+SvgElement *
+svg_element_new (SvgElement     *parent,
+                 SvgElementType  type)
+{
+  SvgElement *self = g_object_new (SVG_TYPE_ELEMENT, NULL);
+
+  svg_element_setup (self, parent, type);
+
+  return self;
+}
+
+/* {{{ Conditional exclusion */
+
+gboolean
+svg_element_conditionally_excluded (SvgElement *element,
+                                    GtkSvg     *svg)
+{
+  SvgValue *required_extensions = element->current[SVG_PROPERTY_REQUIRED_EXTENSIONS];
+  SvgValue *system_language = element->current[SVG_PROPERTY_SYSTEM_LANGUAGE];
+  PangoLanguage *lang;
+
+  if (svg_value_equal (required_extensions, svg_string_list_new (NULL)) &&
+      svg_value_equal (system_language, svg_language_new_list (0, NULL)))
+    return FALSE;
+
+  for (unsigned int i = 0; i < svg_string_list_get_length (required_extensions); i++)
+    {
+      if ((svg->features & GTK_SVG_EXTENSIONS) == 0)
+        return TRUE;
+
+      if (strcmp (svg_string_list_get (required_extensions, i), "http://www.gtk.org/grappa") != 0)
+        return TRUE;
+    }
+
+  lang = gtk_get_default_language ();
+
+  for (unsigned int i = 0; i < svg_language_get_length (system_language); i++)
+    {
+      const char *l1;
+      const char *l2;
+
+      if (lang == svg_language_get (system_language, i))
+        return FALSE;
+
+      l1 = pango_language_to_string (lang);
+      l2 = pango_language_to_string (svg_language_get (system_language, i));
+
+      for (unsigned int j = 0; l1[j]; j++)
+        {
+          if (l1[j] == '-')
+            return FALSE;
+
+          if (l1[j] != l2[j])
+            break;
+        }
+    }
+
+  return TRUE;
+}
+
+/* }}} */
+
+static gboolean
+auto_or_unset (SvgValue *value)
+{
+  return svg_value_is_auto (value) || svg_value_is_unset (value);
+}
+
+static void
+resolve_rx (SvgElement            *element,
+            const graphene_rect_t *viewport,
+            gboolean               current,
+            double                *rx,
+            double                *ry)
+{
+  SvgValue **values;
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  if (element->type == SVG_ELEMENT_ELLIPSE)
+    {
+      if (auto_or_unset (values[SVG_PROPERTY_RX]))
+        {
+          if (auto_or_unset (values[SVG_PROPERTY_RY]))
+            *ry = 0;
+          else
+            *ry = svg_number_get (values[SVG_PROPERTY_RY], viewport->size.height);
+          *rx = *ry;
+         }
+       else
+         {
+           *rx = svg_number_get (values[SVG_PROPERTY_RX], viewport->size.width);
+           if (svg_value_is_auto (values[SVG_PROPERTY_RY]))
+             *ry = *rx;
+           else
+             *ry = svg_number_get (values[SVG_PROPERTY_RY], viewport->size.height);
+         }
+    }
+  else if (element->type == SVG_ELEMENT_RECT)
+    {
+      double w = 0;
+      double h = 0;
+
+      if (auto_or_unset (values[SVG_PROPERTY_RX]) &&
+          auto_or_unset (values[SVG_PROPERTY_RY]))
+        {
+          *rx = *ry = 0;
+        }
+      else if (auto_or_unset (values[SVG_PROPERTY_RY]))
+        {
+          *rx = svg_number_get (values[SVG_PROPERTY_RX], viewport->size.width);
+          *ry = *rx;
+        }
+      else if (auto_or_unset (values[SVG_PROPERTY_RX]))
+        {
+          *ry = svg_number_get (values[SVG_PROPERTY_RY], viewport->size.height);
+          *rx = *ry;
+        }
+      else
+        {
+          *rx = svg_number_get (values[SVG_PROPERTY_RX], viewport->size.width);
+          *ry = svg_number_get (values[SVG_PROPERTY_RY], viewport->size.height);
+        }
+
+      if (!auto_or_unset (values[SVG_PROPERTY_WIDTH]))
+        w = svg_number_get (values[SVG_PROPERTY_WIDTH], viewport->size.width);
+      if (!auto_or_unset (values[SVG_PROPERTY_HEIGHT]))
+        h = svg_number_get (values[SVG_PROPERTY_HEIGHT], viewport->size.height);
+
+      if (*rx > w / 2)
+        *rx = w / 2;
+      if (*ry > h / 2)
+        *ry = h / 2;
+    }
+  else
+    g_assert_not_reached ();
+}
+
+void
+svg_element_get_line (SvgElement            *element,
+                      graphene_point_t      *start,
+                      graphene_point_t      *end,
+                      const graphene_rect_t *viewport,
+                      gboolean               current)
+{
+  SvgValue **values;
+
+  g_return_if_fail (element->type == SVG_ELEMENT_LINE);
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  graphene_point_init (start, 0, 0);
+  graphene_point_init (end, 0, 0);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_X1]))
+    start->x = svg_number_get (values[SVG_PROPERTY_X1], viewport->size.width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_Y1]))
+    start->y = svg_number_get (values[SVG_PROPERTY_Y1], viewport->size.height);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_X2]))
+    end->x = svg_number_get (values[SVG_PROPERTY_X2], viewport->size.width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_Y2]))
+    end->y = svg_number_get (values[SVG_PROPERTY_Y2], viewport->size.height);
+}
+
+void
+svg_element_get_circle (SvgElement            *element,
+                        graphene_point_t      *center,
+                        double                *radius,
+                        const graphene_rect_t *viewport,
+                        gboolean               current)
+{
+  SvgValue **values;
+
+  g_return_if_fail (element->type == SVG_ELEMENT_CIRCLE);
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  center->x = center->y = *radius = 0;
+
+  if (svg_value_is_set (values[SVG_PROPERTY_CX]))
+    center->x = svg_number_get (values[SVG_PROPERTY_CX], viewport->size.width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_CY]))
+    center->y = svg_number_get (values[SVG_PROPERTY_CY], viewport->size.height);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_R]))
+    *radius = svg_number_get (values[SVG_PROPERTY_R], normalized_diagonal (viewport));
+}
+
+void
+svg_element_get_ellipse (SvgElement            *element,
+                         graphene_point_t      *center,
+                         double                *rx,
+                         double                *ry,
+                         const graphene_rect_t *viewport,
+                         gboolean               current)
+{
+  SvgValue **values;
+
+  g_return_if_fail (element->type == SVG_ELEMENT_CIRCLE ||
+                    element->type == SVG_ELEMENT_ELLIPSE);
+
+  if (element->type == SVG_ELEMENT_CIRCLE)
+    {
+      svg_element_get_circle (element, center, rx, viewport, current);
+      *ry = *rx;
+      return;
+    }
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  center->x = center->y = *rx = *ry = 0;
+
+  if (svg_value_is_set (values[SVG_PROPERTY_CX]))
+    center->x = svg_number_get (values[SVG_PROPERTY_CX], viewport->size.width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_CY]))
+    center->y = svg_number_get (values[SVG_PROPERTY_CY], viewport->size.height);
+
+  resolve_rx (element, viewport, current, rx, ry);
+}
+
+void
+svg_element_get_rect (SvgElement            *element,
+                      GskRoundedRect        *rect,
+                      const graphene_rect_t *viewport,
+                      gboolean               current)
+{
+  SvgValue **values;
+  double rx, ry;
+
+  g_return_if_fail (element->type == SVG_ELEMENT_CIRCLE ||
+                    element->type == SVG_ELEMENT_ELLIPSE ||
+                    element->type == SVG_ELEMENT_RECT);
+
+  if (element->type != SVG_ELEMENT_RECT)
+    {
+      graphene_point_t center;
+
+      svg_element_get_ellipse (element, &center, &rx, &ry, viewport, current);
+
+      rect->bounds.origin.x = center.x - rx;
+      rect->bounds.origin.y = center.y - ry;
+      rect->bounds.size.width = 2 * rx;
+      rect->bounds.size.height= 2 * ry;
+
+      for (unsigned int i = 0; i < 4; i++)
+        {
+          rect->corner[i].width = rx;
+          rect->corner[i].height = ry;
+        }
+
+      return;
+    }
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  memset (rect, 0, sizeof (GskRoundedRect));
+
+  if (svg_value_is_set (values[SVG_PROPERTY_X]))
+    rect->bounds.origin.x = svg_number_get (values[SVG_PROPERTY_X], viewport->size.width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_Y]))
+    rect->bounds.origin.y = svg_number_get (values[SVG_PROPERTY_Y], viewport->size.height);
+
+  if (!auto_or_unset (values[SVG_PROPERTY_WIDTH]))
+    rect->bounds.size.width = svg_number_get (values[SVG_PROPERTY_WIDTH], viewport->size.width);
+
+  if (!auto_or_unset (values[SVG_PROPERTY_HEIGHT]))
+    rect->bounds.size.height = svg_number_get (values[SVG_PROPERTY_HEIGHT],viewport->size.height);
+
+  resolve_rx (element, viewport, current, &rx, &ry);
+
+  for (unsigned int i = 0; i < 4; i++)
+    {
+      rect->corner[i].width = rx;
+      rect->corner[i].height = ry;
+    }
+}
+
+double *
+svg_element_get_polyline (SvgElement            *element,
+                          unsigned int          *n_coords,
+                          gboolean              *closed,
+                          const graphene_rect_t *viewport,
+                          gboolean               current)
+{
+  SvgValue **values;
+  double *coords;
+
+  g_return_val_if_fail (element->type == SVG_ELEMENT_LINE ||
+                        element->type == SVG_ELEMENT_POLYLINE ||
+                        element->type == SVG_ELEMENT_POLYGON,
+                        NULL);
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  *closed = element->type == SVG_ELEMENT_POLYGON;
+
+  if (element->type == SVG_ELEMENT_LINE)
+    {
+      *n_coords = 4;
+      coords = g_new (double, *n_coords);
+
+      coords[0] = svg_number_get (values[SVG_PROPERTY_X1], viewport->size.width);
+      coords[1] = svg_number_get (values[SVG_PROPERTY_Y1], viewport->size.height);
+      coords[2] = svg_number_get (values[SVG_PROPERTY_X2], viewport->size.width);
+      coords[3] = svg_number_get (values[SVG_PROPERTY_Y2], viewport->size.height);
+    }
+  else
+    {
+      *n_coords = svg_numbers_get_length (values[SVG_PROPERTY_POINTS]);
+      coords = g_new (double, *n_coords);
+
+      for (unsigned int i = 0; i < *n_coords; i += 2)
+        {
+          coords[2 * i] = svg_numbers_get (values[SVG_PROPERTY_POINTS], 2 * i, viewport->size.width);
+          coords[2 * i + 1] = svg_numbers_get (values[SVG_PROPERTY_POINTS], 2 * i + 1, viewport->size.height);
+        }
+    }
+
+  return coords;
+}
+
+GskPath *
+svg_element_get_path (SvgElement            *element,
+                      const graphene_rect_t *viewport,
+                      gboolean               current)
+{
+  GskPathBuilder *builder;
+  SvgValue **values;
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  switch (element->type)
+    {
+    case SVG_ELEMENT_LINE:
+      builder = gsk_path_builder_new ();
+      if (svg_value_is_set (values[SVG_PROPERTY_X1]) &&
+          svg_value_is_set (values[SVG_PROPERTY_Y1]) &&
+          svg_value_is_set (values[SVG_PROPERTY_X2]) &&
+          svg_value_is_set (values[SVG_PROPERTY_Y2]))
+        {
+          double x1 = svg_number_get (values[SVG_PROPERTY_X1], viewport->size.width);
+          double y1 = svg_number_get (values[SVG_PROPERTY_Y1], viewport->size.height);
+          double x2 = svg_number_get (values[SVG_PROPERTY_X2], viewport->size.width);
+          double y2 = svg_number_get (values[SVG_PROPERTY_Y2], viewport->size.height);
+          gsk_path_builder_move_to (builder, x1, y1);
+          gsk_path_builder_line_to (builder, x2, y2);
+        }
+      return gsk_path_builder_free_to_path (builder);
+
+    case SVG_ELEMENT_POLYLINE:
+    case SVG_ELEMENT_POLYGON:
+      builder = gsk_path_builder_new ();
+      if (svg_value_is_set (values[SVG_PROPERTY_POINTS]))
+        {
+          SvgValue *v = values[SVG_PROPERTY_POINTS];
+          if (svg_numbers_get_length (v) > 0)
+            {
+              g_assert (svg_numbers_get_unit (v, 0) != SVG_UNIT_PERCENTAGE);
+              g_assert (svg_numbers_get_unit (v, 1) != SVG_UNIT_PERCENTAGE);
+
+              gsk_path_builder_move_to (builder,
+                                        svg_numbers_get (v, 0, 1),
+                                        svg_numbers_get (v, 1, 1));
+
+              for (unsigned int i = 2; i + 1 < svg_numbers_get_length (v); i += 2)
+                {
+                  g_assert (svg_numbers_get_unit (v, i) != SVG_UNIT_PERCENTAGE);
+                  g_assert (svg_numbers_get_unit (v, i + 1) != SVG_UNIT_PERCENTAGE);
+
+                  gsk_path_builder_line_to (builder,
+                                            svg_numbers_get (v, i, 1),
+                                            svg_numbers_get (v, i + 1, 1));
+                }
+              if (element->type == SVG_ELEMENT_POLYGON)
+                gsk_path_builder_close (builder);
+            }
+        }
+      return gsk_path_builder_free_to_path (builder);
+
+    case SVG_ELEMENT_CIRCLE:
+      builder = gsk_path_builder_new ();
+      if (svg_value_is_set (values[SVG_PROPERTY_CX]) &&
+          svg_value_is_set (values[SVG_PROPERTY_CY]) &&
+          svg_value_is_set (values[SVG_PROPERTY_R]))
+        {
+          double cx = svg_number_get (values[SVG_PROPERTY_CX], viewport->size.width);
+          double cy = svg_number_get (values[SVG_PROPERTY_CY], viewport->size.height);
+          double r = svg_number_get (values[SVG_PROPERTY_R], normalized_diagonal (viewport));
+          gsk_path_builder_add_circle (builder, &GRAPHENE_POINT_INIT (cx, cy), r);
+        }
+      return gsk_path_builder_free_to_path (builder);
+
+    case SVG_ELEMENT_ELLIPSE:
+      builder = gsk_path_builder_new ();
+      if (svg_value_is_set (values[SVG_PROPERTY_CX]) &&
+          svg_value_is_set (values[SVG_PROPERTY_CY]) &&
+          svg_value_is_set (values[SVG_PROPERTY_RX]) &&
+          svg_value_is_set (values[SVG_PROPERTY_RY]))
+        {
+          double cx = svg_number_get (values[SVG_PROPERTY_CX], viewport->size.width);
+          double cy = svg_number_get (values[SVG_PROPERTY_CY], viewport->size.height);
+          double rx, ry;
+          resolve_rx (element, viewport, current, &rx, &ry);
+          path_builder_add_ellipse (builder, cx, cy, rx, ry);
+        }
+      return gsk_path_builder_free_to_path (builder);
+
+    case SVG_ELEMENT_RECT:
+      builder = gsk_path_builder_new ();
+      if (svg_value_is_set (values[SVG_PROPERTY_X]) &&
+          svg_value_is_set (values[SVG_PROPERTY_Y]) &&
+          svg_value_is_set (values[SVG_PROPERTY_WIDTH]) &&
+          svg_value_is_set (values[SVG_PROPERTY_HEIGHT]) &&
+          svg_value_is_set (values[SVG_PROPERTY_RX]) &&
+          svg_value_is_set (values[SVG_PROPERTY_RY]))
+        {
+          double x = svg_number_get (values[SVG_PROPERTY_X], viewport->size.width);
+          double y = svg_number_get (values[SVG_PROPERTY_Y], viewport->size.height);
+          double width = svg_value_is_auto (values[SVG_PROPERTY_WIDTH]) ? 0 : svg_number_get (values[SVG_PROPERTY_WIDTH], viewport->size.width);
+          double height = svg_value_is_auto (values[SVG_PROPERTY_HEIGHT]) ? 0 : svg_number_get (values[SVG_PROPERTY_HEIGHT],viewport->size.height);
+          double rx, ry;
+          resolve_rx (element, viewport, current, &rx, &ry);
+          if (rx == 0 || ry == 0)
+            gsk_path_builder_add_rect (builder, &GRAPHENE_RECT_INIT (x, y, width, height));
+          else
+            gsk_path_builder_add_rounded_rect (builder,
+                                               &(GskRoundedRect) {
+                                                 .bounds = GRAPHENE_RECT_INIT (x, y, width, height),
+                                                 .corner = {
+                                                   GRAPHENE_SIZE_INIT (rx, ry),
+                                                   GRAPHENE_SIZE_INIT (rx, ry),
+                                                   GRAPHENE_SIZE_INIT (rx, ry),
+                                                   GRAPHENE_SIZE_INIT (rx, ry),
+                                                 }
+                                              });
+        }
+      return gsk_path_builder_free_to_path (builder);
+
+    case SVG_ELEMENT_PATH:
+      if (svg_value_is_set (values[SVG_PROPERTY_PATH]) &&
+          svg_path_get_gsk (values[SVG_PROPERTY_PATH]))
+        {
+          return gsk_path_ref (svg_path_get_gsk (values[SVG_PROPERTY_PATH]));
+        }
+      else
+        {
+          builder = gsk_path_builder_new ();
+          return gsk_path_builder_free_to_path (builder);
+        }
+      break;
+
+    case SVG_ELEMENT_USE:
+      {
+        SvgElement *use_element = svg_href_get_shape (element->current[SVG_PROPERTY_HREF]);
+        if (use_element)
+          {
+            return svg_element_get_path (use_element, viewport, current);
+          }
+        else
+          {
+            builder = gsk_path_builder_new ();
+            return gsk_path_builder_free_to_path (builder);
+          }
+      }
+    case SVG_ELEMENT_GROUP:
+    case SVG_ELEMENT_CLIP_PATH:
+    case SVG_ELEMENT_MASK:
+    case SVG_ELEMENT_DEFS:
+    case SVG_ELEMENT_LINEAR_GRADIENT:
+    case SVG_ELEMENT_RADIAL_GRADIENT:
+    case SVG_ELEMENT_PATTERN:
+    case SVG_ELEMENT_MARKER:
+    case SVG_ELEMENT_TEXT:
+    case SVG_ELEMENT_TSPAN:
+    case SVG_ELEMENT_SVG:
+    case SVG_ELEMENT_IMAGE:
+    case SVG_ELEMENT_FILTER:
+    case SVG_ELEMENT_SYMBOL:
+    case SVG_ELEMENT_SWITCH:
+    case SVG_ELEMENT_LINK:
+    case SVG_ELEMENT_VIEW:
+      g_error ("Attempt to get the path of a %s", svg_element_type_get_name (element->type));
+      break;
+    default:
+      g_assert_not_reached ();
+    }
+}
+
+GskPath *
+svg_element_get_current_path (SvgElement            *element,
+                              const graphene_rect_t *viewport)
+{
+  if (element->path)
+    {
+      double rx, ry;
+
+      switch (element->type)
+        {
+        case SVG_ELEMENT_LINE:
+          if (element->path_for.line.x1 != svg_number_get (element->current[SVG_PROPERTY_X1], viewport->size.width) ||
+              element->path_for.line.y1 != svg_number_get (element->current[SVG_PROPERTY_Y1], viewport->size.height) ||
+              element->path_for.line.x2 != svg_number_get (element->current[SVG_PROPERTY_X2], viewport->size.width) ||
+              element->path_for.line.y2 != svg_number_get (element->current[SVG_PROPERTY_Y2], viewport->size.height))
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_POLYLINE:
+        case SVG_ELEMENT_POLYGON:
+          if (!svg_value_equal (element->path_for.polyline.points, element->current[SVG_PROPERTY_POINTS]))
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_CIRCLE:
+          if (element->path_for.circle.cx != svg_number_get (element->current[SVG_PROPERTY_CX], viewport->size.width) ||
+              element->path_for.circle.cy != svg_number_get (element->current[SVG_PROPERTY_CY], viewport->size.height) ||
+              element->path_for.circle.r != svg_number_get (element->current[SVG_PROPERTY_R], normalized_diagonal (viewport)))
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_ELLIPSE:
+          resolve_rx (element, viewport, TRUE, &rx, &ry);
+          if (element->path_for.ellipse.cx != svg_number_get (element->current[SVG_PROPERTY_CX], viewport->size.width) ||
+              element->path_for.ellipse.cy != svg_number_get (element->current[SVG_PROPERTY_CY], viewport->size.height) ||
+              element->path_for.ellipse.rx != rx ||
+              element->path_for.ellipse.ry != ry)
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_RECT:
+          resolve_rx (element, viewport, TRUE, &rx, &ry);
+          if (element->path_for.rect.x != svg_number_get (element->current[SVG_PROPERTY_X], viewport->size.width) ||
+              element->path_for.rect.y != svg_number_get (element->current[SVG_PROPERTY_Y], viewport->size.height) ||
+              element->path_for.rect.w != svg_number_get (element->current[SVG_PROPERTY_WIDTH], viewport->size.width) ||
+              element->path_for.rect.h != svg_number_get (element->current[SVG_PROPERTY_HEIGHT], viewport->size.height) ||
+              element->path_for.rect.rx != rx ||
+              element->path_for.rect.ry != ry)
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_PATH:
+          if (element->path != svg_path_get_gsk (element->current[SVG_PROPERTY_PATH]))
+            {
+              g_clear_pointer (&element->path, gsk_path_unref);
+              g_clear_pointer (&element->measure, gsk_path_measure_unref);
+            }
+          break;
+
+        case SVG_ELEMENT_USE:
+          g_clear_pointer (&element->path, gsk_path_unref);
+          break;
+
+        case SVG_ELEMENT_GROUP:
+        case SVG_ELEMENT_CLIP_PATH:
+        case SVG_ELEMENT_MASK:
+        case SVG_ELEMENT_DEFS:
+        case SVG_ELEMENT_LINEAR_GRADIENT:
+        case SVG_ELEMENT_RADIAL_GRADIENT:
+        case SVG_ELEMENT_PATTERN:
+        case SVG_ELEMENT_MARKER:
+        case SVG_ELEMENT_TEXT:
+        case SVG_ELEMENT_TSPAN:
+        case SVG_ELEMENT_SVG:
+        case SVG_ELEMENT_IMAGE:
+        case SVG_ELEMENT_FILTER:
+        case SVG_ELEMENT_SYMBOL:
+        case SVG_ELEMENT_SWITCH:
+        case SVG_ELEMENT_LINK:
+        case SVG_ELEMENT_VIEW:
+          g_error ("Attempt to get the path of a %s", svg_element_type_get_name (element->type));
+          break;
+        default:
+          g_assert_not_reached ();
+        }
+    }
+
+  if (!element->path)
+    {
+      double rx, ry;
+      element->path = svg_element_get_path (element, viewport, TRUE);
+      element->valid_bounds = FALSE;
+
+      switch (element->type)
+        {
+        case SVG_ELEMENT_LINE:
+          element->path_for.line.x1 = svg_number_get (element->current[SVG_PROPERTY_X1], viewport->size.width);
+          element->path_for.line.y1 = svg_number_get (element->current[SVG_PROPERTY_Y1], viewport->size.height);
+          element->path_for.line.x2 = svg_number_get (element->current[SVG_PROPERTY_X2], viewport->size.width);
+          element->path_for.line.y2 = svg_number_get (element->current[SVG_PROPERTY_Y2], viewport->size.height);
+          break;
+
+        case SVG_ELEMENT_POLYLINE:
+        case SVG_ELEMENT_POLYGON:
+          g_clear_pointer (&element->path_for.polyline.points, svg_value_unref);
+          element->path_for.polyline.points = svg_value_ref (element->current[SVG_PROPERTY_POINTS]);
+          break;
+
+        case SVG_ELEMENT_CIRCLE:
+          element->path_for.circle.cx = svg_number_get (element->current[SVG_PROPERTY_CX], viewport->size.width);
+          element->path_for.circle.cy = svg_number_get (element->current[SVG_PROPERTY_CY], viewport->size.height);
+          element->path_for.circle.r = svg_number_get (element->current[SVG_PROPERTY_R], normalized_diagonal (viewport));
+          break;
+
+        case SVG_ELEMENT_ELLIPSE:
+          resolve_rx (element, viewport, TRUE, &rx, &ry);
+          element->path_for.ellipse.cx = svg_number_get (element->current[SVG_PROPERTY_CX], viewport->size.width);
+          element->path_for.ellipse.cy = svg_number_get (element->current[SVG_PROPERTY_CY], viewport->size.height);
+          element->path_for.ellipse.rx = rx;
+          element->path_for.ellipse.ry = ry;
+          break;
+
+        case SVG_ELEMENT_RECT:
+          resolve_rx (element, viewport, TRUE, &rx, &ry);
+          element->path_for.rect.x = svg_number_get (element->current[SVG_PROPERTY_X], viewport->size.width);
+          element->path_for.rect.y = svg_number_get (element->current[SVG_PROPERTY_Y], viewport->size.height);
+          element->path_for.rect.w = svg_number_get (element->current[SVG_PROPERTY_WIDTH], viewport->size.width);
+          element->path_for.rect.h = svg_number_get (element->current[SVG_PROPERTY_HEIGHT], viewport->size.height);
+          element->path_for.rect.rx = rx;
+          element->path_for.rect.ry = ry;
+          break;
+
+        case SVG_ELEMENT_PATH:
+        case SVG_ELEMENT_USE:
+          break;
+
+        case SVG_ELEMENT_GROUP:
+        case SVG_ELEMENT_CLIP_PATH:
+        case SVG_ELEMENT_MASK:
+        case SVG_ELEMENT_DEFS:
+        case SVG_ELEMENT_LINEAR_GRADIENT:
+        case SVG_ELEMENT_RADIAL_GRADIENT:
+        case SVG_ELEMENT_PATTERN:
+        case SVG_ELEMENT_MARKER:
+        case SVG_ELEMENT_TEXT:
+        case SVG_ELEMENT_TSPAN:
+        case SVG_ELEMENT_SVG:
+        case SVG_ELEMENT_IMAGE:
+        case SVG_ELEMENT_FILTER:
+        case SVG_ELEMENT_SYMBOL:
+        case SVG_ELEMENT_SWITCH:
+        case SVG_ELEMENT_LINK:
+        case SVG_ELEMENT_VIEW:
+        default:
+          g_assert_not_reached ();
+        }
+    }
+
+  return gsk_path_ref (element->path);
+}
+
+GskPathMeasure *
+svg_element_get_current_measure (SvgElement            *element,
+                                 const graphene_rect_t *viewport)
+{
+  if (!element->measure)
+    {
+      GskPath *path = svg_element_get_current_path (element, viewport);
+      element->measure = gsk_path_measure_new (path);
+      gsk_path_unref (path);
+    }
+
+  return gsk_path_measure_ref (element->measure);
+}
+
+gboolean
+svg_element_get_current_bounds (SvgElement            *element,
+                                const graphene_rect_t *viewport,
+                                GtkSvg                *svg,
+                                graphene_rect_t       *bounds)
+{
+  graphene_rect_t b;
+  gboolean has_any;
+  gboolean ret = FALSE;
+
+  graphene_rect_init_from_rect (&b, graphene_rect_zero ());
+
+  switch (element->type)
+    {
+    case SVG_ELEMENT_LINE:
+    case SVG_ELEMENT_POLYLINE:
+    case SVG_ELEMENT_POLYGON:
+    case SVG_ELEMENT_RECT:
+    case SVG_ELEMENT_CIRCLE:
+    case SVG_ELEMENT_ELLIPSE:
+    case SVG_ELEMENT_PATH:
+      if (!element->valid_bounds)
+        {
+          GskPath *path = svg_element_get_current_path (element, viewport);
+          if (!gsk_path_get_tight_bounds (element->path, &element->bounds))
+            graphene_rect_init (&element->bounds, 0, 0, 0, 0);
+          element->valid_bounds = TRUE;
+          gsk_path_unref (path);
+        }
+      graphene_rect_init_from_rect (&b, &element->bounds);
+      ret = TRUE;
+      break;
+    case SVG_ELEMENT_USE:
+      {
+        SvgElement *use_element = svg_href_get_shape (element->current[SVG_PROPERTY_HREF]);
+        if (use_element)
+          ret = svg_element_get_current_bounds (use_element, viewport, svg, &b);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_GROUP:
+    case SVG_ELEMENT_CLIP_PATH:
+    case SVG_ELEMENT_MASK:
+    case SVG_ELEMENT_PATTERN:
+    case SVG_ELEMENT_MARKER:
+    case SVG_ELEMENT_SVG:
+    case SVG_ELEMENT_SYMBOL:
+    case SVG_ELEMENT_SWITCH:
+    case SVG_ELEMENT_LINK:
+      has_any = FALSE;
+      for (SvgElement *sh = element->first_child; sh; sh = sh->next_sibling)
+        {
+          graphene_rect_t b2;
+
+          if (svg_enum_get (sh->current[SVG_PROPERTY_DISPLAY]) == DISPLAY_NONE)
+            continue;
+
+          if (svg_element_conditionally_excluded (sh, svg))
+            continue;
+
+          if (svg_element_get_current_bounds (sh, viewport, svg, &b2))
+            {
+              if (_gtk_bitmask_get (sh->attrs, SVG_PROPERTY_TRANSFORM))
+                {
+                   GskTransform *transform = svg_transform_get_gsk (sh->current[SVG_PROPERTY_TRANSFORM]);
+                   gsk_transform_transform_bounds (transform, &b2, &b2);
+                   gsk_transform_unref (transform);
+                }
+
+              if (!has_any)
+                graphene_rect_init_from_rect (&b, &b2);
+              else
+                graphene_rect_union (&b, &b2, &b);
+              has_any = TRUE;
+            }
+
+          if (element->type == SVG_ELEMENT_SWITCH)
+            break;
+        }
+      if (!has_any)
+        graphene_rect_init (&b, 0, 0, 0, 0);
+      ret = TRUE;
+      break;
+    case SVG_ELEMENT_TEXT:
+    case SVG_ELEMENT_TSPAN:
+      {
+        SvgElement *elt = element;
+        while (svg_element_get_element_type (elt) != SVG_ELEMENT_TEXT)
+          elt = svg_element_get_parent (elt);
+        if (!elt->valid_bounds)
+          g_critical ("No valid bounds for text");
+        graphene_rect_init_from_rect (&b, &elt->bounds);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_IMAGE:
+      {
+        double x, y, width, height;
+
+        x = viewport->origin.x + svg_number_get (element->current[SVG_PROPERTY_X], viewport->size.width);
+        y = viewport->origin.y + svg_number_get (element->current[SVG_PROPERTY_Y], viewport->size.height);
+        width = svg_number_get (element->current[SVG_PROPERTY_WIDTH], viewport->size.width);
+        height = svg_number_get (element->current[SVG_PROPERTY_HEIGHT], viewport->size.height);
+
+        graphene_rect_init (&b, x, y, width, height);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_DEFS:
+    case SVG_ELEMENT_LINEAR_GRADIENT:
+    case SVG_ELEMENT_RADIAL_GRADIENT:
+    case SVG_ELEMENT_FILTER:
+    case SVG_ELEMENT_VIEW:
+      break;
+    default:
+      g_assert_not_reached ();
+    }
+
+  graphene_rect_init_from_rect (bounds, &b);
+
+  return ret;
+}
+
+static double
+width_apply_weight (double width,
+                    double minwidth,
+                    double maxwidth,
+                    double weight)
+{
+  if (weight < 1)
+    {
+      g_assert_not_reached ();
+    }
+  else if (weight < 400)
+    {
+      double f = (400 - weight) / (400 - 1);
+      return lerp (f, width, minwidth);
+    }
+  else if (weight == 400)
+    {
+      return width;
+    }
+  else if (weight <= 1000)
+    {
+      double f = (weight - 400) / (1000 - 400);
+      return lerp (f, width, maxwidth);
+    }
+  else
+    {
+      g_assert_not_reached ();
+    }
+}
+
+GskStroke *
+svg_element_create_basic_stroke (SvgElement            *element,
+                                 const graphene_rect_t *viewport,
+                                 gboolean               current,
+                                 gboolean               allow_gpa,
+                                 double                 weight)
+{
+  GskStroke *stroke;
+  double width;
+  SvgValue **values;
+
+  if (current)
+    values = element->current;
+  else
+    values = element->base;
+
+  if (svg_value_is_set (values[SVG_PROPERTY_STROKE_WIDTH]))
+    width = svg_number_get (values[SVG_PROPERTY_STROKE_WIDTH], normalized_diagonal (viewport));
+  else
+    width = 1;
+
+  if (allow_gpa &&
+      svg_value_is_set (values[SVG_PROPERTY_STROKE_MINWIDTH]) &&
+      svg_value_is_set (values[SVG_PROPERTY_STROKE_MAXWIDTH]))
+    {
+      double min, max;
+
+      min = svg_number_get (values[SVG_PROPERTY_STROKE_MINWIDTH], width);
+      max = svg_number_get (values[SVG_PROPERTY_STROKE_MAXWIDTH], width);
+
+      width = width_apply_weight (width, min, max, weight);
+    }
+
+  stroke = gsk_stroke_new (width);
+
+  if (svg_value_is_set (values[SVG_PROPERTY_STROKE_LINECAP]))
+    gsk_stroke_set_line_cap (stroke, svg_enum_get (values[SVG_PROPERTY_STROKE_LINECAP]));
+  if (svg_value_is_set (values[SVG_PROPERTY_STROKE_LINEJOIN]))
+    gsk_stroke_set_line_join (stroke, svg_enum_get (values[SVG_PROPERTY_STROKE_LINEJOIN]));
+  if (svg_value_is_set (values[SVG_PROPERTY_STROKE_MITERLIMIT]))
+    gsk_stroke_set_miter_limit (stroke, svg_number_get (values[SVG_PROPERTY_STROKE_MITERLIMIT], 1));
+
+  return stroke;
+}
+
+gboolean
+svg_element_get_current_stroke_bounds (SvgElement            *element,
+                                       const graphene_rect_t *viewport,
+                                       GtkSvg                *svg,
+                                       graphene_rect_t       *bounds)
+{
+  graphene_rect_t b;
+  gboolean has_any;
+  gboolean ret = FALSE;
+
+  graphene_rect_init_from_rect (&b, graphene_rect_zero ());
+
+  switch (element->type)
+    {
+    case SVG_ELEMENT_LINE:
+    case SVG_ELEMENT_POLYLINE:
+    case SVG_ELEMENT_POLYGON:
+    case SVG_ELEMENT_RECT:
+    case SVG_ELEMENT_CIRCLE:
+    case SVG_ELEMENT_ELLIPSE:
+    case SVG_ELEMENT_PATH:
+      {
+        GskPath *path = svg_element_get_current_path (element, viewport);
+        GskStroke *stroke = svg_element_create_basic_stroke (element, viewport, TRUE, TRUE, 400);
+        if (!gsk_path_get_stroke_bounds (element->path, stroke, &b))
+          graphene_rect_init (&b, 0, 0, 0, 0);
+        gsk_path_unref (path);
+        gsk_stroke_free (stroke);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_USE:
+      {
+        SvgElement *use_element = svg_href_get_shape (element->current[SVG_PROPERTY_HREF]);
+        if (use_element)
+          ret = svg_element_get_current_stroke_bounds (use_element, viewport, svg, &b);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_GROUP:
+    case SVG_ELEMENT_CLIP_PATH:
+    case SVG_ELEMENT_MASK:
+    case SVG_ELEMENT_PATTERN:
+    case SVG_ELEMENT_MARKER:
+    case SVG_ELEMENT_SVG:
+    case SVG_ELEMENT_SYMBOL:
+    case SVG_ELEMENT_SWITCH:
+    case SVG_ELEMENT_LINK:
+      has_any = FALSE;
+      for (SvgElement *sh = element->first_child; sh; sh = sh->next_sibling)
+        {
+          graphene_rect_t b2;
+
+          if (svg_enum_get (sh->current[SVG_PROPERTY_DISPLAY]) == DISPLAY_NONE)
+            continue;
+
+          if (svg_element_conditionally_excluded (sh, svg))
+            continue;
+
+          if (svg_element_get_current_stroke_bounds (sh, viewport, svg, &b2))
+            {
+              if (!has_any)
+                graphene_rect_init_from_rect (&b, &b2);
+              else
+                graphene_rect_union (&b, &b2, &b);
+              has_any = TRUE;
+            }
+
+          if (element->type == SVG_ELEMENT_SWITCH)
+            break;
+        }
+      if (!has_any)
+        graphene_rect_init (&b, 0, 0, 0, 0);
+      ret = TRUE;
+      break;
+    case SVG_ELEMENT_TEXT:
+    case SVG_ELEMENT_TSPAN:
+      if (!element->valid_bounds)
+        g_critical ("No valid bounds for text");
+      graphene_rect_init_from_rect (&b, &element->bounds);
+      break;
+    case SVG_ELEMENT_IMAGE:
+      {
+        double x, y, width, height;
+
+        x = viewport->origin.x + svg_number_get (element->current[SVG_PROPERTY_X], viewport->size.width);
+        y = viewport->origin.y + svg_number_get (element->current[SVG_PROPERTY_Y], viewport->size.height);
+        width = svg_number_get (element->current[SVG_PROPERTY_WIDTH], viewport->size.width);
+        height = svg_number_get (element->current[SVG_PROPERTY_HEIGHT], viewport->size.height);
+
+        graphene_rect_init (&b, x, y, width, height);
+        ret = TRUE;
+      }
+      break;
+    case SVG_ELEMENT_DEFS:
+    case SVG_ELEMENT_LINEAR_GRADIENT:
+    case SVG_ELEMENT_RADIAL_GRADIENT:
+    case SVG_ELEMENT_FILTER:
+    case SVG_ELEMENT_VIEW:
+      break;
+    default:
+      g_assert_not_reached ();
+    }
+
+  graphene_rect_init_from_rect (bounds, &b);
+
+  return ret;
+}
+
+void
+svg_element_add_color_stop (SvgElement   *element,
+                            SvgColorStop *stop)
+{
+  g_assert (gtk_css_node_get_parent (svg_color_stop_get_css_node (stop)) == element->css_node);
+  g_assert (svg_element_type_is_gradient (element->type));
+  g_ptr_array_add (element->color_stops, stop);
+
+  if (element->color_stop_observer)
+    gtk_array_list_model_item_added (element->color_stop_observer);
+}
+
+void
+svg_element_add_filter (SvgElement *element,
+                        SvgFilter  *filter)
+{
+  g_assert (gtk_css_node_get_parent (svg_filter_get_css_node (filter)) == element->css_node);
+  g_assert (svg_element_type_is_filter (element->type));
+  g_ptr_array_add (element->filters, filter);
+
+  if (element->filter_observer)
+    gtk_array_list_model_item_added (element->filter_observer);
+}
+
+/* Child is transfer-full */
+void
+svg_element_insert_after (SvgElement *element,
+                          SvgElement *child,
+                          SvgElement *sibling)
+{
+  g_assert (svg_element_type_is_container (element->type) || element->type == SVG_ELEMENT_USE);
+  g_assert (sibling == NULL || sibling->parent == element);
+
+  child->parent = element;
+
+  if (element->first_child == NULL)
+    {
+      child->prev_sibling = child->next_sibling = NULL;
+      element->first_child = element->last_child = child;
+    }
+  else
+    {
+      child->prev_sibling = sibling;
+      if (sibling)
+        {
+          child->next_sibling = sibling->next_sibling;
+          sibling->next_sibling = child;
+          if (sibling == element->last_child)
+            element->last_child = child;
+          else
+            child->next_sibling->prev_sibling = child;
+        }
+      else
+        {
+          child->next_sibling = element->first_child;
+          element->first_child->prev_sibling = child;
+          element->first_child = child;
+        }
+    }
+
+  gtk_css_node_insert_after (element->css_node,
+                             child->css_node,
+                             sibling ? sibling->css_node : NULL);
+
+  if (child->type == SVG_ELEMENT_TSPAN)
+    {
+      SvgElement *text_parent = NULL;
+
+      if (svg_element_type_is_text (element->type))
+        text_parent = element;
+      else if (element->parent &&
+               element->type == SVG_ELEMENT_LINK &&
+               svg_element_type_is_text (element->parent->type))
+        text_parent = element->parent;
+
+      if (text_parent)
+        {
+          TextNode node = {
+            .type = TEXT_NODE_SHAPE,
+            .shape = { .shape = child }
+          };
+          g_array_append_val (text_parent->text, node);
+        }
+    }
+
+  /* for lack of a better approach, assume the new shape has no deps */
+  child->next = element->first;
+  element->first = child;
+
+  if (element->child_observer)
+    gtk_list_list_model_item_added (element->child_observer, child);
+}
+
+/* Child is transfer-full */
+void
+svg_element_append_child (SvgElement *element,
+                          SvgElement *child)
+{
+  svg_element_insert_after (element, child, element->last_child);
+}
+
+/* Child is transfer-full */
+void
+svg_element_prepend_child (SvgElement *element,
+                           SvgElement *child)
+{
+  svg_element_insert_after (element, child, element->last_child);
+}
+
+unsigned int
+svg_element_get_n_children (SvgElement *element)
+{
+  unsigned int n = 0;
+
+  for (SvgElement *s = element->first_child; s; s = s->next_sibling)
+    n++;
+
+  return n;
+}
+
+SvgElement *
+svg_element_get_child (SvgElement   *element,
+                       unsigned int  idx)
+{
+  unsigned int n = 0;
+
+  for (SvgElement *s = element->first_child; s; s = s->next_sibling)
+    {
+      if (n == idx)
+        return s;
+      n++;
+    }
+
+  return NULL;
+}
+
+void
+svg_element_add_animation (SvgElement   *shape,
+                           SvgAnimation *animation)
+{
+  if (!shape->animations)
+    shape->animations = g_ptr_array_new_with_free_func ((GDestroyNotify) svg_animation_free);
+  g_ptr_array_add (shape->animations, animation);
+
+  if (shape->first_animation == NULL)
+    {
+      shape->first_animation = shape->last_animation = animation;
+      animation->prev_sibling = animation->next_sibling = NULL;
+    }
+  else
+    {
+      shape->last_animation->next_sibling = animation;
+      animation->prev_sibling = shape->last_animation;
+      animation->next_sibling = NULL;
+      shape->last_animation = animation;
+    }
+
+  if (shape->animation_observer)
+    gtk_list_list_model_item_added (shape->animation_observer, animation);
+}
+
+void
+svg_animation_delete (SvgAnimation *animation)
+{
+  SvgElement *shape = animation->shape;
+  SvgAnimation *previous = animation->prev_sibling;
+
+  if (shape->last_animation == animation)
+    shape->last_animation = animation->prev_sibling;
+  if (shape->first_animation == animation)
+    shape->first_animation = animation->next_sibling;
+  if (animation->prev_sibling)
+    animation->prev_sibling->next_sibling = animation->next_sibling;
+  if (animation->next_sibling)
+    animation->next_sibling->prev_sibling = animation->prev_sibling;
+
+  svg_animation_drop_and_free (g_object_ref (animation));
+  g_ptr_array_remove (shape->animations, animation);
+
+  if (shape->animation_observer)
+    gtk_list_list_model_item_removed (shape->animation_observer, previous);
+}
+
+/* What we call base value here is roughly the 'cascaded' value of CSS:
+ * the result of applying styles. We carry an 'important' boolean to
+ * indicate whether the applied styles was !important. Values that are
+ * important have higher priority than animations.
+ */
+void
+svg_element_set_base_value (SvgElement  *element,
+                            SvgProperty  attr,
+                            SvgValue    *value,
+                            gboolean     important)
+{
+  g_clear_pointer (&element->base[attr], svg_value_unref);
+  if (value)
+    element->base[attr] = svg_value_ref (value);
+  else
+    element->base[attr] = svg_property_ref_initial_value (attr,
+                                                          svg_element_get_element_type (element),
+                                                          svg_element_get_parent (element) != NULL);
+  element->important = _gtk_bitmask_set (element->important, attr, important);
+}
+
+void
+svg_element_take_base_value (SvgElement  *element,
+                             SvgProperty  attr,
+                             SvgValue    *value)
+{
+  svg_element_set_base_value (element, attr, value, FALSE);
+  if (value)
+    svg_value_unref (value);
+}
+
+SvgValue *
+svg_element_get_base_value (SvgElement  *element,
+                            SvgProperty  attr)
+{
+  return element->base[attr];
+}
+
+void
+svg_element_set_specified_value (SvgElement  *element,
+                                 SvgProperty  attr,
+                                 SvgValue    *value)
+{
+  unsigned int i;
+  PropertyValue *v;
+
+  if (_gtk_bitmask_get (element->attrs, attr))
+    {
+      for (i = 0; i < element->specified->len; i++)
+        {
+          v = &g_array_index (element->specified, PropertyValue, i);
+
+          if (v->attr == attr)
+            {
+              if (svg_value_equal (value, v->value))
+                return;
+              g_clear_pointer (&v->value, svg_value_unref);
+              break;
+            }
+        }
+    }
+  else
+    i = element->specified->len;
+
+  if (i == element->specified->len)
+    {
+      PropertyValue pv = { attr, NULL };
+
+      if (value == NULL)
+        return;
+      g_array_append_val (element->specified, pv);
+    }
+
+  v = &g_array_index (element->specified, PropertyValue, i);
+  g_assert (v->attr == attr);
+  g_assert (v->value == NULL);
+  if (value)
+    v->value = svg_value_ref (value);
+
+  element->attrs = _gtk_bitmask_set (element->attrs, attr, value != NULL);
+
+  svg_element_changed (element, attr);
+}
+
+void
+svg_element_take_specified_value (SvgElement  *element,
+                                  SvgProperty  attr,
+                                  SvgValue    *value)
+{
+  svg_element_set_specified_value (element, attr, value);
+  if (value)
+    svg_value_unref (value);
+}
+
+SvgValue *
+svg_element_get_specified_value (SvgElement  *element,
+                                 SvgProperty  attr)
+{
+  for (unsigned int i = 0; i < element->specified->len; i++)
+    {
+      PropertyValue *v = &g_array_index (element->specified, PropertyValue, i);
+
+      if (v->attr == attr)
+        return v->value;
+    }
+
+  return NULL;
+}
+
+gboolean
+svg_element_is_specified (SvgElement  *element,
+                          SvgProperty  attr)
+{
+  return _gtk_bitmask_get (element->attrs, attr);
+}
+
+gboolean
+svg_element_is_important (SvgElement  *element,
+                          SvgProperty  attr)
+{
+  return _gtk_bitmask_get (element->important, attr);
+}
+
+void
+svg_element_set_current_value (SvgElement  *element,
+                               SvgProperty  attr,
+                               SvgValue    *value)
+{
+  if (element->current[attr] == value)
+    return;
+
+  if (value)
+    svg_value_ref (value);
+  g_clear_pointer (&element->current[attr], svg_value_unref);
+  element->current[attr] = value;
+}
+
+SvgValue *
+svg_element_get_current_value (SvgElement  *element,
+                               SvgProperty  attr)
+{
+  return element->current[attr];
+}
+
+SvgElementType
+svg_element_get_element_type (SvgElement *element)
+{
+  return element->type;
+}
+
+void
+svg_element_set_id (SvgElement *element,
+                    const char *id)
+{
+  if (!g_set_str (&element->id, id))
+    return;
+
+  gtk_css_node_set_id (element->css_node, g_quark_from_string (id));
+  g_object_notify_by_pspec (G_OBJECT (element), svg_element_prop[SVG_ELEMENT_PROP_ID]);
+}
+
+const char *
+svg_element_get_id (SvgElement *element)
+{
+  return element->id;
+}
+
+void
+svg_element_set_inline_style (SvgElement           *element,
+                              const char           *style,
+                              const GtkSvgLocation *location)
+{
+  g_set_str (&element->style, style);
+  element->style_loc = *location;
+}
+
+const char *
+svg_element_get_inline_style (SvgElement     *element,
+                              GtkSvgLocation *location)
+{
+  *location = element->style_loc;
+  return element->style;
+}
+
+unsigned int
+svg_element_get_n_styles (SvgElement *element)
+{
+  return element->styles->len;
+}
+
+const char *
+svg_element_get_style (SvgElement   *element,
+                       unsigned int  pos)
+{
+  StyleElt *elt;
+
+  g_return_val_if_fail (pos < element->styles->len, NULL);
+
+  elt = g_ptr_array_index (element->styles, pos);
+
+  return g_bytes_get_data (elt->content, NULL);
+}
+
+const char *
+svg_element_get_style_media (SvgElement   *element,
+                             unsigned int  pos)
+{
+  StyleElt *elt;
+
+  g_return_val_if_fail (pos < element->styles->len, NULL);
+
+  elt = g_ptr_array_index (element->styles, pos);
+
+  return elt->media;
+}
+
+void
+svg_element_set_style (SvgElement   *element,
+                       unsigned int  pos,
+                       const char   *style)
+{
+  StyleElt *elt;
+  unsigned int i;
+
+  g_return_if_fail (pos <= element->styles->len);
+
+  if (pos < element->styles->len)
+    {
+      elt = g_ptr_array_index (element->styles, pos);
+      g_bytes_unref (elt->content);
+    }
+  else
+    {
+      elt = g_new0 (StyleElt, 1);
+      g_ptr_array_add (element->styles, elt);
+    }
+
+  elt->content = g_bytes_new_take (g_strdup (style), strlen (style));
+
+  for (i = element->styles->len; i > 0; i--)
+    {
+      elt = g_ptr_array_index (element->styles, i - 1);
+      if (g_bytes_get_size (elt->content) > 0)
+        break;
+    }
+
+  g_ptr_array_set_size (element->styles, i);
+}
+
+void
+svg_element_clear_style (SvgElement *element)
+{
+  g_ptr_array_set_size (element->styles, 0);
+}
+
+void
+svg_element_parse_classes (SvgElement *element,
+                           const char *classes)
+{
+  svg_element_take_classes (element, parse_strv (classes));
+}
+
+void
+svg_element_take_classes (SvgElement *element,
+                          GStrv       classes)
+{
+  g_strfreev (element->classes);
+  element->classes = classes;
+  gtk_css_node_set_classes (element->css_node, (const char **) element->classes);
+}
+
+GStrv
+svg_element_get_classes (SvgElement *element)
+{
+  return element->classes;
+}
+
+void
+svg_element_add_title (SvgElement    *element,
+                       PangoLanguage *lang,
+                       const char    *title)
+{
+  LangString l;
+
+  l.type = "title";
+  l.lang = lang;
+  l.string = g_strdup (title);
+
+  g_array_append_val (element->lang_strings, l);
+}
+
+const char *
+svg_element_get_title (SvgElement *element)
+{
+  return element->title;
+}
+
+void
+svg_element_add_description (SvgElement    *element,
+                             PangoLanguage *lang,
+                             const char    *description)
+{
+  LangString l;
+
+  l.type = "desc";
+  l.lang = lang;
+  l.string = g_strdup (description);
+
+  g_array_append_val (element->lang_strings, l);
+}
+
+const char *
+svg_element_get_description (SvgElement *element)
+{
+  return element->description;
+}
+
+static const char *
+pick_best_lang_string (GArray        *ls,
+                       const char    *type,
+                       PangoLanguage *lang)
+{
+  const char *string = NULL;
+
+  for (unsigned int i = 0; i < ls->len; i++)
+    {
+      LangString *l = &g_array_index (ls, LangString, i);
+
+      if (strcmp (l->type, type) != 0)
+        continue;
+
+      if (string == NULL)
+        string = l->string;
+
+      if (l->lang == lang)
+        {
+          string = l->string;
+          break;
+        }
+    }
+
+  return string;
+}
+
+void
+svg_element_set_language (SvgElement    *element,
+                          PangoLanguage *lang)
+{
+  g_set_str (&element->title, pick_best_lang_string (element->lang_strings, "title", lang));
+  g_set_str (&element->description, pick_best_lang_string (element->lang_strings, "desc", lang));
+  g_clear_pointer (&element->lang_strings, g_array_unref);
+}
+
+GtkCssNode *
+svg_element_get_css_node (SvgElement *element)
+{
+  return element->css_node;
+}
+
+void
+svg_element_set_origin (SvgElement     *element,
+                        GtkSvgLocation *location)
+{
+  element->line = location->lines;
+}
+
+void
+svg_element_get_origin (SvgElement     *element,
+                        GtkSvgLocation *location)
+{
+  location->lines = element->line;
+}
+
+void
+svg_element_delete (SvgElement *element)
+{
+  SvgElement *prev, *next, *parent;
+
+  if (element->text)
+    {
+      for (unsigned int i = 0; i < element->text->len; i++)
+        {
+          TextNode *node = &g_array_index (element->text, TextNode, i);
+          if (node->type == TEXT_NODE_SHAPE && node->shape.shape == element)
+            {
+              g_array_remove_index (element->text, i);
+              break;
+            }
+        }
+    }
+
+  prev = element->prev_sibling;
+  next = element->next_sibling;
+  parent = element->parent;
+
+  if (parent)
+    {
+      if (parent->first_child == element)
+        {
+          parent->first_child = element->next_sibling;
+          if (parent->first_child)
+            parent->first_child->prev_sibling = NULL;
+        }
+      if (parent->last_child == element)
+        {
+          parent->last_child = element->prev_sibling;
+          if (parent->last_child)
+            parent->last_child->next_sibling = NULL;
+        }
+    }
+
+  if (prev)
+    prev->next_sibling = next;
+  if (next)
+    next->prev_sibling = prev;
+
+  element->prev_sibling = NULL;
+  element->next_sibling = NULL;
+  element->parent = NULL;
+
+  /* keep the update order up-to-date */
+  if (parent->first == element)
+    {
+      parent->first = element->next;
+    }
+  else
+    {
+      for (SvgElement *t = parent->first; t; t = t->next)
+        {
+          if (t->next == element)
+            {
+              t->next = element->next;
+              break;
+            }
+        }
+    }
+
+  if (parent && parent->child_observer)
+    gtk_list_list_model_item_removed (parent->child_observer, prev);
+
+  g_object_unref (element);
+}
+
+SvgElement *
+svg_element_get_parent (SvgElement *element)
+{
+  return element->parent;
+}
+
+/* Given two elements, find ancestors
+ * such that ancestor0 != ancestor1 and
+ * ancestor0->parent == ancestor1->parent
+ */
+gboolean
+svg_element_common_ancestor (SvgElement  *element0,
+                             SvgElement  *element1,
+                             SvgElement **ancestor0,
+                             SvgElement **ancestor1)
+{
+  SvgElement *parent0, *parent1;
+  unsigned int depth0, depth1;
+
+  depth0 = 0;
+  parent0 = element0;
+  while (parent0->parent)
+    {
+      parent0 = parent0->parent;
+      depth0++;
+    }
+
+  depth1 = 0;
+  parent1 = element1;
+  while (parent1->parent)
+    {
+      parent1 = parent1->parent;
+      depth1++;
+    }
+
+  if (parent0 != parent1)
+    return FALSE;
+
+  while (depth0 > depth1)
+    {
+      element0 = element0->parent;
+      depth0--;
+    }
+
+  while (depth1 > depth0)
+    {
+      element1 = element1->parent;
+      depth1--;
+    }
+
+  while (element0->parent != element1->parent)
+    {
+      element0 = element0->parent;
+      element1 = element1->parent;
+    }
+
+  g_assert (element0->parent == element1->parent);
+
+  *ancestor0 = element0;
+  *ancestor1 = element1;
+
+  return TRUE;
+}
+
+uint64_t
+svg_element_get_states (SvgElement *element)
+{
+  return element->gpa.states;
+}
+
+void
+svg_element_set_states (SvgElement *element,
+                        uint64_t    states)
+{
+  element->gpa.states = states;
+}
+
+gboolean
+svg_element_equal (SvgElement *element1,
+                   SvgElement *element2)
+{
+  if (element1 == element2)
+    return TRUE;
+
+  if (!element1 || !element2)
+    return FALSE;
+
+  if (element1->type != element2->type ||
+      g_strcmp0 (svg_element_get_id (element1), svg_element_get_id (element2)) != 0)
+    return FALSE;
+
+  if (g_strcmp0 (svg_element_get_id (element1), svg_element_get_id (element2)) != 0)
+    return FALSE;
+
+  if (g_strcmp0 (element1->style, element2->style) != 0)
+    return FALSE;
+
+  if (element1->classes && element2->classes)
+    {
+      if (!g_strv_equal ((const char * const *) element1->classes,
+                         (const char * const *) element2->classes))
+        return FALSE;
+    }
+  else
+    {
+      if (element1->classes != element2->classes)
+        return FALSE;
+    }
+
+  for (unsigned int i = 0; i < N_SVG_PROPERTIES; i++)
+    {
+      SvgValue *v1 = svg_element_get_specified_value (element1, i);
+      SvgValue *v2 = svg_element_get_specified_value (element2, i);
+
+      if (v1 == v2)
+        continue;
+
+      if ((v1 && !v2) || (v2 && !v1))
+        return FALSE;
+
+      if (!svg_value_equal (v1, v2))
+        return FALSE;
+    }
+
+  if (svg_element_type_is_container (element1->type))
+    {
+      SvgElement *s1, *s2;
+
+      for (s1 = element1->first_child, s2 = element2->first_child;
+           s1 != NULL || s2 != NULL;
+           s1 = s1->next_sibling, s2 = s2->next_sibling)
+        {
+          if (!svg_element_equal (s1, s2))
+            return FALSE;
+        }
+    }
+
+  if (svg_element_type_is_gradient (element1->type))
+    {
+      if (element1->color_stops->len != element2->color_stops->len)
+        return FALSE;
+
+      for (unsigned int i = 0; i < element1->color_stops->len; i++)
+        {
+          SvgColorStop *s1 = g_ptr_array_index (element1->color_stops, i);
+          SvgColorStop *s2 = g_ptr_array_index (element2->color_stops, i);
+
+          if (!svg_color_stop_equal (s1, s2))
+            return FALSE;
+        }
+    }
+
+  if (svg_element_type_is_filter (element1->type))
+    {
+      if (element1->filters->len != element2->filters->len)
+        return FALSE;
+
+      for (unsigned int i = 0; i < element1->filters->len; i++)
+        {
+          SvgFilter *f1 = g_ptr_array_index (element1->filters, i);
+          SvgFilter *f2 = g_ptr_array_index (element2->filters, i);
+
+          if (!svg_filter_equal (f1, f2))
+            return FALSE;
+        }
+    }
+
+  if (element1->animations || element2->animations)
+    {
+      if (!element1->animations || !element2->animations)
+        return FALSE;
+
+      if (element1->animations->len != element2->animations->len)
+        return FALSE;
+
+      for (unsigned int i = 0; i < element1->animations->len; i++)
+        {
+          SvgAnimation *a1 = g_ptr_array_index (element1->animations, i);
+          SvgAnimation *a2 = g_ptr_array_index (element2->animations, i);
+
+          if (!svg_animation_equal (a1, a2))
+            return FALSE;
+        }
+    }
+
+  return TRUE;
+}
+
+void
+svg_element_foreach (SvgElement       *element,
+                     SvgShapeCallback  callback,
+                     gpointer          user_data)
+{
+  callback (element, user_data);
+
+  for (SvgElement *s = element->first_child; s; s = s->next_sibling)
+    svg_element_foreach (s, callback, user_data);
+}
+
+void
+svg_element_set_gpa_width (SvgElement *element,
+                           SvgValue   *value)
+{
+  g_clear_pointer (&element->gpa.width, svg_value_unref);
+  if (value)
+    element->gpa.width = svg_value_ref (value);
+}
+
+SvgValue *
+svg_element_get_gpa_width (SvgElement *element)
+{
+  return element->gpa.width;
+}
+
+void
+svg_element_set_gpa_fill (SvgElement *element,
+                          SvgValue   *value)
+{
+  g_clear_pointer (&element->gpa.fill, svg_value_unref);
+  if (value)
+    element->gpa.fill = svg_value_ref (value);
+}
+
+SvgValue *
+svg_element_get_gpa_fill (SvgElement *element)
+{
+  return element->gpa.fill;
+}
+
+void
+svg_element_set_gpa_stroke (SvgElement *element,
+                            SvgValue   *value)
+{
+  g_clear_pointer (&element->gpa.stroke, svg_value_unref);
+  if (value)
+    element->gpa.stroke = svg_value_ref (value);
+}
+
+SvgValue *
+svg_element_get_gpa_stroke (SvgElement *element)
+{
+  return element->gpa.stroke;
+}
+
+void
+svg_element_set_gpa_transition (SvgElement    *element,
+                                GpaTransition  transition,
+                                GpaEasing      easing,
+                                int64_t        duration,
+                                int64_t        delay)
+{
+  element->gpa.transition = transition;
+  element->gpa.transition_easing = easing;
+  element->gpa.transition_duration = duration;
+  element->gpa.transition_delay = delay;
+}
+
+void
+svg_element_get_gpa_transition (SvgElement    *element,
+                                GpaTransition *transition,
+                                GpaEasing     *easing,
+                                int64_t       *duration,
+                                int64_t       *delay)
+{
+  if (transition)
+    *transition = element->gpa.transition;
+  if (easing)
+    *easing = element->gpa.transition_easing;
+  if (duration)
+    *duration = element->gpa.transition_duration;
+  if (delay)
+    *delay = element->gpa.transition_delay;
+}
+
+void
+svg_element_set_gpa_animation (SvgElement   *element,
+                               GpaAnimation  animation,
+                               GpaEasing     easing,
+                               int64_t       duration,
+                               double        repeat,
+                               double        segment)
+{
+  element->gpa.animation = animation;
+  element->gpa.animation_easing = easing;
+  element->gpa.animation_duration = duration;
+  element->gpa.animation_repeat = repeat;
+  element->gpa.animation_segment = segment;
+}
+
+void
+svg_element_get_gpa_animation (SvgElement   *element,
+                               GpaAnimation *animation,
+                               GpaEasing    *easing,
+                               int64_t      *duration,
+                               double       *repeat,
+                               double       *segment)
+{
+  if (animation)
+    *animation = element->gpa.animation;
+  if (easing)
+    *easing = element->gpa.animation_easing;
+  if (duration)
+    *duration = element->gpa.animation_duration;
+  if (repeat)
+    *repeat = element->gpa.animation_repeat;
+  if (segment)
+    *segment = element->gpa.animation_segment;
+}
+
+void
+svg_element_set_gpa_origin (SvgElement *element,
+                            double      origin)
+{
+  element->gpa.origin = origin;
+}
+
+double
+svg_element_get_gpa_origin (SvgElement *element)
+{
+  return element->gpa.origin;
+}
+
+void
+svg_element_set_gpa_attachment (SvgElement *element,
+                                const char *id,
+                                double      position,
+                                SvgElement *shape)
+{
+  g_set_str (&element->gpa.attach.ref, id);
+  element->gpa.attach.pos = position;
+  element->gpa.attach.shape = shape;
+}
+
+void
+svg_element_get_gpa_attachment (SvgElement  *element,
+                                const char **id,
+                                double      *position,
+                                SvgElement **shape)
+{
+  if (id)
+    *id = element->gpa.attach.ref;
+  if (position)
+    *position = element->gpa.attach.pos;
+  if (shape)
+    *shape = element->gpa.attach.shape;
+}
+
+SvgElement *
+svg_element_duplicate (SvgElement *element,
+                       SvgElement *parent)
+{
+  SvgElement *copy = g_object_new (SVG_TYPE_ELEMENT, NULL);
+
+  copy->parent = parent;
+  copy->type = element->type;
+
+  copy->attrs = _gtk_bitmask_copy (element->attrs);
+  copy->important = _gtk_bitmask_copy (element->important);
+  copy->style = g_strdup (element->style);
+  copy->classes = g_strdupv (element->classes);
+  copy->title = g_strdup (element->title);
+  copy->description = g_strdup (element->description);
+  copy->line = element->line;
+  copy->style_loc = element->style_loc;
+  copy->focusable = element->focusable;
+  copy->render_cacheable = element->render_cacheable;
+
+  copy->css_node = gtk_css_node_new ();
+  gtk_css_node_set_parent (copy->css_node, parent->css_node);
+  gtk_css_node_set_name (copy->css_node, g_quark_from_static_string (svg_element_type_get_name (copy->type)));
+  gtk_css_node_set_classes (copy->css_node, (const char **) copy->classes);
+  if (copy->type == SVG_ELEMENT_LINK)
+    gtk_css_node_set_state (copy->css_node, GTK_STATE_FLAG_LINK);
+
+  copy->specified = g_array_ref (element->specified);
+  copy->inline_styles = g_array_ref (element->inline_styles);
+  copy->styles = g_ptr_array_ref (element->styles);
+
+  for (SvgProperty attr = FIRST_SVG_PROPERTY; attr <= LAST_SVG_PROPERTY; attr++)
+    {
+      copy->base[attr] = svg_property_ref_initial_value (attr, copy->type, parent != NULL);
+      copy->current[attr] = svg_value_ref (copy->base[attr]);
+    }
+
+  copy->animations = g_ptr_array_new ();
+
+  copy->gpa.states = element->gpa.states;
+  copy->gpa.transition = element->gpa.transition;
+  copy->gpa.transition_easing = element->gpa.transition_easing;
+  copy->gpa.transition_duration = element->gpa.transition_duration;
+  copy->gpa.transition_delay = element->gpa.transition_delay;
+  copy->gpa.animation = element->gpa.animation;
+  copy->gpa.animation_easing = element->gpa.animation_easing;
+  copy->gpa.animation_duration = element->gpa.animation_duration;
+  copy->gpa.animation_repeat = element->gpa.animation_repeat;
+  copy->gpa.animation_segment = element->gpa.animation_segment;
+  copy->gpa.origin = element->gpa.origin;
+  copy->gpa.attach.ref = NULL;
+  copy->gpa.attach.shape = NULL;
+  copy->gpa.attach.pos = 0;
+
+  return copy;
+}
+
+void
+svg_element_move_child_down (SvgElement *element,
+                             SvgElement *child)
+{
+  SvgElement *other = child->next_sibling;
+  SvgElement *prev = NULL;
+  SvgElement *next = NULL;
+
+  if (other == NULL)
+    return;
+
+  prev = child->prev_sibling;
+  next = other->next_sibling;
+
+  child->prev_sibling = other;
+  child->next_sibling = next;
+  other->next_sibling = child;
+  other->prev_sibling = prev;
+
+  if (prev)
+    prev->next_sibling = other;
+  else
+    element->first_child = other;
+
+  if (next)
+    next->prev_sibling = child;
+  else
+    element->last_child = child;
+
+  if (element->child_observer)
+    gtk_list_list_model_item_moved (element->child_observer, child, prev);
+}
+
+unsigned int
+svg_element_get_n_animations (SvgElement *element)
+{
+  if (element->animations)
+    return element->animations->len;
+  return 0;
+}
+
+SvgAnimation *
+svg_element_get_animation (SvgElement   *element,
+                           unsigned int  pos)
+{
+  if (element->animations && pos < element->animations->len)
+    return g_ptr_array_index (element->animations, pos);
+  return NULL;
+}
+
+SvgAnimation *
+svg_element_find_animation (SvgElement *element,
+                            const char *id)
+{
+  if (element->animations)
+    {
+      for (unsigned int i = 0; i < element->animations->len; i++)
+        {
+          SvgAnimation *a = g_ptr_array_index (element->animations, i);
+          if (g_strcmp0 (a->id, id) == 0)
+            return a;
+        }
+    }
+
+  if (svg_element_type_is_container (element->type))
+    {
+      for (SvgElement *child = element->first_child; child; child = child->next_sibling)
+        {
+          SvgAnimation *a = svg_element_find_animation (child, id);
+          if (a)
+            return a;
+        }
+    }
+
+  return NULL;
+}
+
+void
+svg_element_set_autofocus (SvgElement *element,
+                           gboolean    autofocus)
+{
+  element->autofocus = autofocus;
+}
+
+gboolean
+svg_element_get_autofocus (SvgElement *element)
+{
+  return element->autofocus;
+}
+
+void
+svg_element_set_focusable (SvgElement *element,
+                           gboolean    focusable)
+{
+  element->focusable = focusable;
+}
+
+gboolean
+svg_element_get_focusable (SvgElement *element)
+{
+  return element->focusable;
+}
+
+gboolean
+svg_element_get_initial_focusable (SvgElement *element)
+{
+  if (element->type == SVG_ELEMENT_SVG && element->parent == NULL)
+    return TRUE;
+  else if (element->type == SVG_ELEMENT_LINK)
+    return TRUE;
+  else
+    return FALSE;
+}
+
+static void
+svg_element_change_css_state (SvgElement *element,
+                              GtkStateFlags add,
+                              GtkStateFlags remove)
+{
+  GtkStateFlags state = gtk_css_node_get_state (element->css_node);
+  gtk_css_node_set_state (element->css_node, (state | add) & ~remove);
+}
+
+void
+svg_element_set_focus (SvgElement *element,
+                       gboolean    focus)
+{
+  if (focus)
+    svg_element_change_css_state (element, GTK_STATE_FLAG_FOCUSED, 0);
+  else
+    svg_element_change_css_state (element, 0, GTK_STATE_FLAG_FOCUSED);
+}
+
+gboolean
+svg_element_get_focus (SvgElement *element)
+{
+  return (gtk_css_node_get_state (element->css_node) & GTK_STATE_FLAG_FOCUSED) != 0;
+}
+
+void
+svg_element_set_active (SvgElement *element,
+                        gboolean    active)
+{
+  if (active)
+    svg_element_change_css_state (element, GTK_STATE_FLAG_ACTIVE, 0);
+  else
+    svg_element_change_css_state (element, 0, GTK_STATE_FLAG_ACTIVE);
+}
+
+gboolean
+svg_element_get_active (SvgElement *element)
+{
+  return (gtk_css_node_get_state (element->css_node) & GTK_STATE_FLAG_ACTIVE) != 0;
+}
+
+void
+svg_element_set_hover (SvgElement *element,
+                       gboolean    hover)
+{
+  if (hover)
+    svg_element_change_css_state (element, GTK_STATE_FLAG_PRELIGHT, 0);
+  else
+    svg_element_change_css_state (element, 0, GTK_STATE_FLAG_PRELIGHT);
+
+  for (element = element->parent; element; element = element->parent)
+    {
+      if (hover)
+        svg_element_change_css_state (element, GTK_STATE_FLAG_PRELIGHT, 0);
+      else
+        svg_element_change_css_state (element, 0, GTK_STATE_FLAG_PRELIGHT);
+    }
+}
+
+gboolean
+svg_element_get_hover (SvgElement *element)
+{
+  return (gtk_css_node_get_state (element->css_node) & GTK_STATE_FLAG_PRELIGHT) != 0;
+}
+
+void
+svg_element_set_visited (SvgElement *element,
+                         gboolean    visited)
+{
+  if (visited)
+    svg_element_change_css_state (element, GTK_STATE_FLAG_VISITED, 0);
+  else
+    svg_element_change_css_state (element, 0, GTK_STATE_FLAG_VISITED);
+}
+
+gboolean
+svg_element_get_visited (SvgElement *element)
+{
+  return (gtk_css_node_get_state (element->css_node) & GTK_STATE_FLAG_VISITED) != 0;
+}
+
+/* Depth first traversal in pre-order */
+
+static SvgElement *
+next_after (SvgElement *element,
+            SvgElement *child)
+{
+  if (child->next_sibling)
+    return child->next_sibling;
+  else if (element->parent)
+    return next_after (element->parent, element);
+  else
+    return NULL;
+}
+
+SvgElement *
+svg_element_first (SvgElement *element)
+{
+  return element;
+}
+
+SvgElement *
+svg_element_last (SvgElement *element)
+{
+  if (element->last_child)
+    return svg_element_last (element->last_child);
+  else
+    return element;
+}
+
+SvgElement *
+svg_element_next (SvgElement *element)
+{
+  if (element->first_child)
+    return element->first_child;
+  else if (element->parent)
+    return next_after (element->parent, element);
+  else
+    return NULL;
+}
+
+SvgElement *
+svg_element_previous (SvgElement *element)
+{
+  if (element->prev_sibling)
+    return svg_element_last (element->prev_sibling);
+  else if (element->parent)
+    return element->parent;
+  else
+    return NULL;
+}
+
+SvgElement *
+svg_element_find_by_id (SvgElement *element,
+                        const char *id)
+{
+  if (g_strcmp0 (element->id, id) == 0)
+    return element;
+
+  for (SvgElement *child = element->first_child; child; child = child->next_sibling)
+    {
+      SvgElement *res = svg_element_find_by_id (child, id);
+      if (res)
+        return res;
+    }
+
+  return NULL;
+}
+
+static gboolean
+propagate_event_down (SvgElement *element,
+                      GdkEvent   *event,
+                      GtkSvg     *svg)
+{
+  if (element->parent)
+    {
+      if (propagate_event_down (element->parent, event, svg))
+        return GDK_EVENT_STOP;
+    }
+
+  return GDK_EVENT_PROPAGATE;
+}
+
+static gboolean
+propagate_event_up (SvgElement *element,
+                    GdkEvent   *event,
+                    GtkSvg     *svg)
+{
+  if (element->type == SVG_ELEMENT_LINK)
+    {
+      if (gdk_event_get_event_type (event) == GDK_KEY_PRESS &&
+          gdk_key_event_get_keyval (event) == GDK_KEY_Return)
+        {
+          gtk_svg_activate_element (svg, element);
+          return GDK_EVENT_STOP;
+        }
+
+      if (gdk_event_get_event_type (event) == GDK_BUTTON_PRESS &&
+          gdk_button_event_get_button (event) == GDK_BUTTON_PRIMARY)
+        {
+          gtk_svg_set_active (svg, element);
+          return GDK_EVENT_STOP;
+        }
+      else if (gdk_event_get_event_type (event) == GDK_BUTTON_RELEASE &&
+               gdk_button_event_get_button (event) == GDK_BUTTON_PRIMARY &&
+               gtk_svg_get_active (svg) == element)
+        {
+          gtk_svg_activate_element (svg, element);
+          gtk_svg_set_active (svg, NULL);
+          return GDK_EVENT_STOP;
+        }
+    }
+
+  if (element->parent)
+    {
+      if (propagate_event_up (element->parent, event, svg))
+        return GDK_EVENT_STOP;
+    }
+
+  return GDK_EVENT_PROPAGATE;
+}
+
+gboolean
+svg_element_propagate_event (SvgElement *target,
+                             GdkEvent   *event,
+                             GtkSvg     *svg)
+{
+  if (propagate_event_down (target, event, svg))
+    return GDK_EVENT_STOP;
+
+  return propagate_event_up (target, event, svg);
+}
+
+gboolean
+svg_element_or_ancestor_has_type (SvgElement     *element,
+                                  SvgElementType  type)
+{
+  for (SvgElement *p = element; p; p = p->parent)
+    {
+      if (p->type == type)
+        return TRUE;
+    }
+  return FALSE;
+}
+
+/* bounding box check */
+gboolean
+svg_element_can_contain (SvgElement             *element,
+                         const graphene_rect_t  *viewport,
+                         GtkSvg                 *svg,
+                         const graphene_point_t *point)
+{
+  graphene_rect_t bounds;
+
+  if (svg_element_get_current_bounds (element, viewport, svg, &bounds))
+    return gsk_rect_contains_point (&bounds, point);
+
+  return TRUE;
+}
+
+/* accurate check according to pointer-events */
+gboolean
+svg_element_contains (SvgElement             *element,
+                      const graphene_rect_t  *viewport,
+                      GtkSvg                 *svg,
+                      const graphene_point_t *point)
+{
+  GskPath *path;
+  GskFillRule fill_rule;
+  gboolean ret;
+  PointerEvents pe;
+  Visibility vis;
+  graphene_rect_t bounds;
+  PaintKind fill_kind;
+  PaintKind stroke_kind;
+  GskStroke *stroke;
+
+  g_assert (svg_element_type_is_path (element->type));
+
+  pe = svg_enum_get (svg_element_get_current_value (element, SVG_PROPERTY_POINTER_EVENTS));
+  vis = svg_enum_get (svg_element_get_current_value (element, SVG_PROPERTY_VISIBILITY));
+  fill_kind = svg_paint_get_kind (svg_element_get_current_value (element, SVG_PROPERTY_FILL));
+  stroke_kind = svg_paint_get_kind (svg_element_get_current_value (element, SVG_PROPERTY_STROKE));
+  fill_rule = svg_enum_get (svg_element_get_current_value (element, SVG_PROPERTY_FILL_RULE));
+
+  switch ((unsigned int) pe)
+    {
+    case POINTER_EVENTS_NONE:
+      return FALSE;
+      break;
+
+    case POINTER_EVENTS_BOUNDING_BOX:
+      if (svg_element_get_current_bounds (element, viewport, svg, &bounds))
+        return gsk_rect_contains_point (&bounds, point);
+      return FALSE;
+
+    case POINTER_EVENTS_AUTO:
+    case POINTER_EVENTS_VISIBLE_PAINTED:
+      if (vis == VISIBILITY_HIDDEN)
+        return FALSE;
+      G_GNUC_FALLTHROUGH;
+
+    case POINTER_EVENTS_PAINTED:
+      path = svg_element_get_current_path (element, viewport);
+      stroke = svg_element_create_basic_stroke (element, viewport, TRUE, TRUE, 400);
+      if (fill_kind != PAINT_NONE && gsk_path_in_fill (path, point, fill_rule))
+        ret = TRUE;
+      else if (stroke_kind != PAINT_NONE && path_in_stroke (path, point, stroke))
+        ret = TRUE;
+      else
+        ret = FALSE;
+      gsk_stroke_free (stroke);
+      gsk_path_unref (path);
+      return ret;
+
+    case POINTER_EVENTS_VISIBLE_FILL:
+      if (vis == VISIBILITY_HIDDEN || fill_kind == PAINT_NONE)
+        return FALSE;
+      G_GNUC_FALLTHROUGH;
+
+    case POINTER_EVENTS_FILL:
+      path = svg_element_get_current_path (element, viewport);
+      ret = gsk_path_in_fill (path, point, fill_rule);
+      gsk_path_unref (path);
+      return ret;
+
+    case POINTER_EVENTS_VISIBLE_STROKE:
+      if (vis == VISIBILITY_HIDDEN || stroke_kind == PAINT_NONE)
+        return FALSE;
+      G_GNUC_FALLTHROUGH;
+
+    case POINTER_EVENTS_STROKE:
+      /* FIXME: not quite right */
+      path = svg_element_get_current_path (element, viewport);
+      stroke = svg_element_create_basic_stroke (element, viewport, TRUE, TRUE, 400);
+      ret = path_in_stroke (path, point, stroke);
+      gsk_stroke_free (stroke);
+      gsk_path_unref (path);
+      return ret;
+
+    case POINTER_EVENTS_VISIBLE:
+      if (vis == VISIBILITY_HIDDEN)
+        return FALSE;
+      G_GNUC_FALLTHROUGH;
+
+    case POINTER_EVENTS_ALL:
+      path = svg_element_get_current_path (element, viewport);
+      stroke = svg_element_create_basic_stroke (element, viewport, TRUE, TRUE, 400);
+      if (gsk_path_in_fill (path, point, fill_rule))
+        ret = TRUE;
+      else if (path_in_stroke (path, point, stroke))
+        ret = TRUE;
+      else
+        ret = FALSE;
+      gsk_stroke_free (stroke);
+      gsk_path_unref (path);
+      return ret;
+
+    default:
+      g_assert_not_reached ();
+    }
+
+  return FALSE;
+}
+
+static gboolean
+svg_element_has_ancestor_or_corresponding (SvgElement *element,
+                                           SvgElement *ancestor)
+{
+  for (SvgElement *parent = element->parent; parent; parent = parent->parent)
+    {
+      if (parent == ancestor || parent->corresponding == ancestor)
+        return TRUE;
+    }
+  return FALSE;
+}
+
+static void svg_element_build_shadow_tree (SvgElement        *element,
+                                           SvgComputeContext *context);
+
+static SvgElement *
+svg_element_clone (SvgElement        *element,
+                   SvgElement        *parent,
+                   SvgComputeContext *context)
+{
+  SvgElement *clone;
+
+  if (context->clone_count++ > CLONE_LIMIT)
+    {
+      gtk_svg_rendering_error (context->svg, "Excessive instance count, aborting");
+      return NULL;
+    }
+
+  if (element->type == SVG_ELEMENT_USE)
+    svg_element_build_shadow_tree (element, context);
+
+  clone = g_object_new (SVG_TYPE_ELEMENT, NULL);
+
+  clone->type = element->type;
+  clone->parent = parent;
+  clone->attrs = _gtk_bitmask_copy (element->attrs);
+  clone->important = _gtk_bitmask_copy (element->important);
+  clone->id = NULL; /* Lets not confuse find-by-id */
+  clone->style = g_strdup (element->style);
+  clone->classes = g_strdupv (element->classes);
+  clone->title = g_strdup (element->title);
+  clone->description = g_strdup (element->description);
+  clone->line = element->line;
+  clone->style_loc = element->style_loc;
+  clone->focusable = element->focusable;
+
+  clone->first = NULL;
+  clone->next = NULL;
+
+  clone->css_node = gtk_css_node_new ();
+  gtk_css_node_set_name (clone->css_node, g_quark_from_static_string (svg_element_type_get_name (clone->type)));
+  if (element->id)
+    gtk_css_node_set_id (clone->css_node, g_quark_from_string (element->id));
+  gtk_css_node_set_classes (clone->css_node, (const char **) clone->classes);
+  if (clone->type == SVG_ELEMENT_LINK)
+    gtk_css_node_set_state (clone->css_node, GTK_STATE_FLAG_LINK);
+
+  if (element->text)
+    clone->text = array_new_with_clear_func (sizeof (TextNode), (GDestroyNotify) text_node_clear);
+
+  clone->specified = array_new_with_clear_func (sizeof (PropertyValue), (GDestroyNotify) property_value_clear);
+  for (unsigned int i = 0; i < element->specified->len; i++)
+    {
+      PropertyValue *p = &g_array_index (element->specified, PropertyValue, i);
+      PropertyValue pv;
+
+      pv.attr = p->attr;
+      pv.value = svg_value_ref (p->value);
+      pv.important = p->important;
+      g_array_append_val (clone->specified, pv);
+    }
+
+  for (unsigned int attr = 0; attr < N_SVG_PROPERTIES; attr++)
+    {
+      clone->base[attr] = svg_value_ref (element->base[attr]);
+      clone->current[attr] = svg_property_ref_initial_value (attr, clone->type, clone->parent != NULL);
+    }
+
+  if (element->first_child)
+    {
+      SvgElement *p, *q, *r;
+
+      for (SvgElement *child = element->first_child; child; child = child->next_sibling)
+        {
+          SvgElement *child_clone = svg_element_clone (child, clone, context);
+
+          if (!child_clone)
+            {
+              g_object_unref (clone);
+              return NULL;
+            }
+
+          svg_element_append_child (clone, child_clone);
+        }
+
+      /* Copy dependency order */
+      q = NULL;
+      for (p = element->first; p; p = p->next)
+        {
+          for (r = clone->first_child; r; r = r->next_sibling)
+            {
+              if (r->corresponding == p)
+                break;
+            }
+
+          if (q)
+            q->next = r;
+          else
+            clone->first = r;
+          q = r;
+        }
+      if (q)
+        q->next = NULL;
+    }
+
+  for (SvgAnimation *a = element->first_animation; a; a = a->next_sibling)
+    {
+      SvgAnimation *a_clone = svg_animation_clone (a, clone, context->svg->timeline);
+      svg_element_add_animation (clone, a_clone);
+      g_hash_table_insert (context->shadow_tree_map, a, a_clone);
+    }
+
+  if (element->color_stops)
+    {
+      clone->color_stops = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+      for (unsigned int i = 0; i < element->color_stops->len; i++)
+        {
+          SvgColorStop *stop = g_ptr_array_index (element->color_stops, i);
+          g_ptr_array_add (clone->color_stops, svg_color_stop_clone (stop, clone));
+        }
+    }
+
+  if (element->filters)
+    {
+      clone->filters = g_ptr_array_new_with_free_func ((GDestroyNotify) g_object_unref);
+      for (unsigned int i = 0; i < element->filters->len; i++)
+        {
+          SvgFilter *f = g_ptr_array_index (element->filters, i);
+          g_ptr_array_add (clone->filters, svg_filter_clone (f, clone));
+        }
+    }
+
+  if (element->text)
+    {
+      for (unsigned int i = 0; i < element->text->len; i++)
+        {
+          TextNode *t = &g_array_index (element->text, TextNode, i);
+          TextNode tn;
+
+          switch (t->type)
+            {
+            case TEXT_NODE_CHARACTERS:
+              tn.type = TEXT_NODE_CHARACTERS;
+              tn.characters.text = g_strdup (t->characters.text);
+              tn.characters.chunks = NULL;
+              break;
+            case TEXT_NODE_SHAPE:
+              tn.type = TEXT_NODE_SHAPE;
+              tn.shape.shape = t->shape.shape;
+              tn.shape.has_bounds = t->shape.has_bounds;
+              tn.shape.bounds = t->shape.bounds;
+              break;
+            default:
+              g_assert_not_reached ();
+            }
+
+          g_array_append_val (clone->text, tn);
+        }
+    }
+
+  clone->styles = g_ptr_array_ref (element->styles);
+  clone->inline_styles = g_array_ref (element->inline_styles);
+
+  if (element->gpa.fill)
+    clone->gpa.fill = svg_value_ref (element->gpa.fill);
+  if (element->gpa.stroke)
+    clone->gpa.stroke = svg_value_ref (element->gpa.stroke);
+  if (element->gpa.width)
+    clone->gpa.width = svg_value_ref (element->gpa.width);
+
+  clone->gpa.states = element->gpa.states;
+  clone->gpa.transition = element->gpa.transition;
+  clone->gpa.transition_easing = element->gpa.transition_easing;
+  clone->gpa.transition_duration = element->gpa.transition_duration;
+  clone->gpa.transition_delay = element->gpa.transition_delay;
+  clone->gpa.animation = element->gpa.animation;
+  clone->gpa.animation_easing = element->gpa.animation_easing;
+  clone->gpa.animation_duration = element->gpa.animation_duration;
+  clone->gpa.animation_repeat = element->gpa.animation_repeat;
+  clone->gpa.animation_segment = element->gpa.animation_segment;
+  clone->gpa.origin = element->gpa.origin;
+  clone->gpa.attach.ref = NULL;
+  clone->gpa.attach.shape = NULL;
+  clone->gpa.attach.pos = 0;
+
+  clone->corresponding = element;
+  clone->render_cacheable = element->render_cacheable;
+
+  g_hash_table_insert (context->shadow_tree_map, element, clone);
+
+  return clone;
+}
+
+static void
+override_specified (SvgElement  *element,
+                    SvgProperty  attr,
+                    SvgValue    *old_value,
+                    SvgValue    *new_value)
+{
+  /* Styles have already been applied when we do this,
+   * so override base values too, when necessary.
+   */
+  if (element->base[attr] == old_value)
+    svg_element_set_base_value (element, attr, new_value, FALSE);
+  svg_element_take_specified_value (element, attr, new_value);
+}
+
+static void
+svg_element_resolve_shadow_references (SvgElement *element,
+                                       GHashTable *map)
+{
+  SvgValue *value, *new_value;
+  SvgElement *clone;
+  SvgAnimation *anim;
+  SvgProperty href_props[] = {
+    SVG_PROPERTY_HREF,
+    SVG_PROPERTY_FE_IMAGE_HREF,
+    SVG_PROPERTY_MARKER_START,
+    SVG_PROPERTY_MARKER_MID,
+    SVG_PROPERTY_MARKER_END
+  };
+  SvgProperty paint_props[] = {
+    SVG_PROPERTY_FILL,
+    SVG_PROPERTY_STROKE,
+  };
+
+  for (unsigned int i = 0; i < G_N_ELEMENTS (href_props); i++)
+    {
+      value = svg_element_get_specified_value (element, href_props[i]);
+      if (!value)
+        continue;
+
+      clone = g_hash_table_lookup (map, svg_href_get_shape (value));
+      anim = g_hash_table_lookup (map, svg_href_get_animation (value));
+      if (clone || anim)
+        {
+          if (svg_href_get_kind (value) == HREF_URL)
+            new_value = svg_href_new_url_take (g_strdup (svg_href_get_ref (value)));
+          else
+            new_value = svg_href_new_plain (svg_href_get_ref (value));
+          if (clone)
+            svg_href_set_shape (new_value, clone);
+          else
+            svg_href_set_animation (new_value, anim);
+          override_specified (element, href_props[i], value, new_value);
+        }
+    }
+
+  for (unsigned int i = 0; i < G_N_ELEMENTS (paint_props); i++)
+    {
+      PaintKind kind;
+      value = svg_element_get_specified_value (element, paint_props[i]);
+
+      if (!value)
+        continue;
+
+      kind = svg_paint_get_kind (value);
+      if (!paint_is_server (kind))
+        continue;
+
+      clone = g_hash_table_lookup (map, svg_paint_get_server_shape (value));
+      if (clone)
+        {
+          const char *ref = svg_paint_get_server_ref (value);
+          const GdkColor *fallback = svg_paint_get_server_fallback (value);
+
+          if (kind == PAINT_SERVER_WITH_FALLBACK)
+            new_value = svg_paint_new_server_with_fallback (ref, fallback);
+          else if (kind == PAINT_SERVER_WITH_CURRENT_COLOR)
+            new_value = svg_paint_new_server_with_current_color (ref);
+          else
+            new_value = svg_paint_new_server (ref);
+          svg_paint_set_server_shape (new_value, clone);
+          override_specified (element, paint_props[i], value, new_value);
+        }
+    }
+
+  value = svg_element_get_specified_value (element, SVG_PROPERTY_CLIP_PATH);
+  if (value && svg_clip_get_kind (value) == CLIP_URL)
+    {
+      clone = g_hash_table_lookup (map, svg_clip_get_shape (value));
+      if (clone)
+        {
+          new_value = svg_clip_new_url_take (g_strdup (svg_clip_get_id (value)));
+          svg_clip_set_shape (new_value, clone);
+          override_specified (element, SVG_PROPERTY_CLIP_PATH, value, new_value);
+        }
+    }
+
+  value = svg_element_get_specified_value (element, SVG_PROPERTY_MASK);
+  if (value && svg_mask_get_kind (value) == MASK_URL)
+    {
+      clone = g_hash_table_lookup (map, svg_mask_get_shape (value));
+      if (clone)
+        {
+          new_value = svg_mask_new_url_take (g_strdup (svg_mask_get_id (value)));
+          svg_mask_set_shape (new_value, clone);
+          override_specified (element, SVG_PROPERTY_MASK, value, new_value);
+        }
+    }
+
+  value = svg_element_get_specified_value (element, SVG_PROPERTY_FILTER);
+  if (value && !svg_filter_functions_is_none (value))
+    {
+      unsigned int length = svg_filter_functions_get_length (value);
+      gboolean needs_copy = FALSE;
+
+      for (unsigned int i = 0; i < length; i++)
+        {
+          if (svg_filter_functions_get_kind (value, i) == FILTER_REF)
+            {
+              needs_copy = TRUE;
+              break;
+            }
+        }
+
+      if (needs_copy)
+        {
+          new_value = svg_filter_functions_copy (value);
+          for (unsigned int i = 0; i < length; i++)
+            {
+              if (svg_filter_functions_get_kind (value, i) == FILTER_REF)
+                {
+                  clone = g_hash_table_lookup (map, svg_filter_functions_get_shape (value, i));
+                  if (clone)
+                    svg_filter_functions_set_shape (new_value, i, clone);
+                }
+            }
+          override_specified (element, SVG_PROPERTY_FILTER, value, new_value);
+        }
+    }
+
+  if (element->filters)
+    {
+      for (unsigned int i = 0; i < element->filters->len; i++)
+        {
+          SvgFilter *f = g_ptr_array_index (element->filters, i);
+
+          value = svg_filter_get_specified_value (f, SVG_PROPERTY_FE_IMAGE_HREF);
+          if (!value)
+            continue;
+
+          clone = g_hash_table_lookup (map, svg_href_get_shape (value));
+          if (!clone)
+            continue;
+
+          if (svg_href_get_kind (value) == HREF_URL)
+            new_value = svg_href_new_url_take (g_strdup (svg_href_get_ref (value)));
+          else
+            new_value = svg_href_new_plain (svg_href_get_ref (value));
+          svg_href_set_shape (new_value, clone);
+          if (svg_filter_get_base_value (f, SVG_PROPERTY_FE_IMAGE_HREF) == value)
+            svg_filter_set_base_value (f, SVG_PROPERTY_FE_IMAGE_HREF, new_value, FALSE);
+          svg_filter_take_specified_value (f, SVG_PROPERTY_FE_IMAGE_HREF, new_value);
+        }
+    }
+
+  if (element->animations)
+    {
+      for (unsigned int i = 0; i < element->animations->len; i++)
+        {
+          SvgAnimation *a = g_ptr_array_index (element->animations, i);
+          svg_animation_resolve_shadow_references (a, map);
+        }
+    }
+
+  for (SvgElement *child = element->first_child; child; child = child->next_sibling)
+    svg_element_resolve_shadow_references (child, map);
+}
+
+static void
+svg_element_build_shadow_tree (SvgElement        *element,
+                               SvgComputeContext *context)
+{
+  SvgValue *href;
+  SvgElement *target;
+
+  g_assert (element->type == SVG_ELEMENT_USE);
+
+  href = svg_element_get_current_value (element, SVG_PROPERTY_HREF);
+  if (!href || !svg_href_get_shape (href))
+    return;
+
+  target = svg_href_get_shape (href);
+
+  if (element == target || element->corresponding == target ||
+      svg_element_has_ancestor_or_corresponding (element, target))
+    {
+      if (!context->svg->has_use_cycle)
+        gtk_svg_rendering_error (context->svg, "Circular <use>, aborting");
+      context->svg->has_use_cycle = TRUE;
+      return;
+    }
+
+  if (element->first_child)
+    {
+      SvgElement *current = element->first_child;
+      if (current->corresponding == target)
+        return;
+      svg_element_delete (current);
+      element->first = NULL;
+    }
+
+  if (target)
+    {
+      SvgElement *clone = svg_element_clone (target, element, context);
+      if (clone)
+        {
+          svg_element_append_child (element, clone);
+          element->first = clone;
+        }
+    }
+}
+
+void
+svg_element_ensure_shadow_tree (SvgElement        *element,
+                                SvgComputeContext *context)
+{
+  SvgValue *href;
+  SvgElement *target;
+
+  g_assert (context->shadow_tree_map == NULL);
+
+  href = svg_element_get_current_value (element, SVG_PROPERTY_HREF);
+  target = href ? svg_href_get_shape (href) : NULL;
+
+  /* The common case is a static href whose shadow tree was built during the
+   * first update. Avoid allocating a map and walking the clone on every frame.
+   */
+  if ((target == NULL && element->first_child == NULL) ||
+      (element->first_child != NULL && element->first_child->corresponding == target))
+    return;
+
+  context->shadow_tree_map = g_hash_table_new (g_direct_hash, g_direct_equal);
+
+  svg_element_build_shadow_tree (element, context);
+
+  if (element->first_child)
+    svg_element_resolve_shadow_references (element->first_child, context->shadow_tree_map);
+
+  g_clear_pointer (&context->shadow_tree_map, g_hash_table_destroy);
+}
+
+SvgElement *
+svg_element_get_corresponding (SvgElement *element)
+{
+  return element->corresponding;
+}
+
+SvgElement *
+svg_element_get_first_child (SvgElement *element)
+{
+  return element->first_child;
+}
+
+SvgElement *
+svg_element_get_last_child (SvgElement *element)
+{
+  return element->last_child;
+}
+
+SvgElement *
+svg_element_get_prev_sibling (SvgElement *element)
+{
+  return element->prev_sibling;
+}
+
+SvgElement *
+svg_element_get_next_sibling (SvgElement *element)
+{
+  return element->next_sibling;
+}
+
+static void
+svg_element_child_observer_destroyed (gpointer element)
+{
+  SvgElement *self = (SvgElement *) element;
+
+  self->child_observer = NULL;
+}
+
+GListModel *
+svg_element_observe_children (SvgElement *element)
+{
+  if (element->child_observer)
+    return g_object_ref (G_LIST_MODEL (element->child_observer));
+
+  element->child_observer = gtk_list_list_model_new ((gpointer) svg_element_get_first_child,
+                                                     (gpointer) svg_element_get_next_sibling,
+                                                     (gpointer) svg_element_get_prev_sibling,
+                                                     (gpointer) svg_element_get_last_child,
+                                                     (gpointer) g_object_ref,
+                                                     element,
+                                                     svg_element_child_observer_destroyed);
+
+  return G_LIST_MODEL (element->child_observer);
+}
+
+static void
+svg_element_animation_observer_destroyed (gpointer element)
+{
+  SvgElement *self = (SvgElement *) element;
+
+  self->animation_observer = NULL;
+}
+
+SvgAnimation *
+svg_element_get_first_animation (SvgElement *element)
+{
+  return element->first_animation;
+}
+
+SvgAnimation *
+svg_element_get_last_animation (SvgElement *element)
+{
+  return element->last_animation;
+}
+
+GListModel *
+svg_element_observe_animations (SvgElement *element)
+{
+  if (element->animation_observer)
+    return g_object_ref (G_LIST_MODEL (element->animation_observer));
+
+  element->animation_observer = gtk_list_list_model_new ((gpointer) svg_element_get_first_animation,
+                                                         (gpointer) svg_animation_get_next_sibling,
+                                                         (gpointer) svg_animation_get_prev_sibling,
+                                                         (gpointer) svg_element_get_last_animation,
+                                                         (gpointer) g_object_ref,
+                                                         element,
+                                                         svg_element_animation_observer_destroyed);
+
+  return G_LIST_MODEL (element->animation_observer);
+}
+
+static void
+svg_element_filter_observer_destroyed (gpointer element)
+{
+  SvgElement *self = (SvgElement *) element;
+
+  self->filter_observer = NULL;
+}
+
+GListModel *
+svg_element_observe_filters (SvgElement *element)
+{
+  if (element->filter_observer)
+    return g_object_ref (G_LIST_MODEL (element->filter_observer));
+
+  element->filter_observer = gtk_array_list_model_new (element->filters,
+                                                       element,
+                                                       svg_element_filter_observer_destroyed);
+
+  return G_LIST_MODEL (element->filter_observer);
+}
+
+static void
+svg_element_color_stop_observer_destroyed (gpointer element)
+{
+  SvgElement *self = (SvgElement *) element;
+
+  self->color_stop_observer = NULL;
+}
+
+GListModel *
+svg_element_observe_color_stops (SvgElement *element)
+{
+  if (element->color_stop_observer)
+    return g_object_ref (G_LIST_MODEL (element->color_stop_observer));
+
+  element->color_stop_observer = gtk_array_list_model_new (element->color_stops,
+                                                           element,
+                                                           svg_element_color_stop_observer_destroyed);
+
+  return G_LIST_MODEL (element->color_stop_observer);
+}

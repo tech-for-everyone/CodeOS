@@ -1,0 +1,1243 @@
+/* GTK - The GIMP Toolkit
+ * Copyright (C) 2017 Red Hat, Inc.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "config.h"
+
+#include "gtkcssbgsizevalueprivate.h"
+
+#include <math.h>
+#include <string.h>
+
+#include "gtkcssfiltervalueprivate.h"
+#include "gtkcssnumbervalueprivate.h"
+#include "gtkcssshadowvalueprivate.h"
+#include "css/gtkcssdataurlprivate.h"
+#include "svg/gtksvgrendererprivate.h"
+#include "gtksnapshotprivate.h"
+
+#include "gsk/gskcairoblurprivate.h"
+
+typedef union _GtkCssFilter GtkCssFilter;
+
+typedef enum {
+  GTK_CSS_FILTER_NONE,
+  GTK_CSS_FILTER_BLUR,
+  GTK_CSS_FILTER_BRIGHTNESS,
+  GTK_CSS_FILTER_CONTRAST,
+  GTK_CSS_FILTER_DROP_SHADOW,
+  GTK_CSS_FILTER_GRAYSCALE,
+  GTK_CSS_FILTER_HUE_ROTATE,
+  GTK_CSS_FILTER_INVERT,
+  GTK_CSS_FILTER_OPACITY,
+  GTK_CSS_FILTER_SATURATE,
+  GTK_CSS_FILTER_SEPIA,
+  GTK_CSS_FILTER_SVG,
+} GtkCssFilterType;
+
+union _GtkCssFilter {
+  GtkCssFilterType       type;
+  struct {
+    GtkCssFilterType     type;
+    GtkCssValue         *value;
+  }            blur, brightness, contrast, drop_shadow, grayscale, hue_rotate, invert, opacity, saturate, sepia;
+  struct {
+    GtkCssFilterType type;
+    char *url;
+    char *ref;
+    GtkSvg *svg;
+  } svg;
+};
+
+struct _GtkCssValue {
+  GTK_CSS_VALUE_BASE
+  guint                 n_filters;
+  GtkCssFilter          filters[1];
+};
+
+static GtkCssValue *    gtk_css_filter_value_alloc           (guint                  n_values);
+
+static void
+gtk_css_filter_clear (GtkCssFilter *filter)
+{
+  switch (filter->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      gtk_css_value_unref (filter->brightness.value);
+      break;
+    case GTK_CSS_FILTER_CONTRAST:
+      gtk_css_value_unref (filter->contrast.value);
+      break;
+    case GTK_CSS_FILTER_GRAYSCALE:
+      gtk_css_value_unref (filter->grayscale.value);
+      break;
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      gtk_css_value_unref (filter->hue_rotate.value);
+      break;
+    case GTK_CSS_FILTER_INVERT:
+      gtk_css_value_unref (filter->invert.value);
+      break;
+    case GTK_CSS_FILTER_OPACITY:
+      gtk_css_value_unref (filter->opacity.value);
+      break;
+    case GTK_CSS_FILTER_SATURATE:
+      gtk_css_value_unref (filter->saturate.value);
+      break;
+    case GTK_CSS_FILTER_SEPIA:
+      gtk_css_value_unref (filter->sepia.value);
+      break;
+    case GTK_CSS_FILTER_BLUR:
+      gtk_css_value_unref (filter->blur.value);
+      break;
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      gtk_css_value_unref (filter->drop_shadow.value);
+      break;
+    case GTK_CSS_FILTER_SVG:
+      g_free (filter->svg.ref);
+      g_free (filter->svg.url);
+      g_clear_object (&filter->svg.svg);
+      break;
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+}
+
+static void
+gtk_css_filter_init_identity (GtkCssFilter       *filter,
+                              const GtkCssFilter *other)
+{
+  switch (other->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      filter->brightness.value = gtk_css_number_value_new (1, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_CONTRAST:
+      filter->contrast.value = gtk_css_number_value_new (1, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_GRAYSCALE:
+      filter->grayscale.value = gtk_css_number_value_new (0, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      filter->hue_rotate.value = gtk_css_number_value_new (0, GTK_CSS_DEG);
+      break;
+    case GTK_CSS_FILTER_INVERT:
+      filter->invert.value = gtk_css_number_value_new (0, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_OPACITY:
+      filter->opacity.value = gtk_css_number_value_new (1, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_SATURATE:
+      filter->saturate.value = gtk_css_number_value_new (1, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_SEPIA:
+      filter->sepia.value = gtk_css_number_value_new (0, GTK_CSS_NUMBER);
+      break;
+    case GTK_CSS_FILTER_BLUR:
+      filter->blur.value = gtk_css_number_value_new (0, GTK_CSS_PX);
+      break;
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      filter->drop_shadow.value = gtk_css_shadow_value_new_filter (other->drop_shadow.value);
+      break;
+    case GTK_CSS_FILTER_SVG:
+      filter->svg.ref = g_strdup ("filter");
+      filter->svg.url = g_strdup ("<svg><filter id='filter'><feMerge><feMergeNode in='SourceGraphic'/></feMerge></filter></svg>");
+      GBytes *bytes = g_bytes_new_static (filter->svg.url, strlen (filter->svg.url));
+      filter->svg.svg = gtk_svg_new_from_bytes (bytes);
+      g_bytes_unref (bytes);
+      break;
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+
+  filter->type = other->type;
+}
+
+#define R 0.2126
+#define G 0.7152
+#define B 0.0722
+
+static gboolean
+gtk_css_filter_get_matrix (const GtkCssFilter *filter,
+                           graphene_matrix_t  *matrix,
+                           graphene_vec4_t    *offset)
+{
+  double value;
+
+  switch (filter->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      value = gtk_css_number_value_get (filter->brightness.value, 1.0);
+      graphene_matrix_init_scale (matrix, value, value, value);
+      graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_CONTRAST:
+      value = gtk_css_number_value_get (filter->contrast.value, 1.0);
+      graphene_matrix_init_scale (matrix, value, value, value);
+      graphene_vec4_init (offset, 0.5 - 0.5 * value, 0.5 - 0.5 * value, 0.5 - 0.5 * value, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_GRAYSCALE:
+      value = gtk_css_number_value_get (filter->grayscale.value, 1.0);
+      graphene_matrix_init_from_float (matrix, (float[16]) {
+                                           1.0 - (1.0 - R) * value, R * value, R * value, 0.0,
+                                           G * value, 1.0 - (1.0 - G) * value, G * value, 0.0,
+                                           B * value, B * value, 1.0 - (1.0 - B) * value, 0.0,
+                                           0.0, 0.0, 0.0, 1.0
+                                       });
+      graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      {
+        double c, s;
+        value = gtk_css_number_value_get (filter->hue_rotate.value, 1.0) * G_PI / 180.0;
+        c = cos (value);
+        s = sin (value);
+        graphene_matrix_init_from_float (matrix, (float[16]) {
+                                             0.213 + 0.787 * c - 0.213 * s,
+                                             0.213 - 0.213 * c + 0.143 * s,
+                                             0.213 - 0.213 * c - 0.787 * s,
+                                             0,
+                                             0.715 - 0.715 * c - 0.715 * s,
+                                             0.715 + 0.285 * c + 0.140 * s,
+                                             0.715 - 0.715 * c + 0.715 * s,
+                                             0,
+                                             0.072 - 0.072 * c + 0.928 * s,
+                                             0.072 - 0.072 * c - 0.283 * s,
+                                             0.072 + 0.928 * c + 0.072 * s,
+                                             0,
+                                             0, 0, 0, 1
+                                         });
+        graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      }
+      break;
+
+    case GTK_CSS_FILTER_INVERT:
+      value = gtk_css_number_value_get (filter->invert.value, 1.0);
+      graphene_matrix_init_scale (matrix, 1.0 - 2 * value, 1.0 - 2 * value, 1.0 - 2 * value);
+      graphene_vec4_init (offset, value, value, value, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_OPACITY:
+      value = gtk_css_number_value_get (filter->opacity.value, 1.0);
+      graphene_matrix_init_from_float (matrix, (float[16]) {
+                                           1.0, 0.0, 0.0, 0.0,
+                                           0.0, 1.0, 0.0, 0.0,
+                                           0.0, 0.0, 1.0, 0.0,
+                                           0.0, 0.0, 0.0, value
+                                       });
+      graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_SATURATE:
+      value = gtk_css_number_value_get (filter->saturate.value, 1.0);
+      graphene_matrix_init_from_float (matrix, (float[16]) {
+                                           R + (1.0 - R) * value, R - R * value, R - R * value, 0.0,
+                                           G - G * value, G + (1.0 - G) * value, G - G * value, 0.0,
+                                           B - B * value, B - B * value, B + (1.0 - B) * value, 0.0,
+                                           0.0, 0.0, 0.0, 1.0
+                                       });
+      graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_SEPIA:
+      value = gtk_css_number_value_get (filter->sepia.value, 1.0);
+      graphene_matrix_init_from_float (matrix, (float[16]) {
+                                           1.0 - 0.607 * value, 0.349 * value, 0.272 * value, 0.0,
+                                           0.769 * value, 1.0 - 0.314 * value, 0.534 * value, 0.0,
+                                           0.189 * value, 0.168 * value, 1.0 - 0.869 * value, 0.0,
+                                           0.0, 0.0, 0.0, 1.0
+                                       });
+      graphene_vec4_init (offset, 0.0, 0.0, 0.0, 0.0);
+      break;
+
+    case GTK_CSS_FILTER_NONE:
+    case GTK_CSS_FILTER_BLUR:
+    case GTK_CSS_FILTER_DROP_SHADOW:
+    case GTK_CSS_FILTER_SVG:
+      return FALSE;
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+
+  return TRUE;
+}
+
+#undef R
+#undef G
+#undef B
+
+static int
+gtk_css_filter_value_compute_matrix (const GtkCssValue *value,
+                                     int                first,
+                                     graphene_matrix_t *matrix,
+                                     graphene_vec4_t   *offset,
+                                     gboolean          *all_opacity)
+{
+  graphene_matrix_t m, m2;
+  graphene_vec4_t o, o2;
+  int i;
+
+  if (!gtk_css_filter_get_matrix (&value->filters[first], matrix, offset))
+    return first;
+
+  *all_opacity = value->filters[first].type == GTK_CSS_FILTER_OPACITY;
+
+  for (i = first + 1; i < value->n_filters; i++)
+    {
+      if (!gtk_css_filter_get_matrix (&value->filters[i], &m, &o))
+        return i;
+
+      *all_opacity &= value->filters[i].type == GTK_CSS_FILTER_OPACITY;
+      graphene_matrix_multiply (matrix, &m, &m2);
+      graphene_matrix_transform_vec4 (&m, offset, &o2);
+
+      graphene_matrix_init_from_matrix (matrix, &m2);
+      graphene_vec4_add (&o, &o2, offset);
+    }
+
+  return value->n_filters;
+}
+
+static void
+gtk_css_value_filter_free (GtkCssValue *value)
+{
+  guint i;
+
+  for (i = 0; i < value->n_filters; i++)
+    gtk_css_filter_clear (&value->filters[i]);
+
+  g_free (value);
+}
+
+/* returns TRUE if dest == src */
+static gboolean
+gtk_css_filter_compute (GtkCssFilter         *dest,
+                        GtkCssFilter         *src,
+                        guint                 property_id,
+                        GtkCssComputeContext *context)
+{
+  dest->type = src->type;
+
+  switch (src->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      dest->brightness.value = gtk_css_value_compute (src->brightness.value, property_id, context);
+      return dest->brightness.value == src->brightness.value;
+
+    case GTK_CSS_FILTER_CONTRAST:
+      dest->contrast.value = gtk_css_value_compute (src->contrast.value, property_id, context);
+      return dest->contrast.value == src->contrast.value;
+
+    case GTK_CSS_FILTER_GRAYSCALE:
+      dest->grayscale.value = gtk_css_value_compute (src->grayscale.value, property_id, context);
+      return dest->grayscale.value == src->grayscale.value;
+
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      dest->hue_rotate.value = gtk_css_value_compute (src->hue_rotate.value, property_id, context);
+      return dest->hue_rotate.value == src->hue_rotate.value;
+
+    case GTK_CSS_FILTER_INVERT:
+      dest->invert.value = gtk_css_value_compute (src->invert.value, property_id, context);
+      return dest->invert.value == src->invert.value;
+
+    case GTK_CSS_FILTER_OPACITY:
+      dest->opacity.value = gtk_css_value_compute (src->opacity.value, property_id, context);
+      return dest->opacity.value == src->opacity.value;
+
+    case GTK_CSS_FILTER_SATURATE:
+      dest->saturate.value = gtk_css_value_compute (src->saturate.value, property_id, context);
+      return dest->saturate.value == src->saturate.value;
+
+    case GTK_CSS_FILTER_SEPIA:
+      dest->sepia.value = gtk_css_value_compute (src->sepia.value, property_id, context);
+      return dest->sepia.value == src->sepia.value;
+
+    case GTK_CSS_FILTER_BLUR:
+      dest->blur.value = gtk_css_value_compute (src->blur.value, property_id, context);
+      return dest->blur.value == src->blur.value;
+
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      dest->drop_shadow.value = gtk_css_value_compute (src->drop_shadow.value, property_id, context);
+      return dest->drop_shadow.value == src->drop_shadow.value;
+
+    case GTK_CSS_FILTER_SVG:
+      if (src->svg.ref)
+        {
+          dest->svg.ref = g_strdup (src->svg.ref);
+          dest->svg.url = g_strdup (src->svg.url);
+          dest->svg.svg = g_object_ref (src->svg.svg);
+        }
+      return TRUE;
+
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      return FALSE;
+    }
+}
+
+static GtkCssValue *
+gtk_css_value_filter_compute (GtkCssValue          *value,
+                              guint                 property_id,
+                              GtkCssComputeContext *context)
+{
+  GtkCssValue *result;
+  gboolean changes;
+  guint i;
+
+  /* Special case the 99% case of "none" */
+  if (gtk_css_filter_value_is_none (value))
+    return gtk_css_value_ref (value);
+
+  changes = FALSE;
+  result = gtk_css_filter_value_alloc (value->n_filters);
+
+  for (i = 0; i < value->n_filters; i++)
+    {
+      changes |= !gtk_css_filter_compute (&result->filters[i],
+                                          &value->filters[i],
+                                          property_id,
+                                          context);
+    }
+
+  if (!changes)
+    {
+      gtk_css_value_unref (result);
+      result = gtk_css_value_ref (value);
+    }
+
+  return result;
+}
+
+static gboolean
+gtk_css_filter_equal (const GtkCssFilter *filter1,
+                      const GtkCssFilter *filter2)
+{
+  if (filter1->type != filter2->type)
+    return FALSE;
+
+  switch (filter1->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      return gtk_css_value_equal (filter1->brightness.value, filter2->brightness.value);
+
+    case GTK_CSS_FILTER_CONTRAST:
+      return gtk_css_value_equal (filter1->contrast.value, filter2->contrast.value);
+
+    case GTK_CSS_FILTER_GRAYSCALE:
+      return gtk_css_value_equal (filter1->grayscale.value, filter2->grayscale.value);
+
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      return gtk_css_value_equal (filter1->hue_rotate.value, filter2->hue_rotate.value);
+
+    case GTK_CSS_FILTER_INVERT:
+      return gtk_css_value_equal (filter1->invert.value, filter2->invert.value);
+
+    case GTK_CSS_FILTER_OPACITY:
+      return gtk_css_value_equal (filter1->opacity.value, filter2->opacity.value);
+
+    case GTK_CSS_FILTER_SATURATE:
+      return gtk_css_value_equal (filter1->saturate.value, filter2->saturate.value);
+
+    case GTK_CSS_FILTER_SEPIA:
+      return gtk_css_value_equal (filter1->sepia.value, filter2->sepia.value);
+
+    case GTK_CSS_FILTER_BLUR:
+      return gtk_css_value_equal (filter1->blur.value, filter2->blur.value);
+
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      return gtk_css_value_equal (filter1->drop_shadow.value, filter2->drop_shadow.value);
+
+    case GTK_CSS_FILTER_SVG:
+      return g_strcmp0 (filter1->svg.url, filter2->svg.url) == 0 &&
+             g_strcmp0 (filter1->svg.ref, filter2->svg.ref) == 0;
+
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      return FALSE;
+    }
+}
+
+static gboolean
+gtk_css_value_filter_equal (const GtkCssValue *value1,
+                            const GtkCssValue *value2)
+{
+  const GtkCssValue *larger;
+  guint i, n;
+
+  n = MIN (value1->n_filters, value2->n_filters);
+  for (i = 0; i < n; i++)
+    {
+      if (!gtk_css_filter_equal (&value1->filters[i], &value2->filters[i]))
+        return FALSE;
+    }
+
+  larger = value1->n_filters > value2->n_filters ? value1 : value2;
+
+  for (; i < larger->n_filters; i++)
+    {
+      GtkCssFilter filter;
+
+      gtk_css_filter_init_identity (&filter, &larger->filters[i]);
+
+      if (!gtk_css_filter_equal (&larger->filters[i], &filter))
+        {
+          gtk_css_filter_clear (&filter);
+          return FALSE;
+        }
+
+      gtk_css_filter_clear (&filter);
+    }
+
+  return TRUE;
+}
+
+static void
+gtk_css_filter_transition (GtkCssFilter       *result,
+                           const GtkCssFilter *start,
+                           const GtkCssFilter *end,
+                           guint               property_id,
+                           double              progress)
+{
+  result->type = start->type;
+
+  switch (start->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      result->brightness.value = gtk_css_value_transition (start->brightness.value, end->brightness.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_CONTRAST:
+      result->contrast.value = gtk_css_value_transition (start->contrast.value, end->contrast.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_GRAYSCALE:
+      result->grayscale.value = gtk_css_value_transition (start->grayscale.value, end->grayscale.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      result->hue_rotate.value = gtk_css_value_transition (start->hue_rotate.value, end->hue_rotate.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_INVERT:
+      result->invert.value = gtk_css_value_transition (start->invert.value, end->invert.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_OPACITY:
+      result->opacity.value = gtk_css_value_transition (start->opacity.value, end->opacity.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_SATURATE:
+      result->saturate.value = gtk_css_value_transition (start->saturate.value, end->saturate.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_SEPIA:
+      result->sepia.value = gtk_css_value_transition (start->sepia.value, end->sepia.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_BLUR:
+      result->blur.value = gtk_css_value_transition (start->blur.value, end->blur.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      result->drop_shadow.value = gtk_css_value_transition (start->drop_shadow.value, end->drop_shadow.value, property_id, progress);
+      break;
+
+    case GTK_CSS_FILTER_SVG:
+      if (progress < 0.5)
+        {
+          result->svg.ref = g_strdup (start->svg.ref);
+          result->svg.url = g_strdup (start->svg.url);
+          result->svg.svg = g_object_ref (start->svg.svg);
+        }
+      else
+        {
+          result->svg.ref = g_strdup (end->svg.ref);
+          result->svg.url = g_strdup (end->svg.url);
+          result->svg.svg = g_object_ref (end->svg.svg);
+        }
+      break;
+
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+}
+
+static GtkCssValue *
+gtk_css_value_filter_transition (GtkCssValue *start,
+                                 GtkCssValue *end,
+                                 guint        property_id,
+                                 double       progress)
+{
+  GtkCssValue *result;
+  guint i, n;
+
+  if (gtk_css_filter_value_is_none (start))
+    {
+      if (gtk_css_filter_value_is_none (end))
+        return gtk_css_value_ref (start);
+
+      n = 0;
+    }
+  else if (gtk_css_filter_value_is_none (end))
+    {
+      n = 0;
+    }
+  else
+    {
+      n = MIN (start->n_filters, end->n_filters);
+    }
+
+  /* Check filters are compatible. If not, transition between
+   * their result matrices.
+   */
+  for (i = 0; i < n; i++)
+    {
+      if (start->filters[i].type != end->filters[i].type)
+        {
+          /* XXX: can we improve this? */
+          return NULL;
+        }
+    }
+
+  result = gtk_css_filter_value_alloc (MAX (start->n_filters, end->n_filters));
+
+  for (i = 0; i < n; i++)
+    {
+      gtk_css_filter_transition (&result->filters[i],
+                                 &start->filters[i],
+                                 &end->filters[i],
+                                 property_id,
+                                 progress);
+    }
+
+  for (; i < start->n_filters; i++)
+    {
+      GtkCssFilter filter;
+
+      gtk_css_filter_init_identity (&filter, &start->filters[i]);
+      gtk_css_filter_transition (&result->filters[i],
+                                 &start->filters[i],
+                                 &filter,
+                                 property_id,
+                                 progress);
+      gtk_css_filter_clear (&filter);
+    }
+  for (; i < end->n_filters; i++)
+    {
+      GtkCssFilter filter;
+
+      gtk_css_filter_init_identity (&filter, &end->filters[i]);
+      gtk_css_filter_transition (&result->filters[i],
+                                 &filter,
+                                 &end->filters[i],
+                                 property_id,
+                                 progress);
+      gtk_css_filter_clear (&filter);
+    }
+
+  g_assert (i == MAX (start->n_filters, end->n_filters));
+
+  return result;
+}
+
+static void
+gtk_css_filter_print (const GtkCssFilter *filter,
+                      GString            *string)
+{
+  switch (filter->type)
+    {
+    case GTK_CSS_FILTER_BRIGHTNESS:
+      g_string_append (string, "brightness(");
+      gtk_css_value_print (filter->brightness.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_CONTRAST:
+      g_string_append (string, "contrast(");
+      gtk_css_value_print (filter->contrast.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_GRAYSCALE:
+      g_string_append (string, "grayscale(");
+      gtk_css_value_print (filter->grayscale.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_HUE_ROTATE:
+      g_string_append (string, "hue-rotate(");
+      gtk_css_value_print (filter->hue_rotate.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_INVERT:
+      g_string_append (string, "invert(");
+      gtk_css_value_print (filter->invert.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_OPACITY:
+      g_string_append (string, "opacity(");
+      gtk_css_value_print (filter->opacity.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_SATURATE:
+      g_string_append (string, "saturate(");
+      gtk_css_value_print (filter->saturate.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_SEPIA:
+      g_string_append (string, "sepia(");
+      gtk_css_value_print (filter->sepia.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_BLUR:
+      g_string_append (string, "blur(");
+      gtk_css_value_print (filter->blur.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_DROP_SHADOW:
+      g_string_append (string, "drop-shadow(");
+      gtk_css_value_print (filter->drop_shadow.value, string);
+      g_string_append (string, ")");
+      break;
+
+    case GTK_CSS_FILTER_SVG:
+      g_string_append_printf (string, "url(\"%s#%s\")", filter->svg.url, filter->svg.ref);
+      break;
+
+    case GTK_CSS_FILTER_NONE:
+    default:
+      g_assert_not_reached ();
+      break;
+    }
+}
+
+static void
+gtk_css_value_filter_print (const GtkCssValue *value,
+                            GString           *string)
+{
+  guint i;
+
+  if (gtk_css_filter_value_is_none (value))
+    {
+      g_string_append (string, "none");
+      return;
+    }
+
+  for (i = 0; i < value->n_filters; i++)
+    {
+      if (i > 0)
+        g_string_append_c (string, ' ');
+
+      gtk_css_filter_print (&value->filters[i], string);
+    }
+}
+
+static const GtkCssValueClass GTK_CSS_VALUE_FILTER = {
+  "GtkCssFilterValue",
+  gtk_css_value_filter_free,
+  gtk_css_value_filter_compute,
+  NULL,
+  gtk_css_value_filter_equal,
+  gtk_css_value_filter_transition,
+  NULL,
+  NULL,
+  gtk_css_value_filter_print
+};
+
+static GtkCssValue filter_none_singleton = { &GTK_CSS_VALUE_FILTER, 1, 1, 0, 0, 0, {  { GTK_CSS_FILTER_NONE } } };
+
+static GtkCssValue *
+gtk_css_filter_value_alloc (guint n_filters)
+{
+  GtkCssValue *result;
+
+  g_return_val_if_fail (n_filters > 0, NULL);
+
+  result = gtk_css_value_alloc (&GTK_CSS_VALUE_FILTER, sizeof (GtkCssValue) + sizeof (GtkCssFilter) * (n_filters - 1));
+  result->n_filters = n_filters;
+
+  return result;
+}
+
+GtkCssValue *
+gtk_css_filter_value_new_none (void)
+{
+  return gtk_css_value_ref (&filter_none_singleton);
+}
+
+gboolean
+gtk_css_filter_value_is_none (const GtkCssValue *value)
+{
+  return value->n_filters == 0;
+}
+
+static guint
+gtk_css_filter_parse_number (GtkCssParser *parser,
+                             guint         n,
+                             gpointer      data)
+{
+  GtkCssValue **values = data;
+
+  values[n] = gtk_css_number_value_parse (parser, GTK_CSS_PARSE_NUMBER | GTK_CSS_PARSE_PERCENT | GTK_CSS_POSITIVE_ONLY);
+  if (values[n] == NULL)
+    return 0;
+
+  return 1;
+}
+
+static guint
+gtk_css_filter_parse_length (GtkCssParser *parser,
+                             guint         n,
+                             gpointer      data)
+{
+  GtkCssValue **values = data;
+
+  values[n] = gtk_css_number_value_parse (parser, GTK_CSS_PARSE_LENGTH | GTK_CSS_POSITIVE_ONLY);
+  if (values[n] == NULL)
+    return 0;
+
+  return 1;
+}
+
+static guint
+gtk_css_filter_parse_angle (GtkCssParser *parser,
+                            guint         n,
+                            gpointer      data)
+{
+  GtkCssValue **values = data;
+
+  values[n] = gtk_css_number_value_parse (parser, GTK_CSS_PARSE_ANGLE);
+  if (values[n] == NULL)
+    return 0;
+
+  return 1;
+}
+
+static guint
+gtk_css_filter_parse_shadow (GtkCssParser *parser,
+                             guint         n,
+                             gpointer      data)
+{
+  GtkCssValue **values = data;
+
+  values[n] = gtk_css_shadow_value_parse_filter (parser);
+  if (values[n] == NULL)
+    return 0;
+
+  return 1;
+}
+
+typedef struct
+{
+  GtkCssParser *parser;
+  gboolean is_data;
+  GtkCssLocation start, end;
+} ParserErrorData;
+
+static void
+css_location_update (GtkCssLocation *l,
+                     int             lines,
+                     int             bytes,
+                     int             chars)
+{
+  l->bytes += bytes;
+  l->chars += chars;
+  l->lines += lines;
+  l->line_bytes += bytes;
+  l->line_chars += chars;
+}
+
+static void
+svg_error_cb (GtkSvg          *svg,
+              const GError    *svg_error,
+              ParserErrorData *d)
+{
+  GtkCssLocation start = d->start;
+  GtkCssLocation end = d->end;
+
+  if (d->is_data && svg_error->domain == GTK_SVG_ERROR)
+    {
+      const GtkSvgLocation *s = gtk_svg_error_get_start (svg_error);
+      const GtkSvgLocation *e = gtk_svg_error_get_end (svg_error);
+
+      start = end = d->start;
+      css_location_update (&start, s->lines, s->line_chars, s->line_chars);
+      css_location_update (&end, e->lines, e->line_chars, e->line_chars);
+    }
+
+  gtk_css_parser_error (d->parser,
+                        GTK_CSS_PARSER_ERROR_SYNTAX,
+                        &start, &end,
+                        "%s", svg_error->message);
+}
+
+GtkCssValue *
+gtk_css_filter_value_parse (GtkCssParser *parser)
+{
+  GtkCssValue *value;
+  GArray *array;
+  guint i;
+  gboolean computed = TRUE;
+
+  if (gtk_css_parser_try_ident (parser, "none"))
+    return gtk_css_filter_value_new_none ();
+
+  array = g_array_new (FALSE, FALSE, sizeof (GtkCssFilter));
+
+  while (TRUE)
+    {
+      GtkCssFilter filter;
+
+      if (gtk_css_parser_has_function (parser, "blur"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_length, &filter.blur.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_BLUR;
+          computed = computed && gtk_css_value_is_computed (filter.blur.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "brightness"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.brightness.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_BRIGHTNESS;
+          computed = computed && gtk_css_value_is_computed (filter.brightness.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "contrast"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.contrast.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_CONTRAST;
+          computed = computed && gtk_css_value_is_computed (filter.contrast.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "grayscale"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.grayscale.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_GRAYSCALE;
+          computed = computed && gtk_css_value_is_computed (filter.grayscale.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "hue-rotate"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_angle, &filter.hue_rotate.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_HUE_ROTATE;
+          computed = computed && gtk_css_value_is_computed (filter.hue_rotate.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "invert"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.invert.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_INVERT;
+          computed = computed && gtk_css_value_is_computed (filter.invert.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "opacity"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.opacity.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_OPACITY;
+          computed = computed && gtk_css_value_is_computed (filter.opacity.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "saturate"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.saturate.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_SATURATE;
+          computed = computed && gtk_css_value_is_computed (filter.saturate.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "sepia"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_number, &filter.sepia.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_SEPIA;
+          computed = computed && gtk_css_value_is_computed (filter.sepia.value);
+        }
+      else if (gtk_css_parser_has_function (parser, "drop-shadow"))
+        {
+          if (!gtk_css_parser_consume_function (parser, 1, 1, gtk_css_filter_parse_shadow, &filter.drop_shadow.value))
+            goto fail;
+
+          filter.type = GTK_CSS_FILTER_DROP_SHADOW;
+          computed = computed && gtk_css_value_is_computed (filter.drop_shadow.value);
+        }
+      else if (gtk_css_parser_has_url (parser))
+        {
+          GtkCssLocation start, end;
+          char *url;
+          char *scheme = NULL;
+          char *path = NULL;
+          GBytes *bytes = NULL;
+          char *fragment = NULL;
+          GError *error = NULL;
+          unsigned long signal_id;
+          gboolean is_data;
+          int len;
+
+          start = *gtk_css_parser_get_start_location (parser);
+
+          url = gtk_css_parser_consume_url (parser);
+          if (!url)
+            goto fail;
+
+          end = *gtk_css_parser_get_end_location (parser);
+
+          len = strlen ("url(\"");
+          css_location_update (&start, 0, len, len);
+          len = strlen ("\")");
+          css_location_update (&end, 0, - len, - len);
+
+          g_uri_split (url, 0, &scheme, NULL, NULL, NULL, &path, NULL, &fragment, NULL);
+          if (!fragment)
+            {
+              g_set_error (&error,
+                           GTK_CSS_PARSER_ERROR,
+                           GTK_CSS_PARSER_ERROR_UNKNOWN_VALUE,
+                           "Filter url without fragment ID");
+              gtk_css_parser_emit_error (parser, &start, &end, error);
+              g_error_free (error);
+              g_free (scheme);
+              g_free (path);
+              g_free (url);
+              goto fail;
+            }
+
+          url[strlen (url) - (strlen (fragment) + 1)] = '\0';
+
+          is_data = scheme && g_ascii_strcasecmp (scheme, "data") == 0;
+
+          if (is_data)
+            {
+              char *mimetype = NULL;
+
+              bytes = gtk_css_data_url_parse (url, &mimetype, &error);
+
+              if (mimetype && strcmp (mimetype, "image/svg+xml") != 0)
+                {
+                  g_bytes_unref (bytes);
+                  g_set_error (&error,
+                               GTK_CSS_PARSER_ERROR,
+                               GTK_CSS_PARSER_ERROR_UNKNOWN_VALUE,
+                               "Filter url contains non-SVG data");
+                  g_clear_pointer (&bytes, g_bytes_unref);
+                }
+
+              g_free (mimetype);
+
+              if (bytes)
+                {
+                  len = strchr (url, ',') - url;
+                  css_location_update (&start, 0, len, len);
+                  len = strlen (fragment) - 1;
+                  css_location_update (&end, 0, - len, - len);
+                }
+            }
+          else
+            {
+              GFile *file;
+
+              file = gtk_css_parser_resolve_url (parser, url);
+              if (!file)
+                file = g_file_new_for_path (path);
+
+              bytes = g_file_load_bytes (file, NULL, NULL, &error);
+              g_object_unref (file);
+            }
+
+          g_free (scheme);
+          g_free (path);
+
+          if (!bytes)
+            {
+              gtk_css_parser_emit_error (parser, &start, &end, error);
+              g_error_free (error);
+              g_free (fragment);
+              g_free (url);
+              goto fail;
+            }
+
+          /* Don't allow animations and gpa extensions for now,
+           * to avoid complications
+           */
+          filter.svg.svg = gtk_svg_new ();
+          gtk_svg_set_features (filter.svg.svg,
+                                GTK_SVG_SYSTEM_RESOURCES | GTK_SVG_EXTERNAL_RESOURCES);
+          signal_id = g_signal_connect (filter.svg.svg, "error",
+                                        G_CALLBACK (svg_error_cb),
+                                        (&(ParserErrorData) { parser, is_data, start, end }));
+          gtk_svg_load_from_bytes (filter.svg.svg, bytes);
+          g_signal_handler_disconnect (filter.svg.svg, signal_id);
+          filter.svg.ref = fragment;
+          filter.svg.url = url;
+          filter.svg.type = GTK_CSS_FILTER_SVG;
+        }
+      else
+        {
+          break;
+        }
+
+      g_array_append_val (array, filter);
+    }
+
+  if (array->len == 0)
+    {
+      gtk_css_parser_error_syntax (parser, "Expected a filter");
+      goto fail;
+    }
+
+  value = gtk_css_filter_value_alloc (array->len);
+  memcpy (value->filters, array->data, sizeof (GtkCssFilter) * array->len);
+  value->is_computed = computed;
+
+  g_array_free (array, TRUE);
+
+  return value;
+
+fail:
+  for (i = 0; i < array->len; i++)
+    {
+      gtk_css_filter_clear (&g_array_index (array, GtkCssFilter, i));
+    }
+  g_array_free (array, TRUE);
+  return NULL;
+}
+
+/* Returns: extra size due to blur radii */
+double
+gtk_css_filter_value_push_snapshot (const GtkCssValue *filter,
+                                    GtkSnapshot       *snapshot)
+{
+  graphene_matrix_t matrix;
+  graphene_vec4_t offset;
+  gboolean all_opacity;
+  double extra_size;
+  int i, j;
+
+  if (gtk_css_filter_value_is_none (filter))
+    return 0;
+
+  extra_size = 0;
+  i = 0;
+  while (i < filter->n_filters)
+    {
+      j = gtk_css_filter_value_compute_matrix (filter, i, &matrix, &offset, &all_opacity);
+      if (i < j)
+        {
+          if (all_opacity)
+            gtk_snapshot_push_opacity (snapshot, graphene_matrix_get_value (&matrix, 3, 3));
+          else
+            gtk_snapshot_push_color_matrix (snapshot, &matrix, &offset);
+        }
+
+
+      if (j < filter->n_filters)
+        {
+          if (filter->filters[j].type == GTK_CSS_FILTER_BLUR)
+            {
+              double std_dev = gtk_css_number_value_get (filter->filters[j].blur.value, 100.0);
+              gtk_snapshot_push_blur (snapshot, 2 * std_dev);
+              extra_size += gsk_cairo_blur_compute_pixels (std_dev);
+            }
+          else if (filter->filters[j].type == GTK_CSS_FILTER_DROP_SHADOW)
+            {
+              gtk_css_shadow_value_push_snapshot (filter->filters[j].drop_shadow.value, snapshot);
+            }
+          else if (filter->filters[j].type == GTK_CSS_FILTER_SVG)
+            {
+              gtk_snapshot_push_collect (snapshot);
+            }
+          else
+            g_warning ("Don't know how to handle filter type %d", filter->filters[j].type);
+        }
+
+      i = j + 1;
+    }
+
+  return extra_size;
+}
+
+void
+gtk_css_filter_value_pop_snapshot (const GtkCssValue     *filter,
+                                   const graphene_rect_t *bounds,
+                                   GtkSnapshot           *snapshot)
+{
+  int i, j;
+
+  if (gtk_css_filter_value_is_none (filter))
+    return;
+
+  i = 0;
+  while (i < filter->n_filters)
+    {
+      for (j = i; j < filter->n_filters; j++)
+        {
+          if (filter->filters[j].type == GTK_CSS_FILTER_BLUR ||
+              filter->filters[j].type == GTK_CSS_FILTER_DROP_SHADOW ||
+              filter->filters[j].type == GTK_CSS_FILTER_SVG)
+            break;
+        }
+
+      if (i < j)
+        gtk_snapshot_pop (snapshot);
+
+      if (j < filter->n_filters)
+        {
+          if (filter->filters[j].type == GTK_CSS_FILTER_BLUR)
+            gtk_snapshot_pop (snapshot);
+          else if (filter->filters[j].type == GTK_CSS_FILTER_DROP_SHADOW)
+            gtk_css_shadow_value_pop_snapshot (filter->filters[j].drop_shadow.value, snapshot);
+          else if (filter->filters[j].type == GTK_CSS_FILTER_SVG)
+            {
+              GskRenderNode *source, *node;
+
+              source = gtk_snapshot_pop_collect (snapshot);
+              node = gtk_svg_apply_filter (filter->filters[j].svg.svg,
+                                           filter->filters[j].svg.ref,
+                                           bounds,
+                                           source);
+              gtk_snapshot_append_node (snapshot, node);
+              gsk_render_node_unref (node);
+              gsk_render_node_unref (source);
+            }
+        }
+
+      i = j + 1;
+    }
+}
