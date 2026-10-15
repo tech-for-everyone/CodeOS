@@ -65,9 +65,10 @@
 #include <gdk/gdkmemorytexturebuilder.h>
 #include <gdk/gdkmonitor.h>
 #include <gdk/gdkpaintable.h>
-/* GTK6: <gdk/gdkpango.h> and <gdk/deprecated/gdkpixbuf.h> used to be here.
- * Text is QTextLayout (qt/qttext.h) and images are QImage, so both APIs are
- * being removed rather than shimmed; see PLAN.md "Dependency surgery". */
+/* GTK6: <gdk/gdkpango.h> used to be here; its contents are GDK's own text
+ * glue now (gdk/gdktext.h).  <gdk/deprecated/gdkpixbuf.h> is now GTK6's
+ * gdk/gdkpixbuf.h, reached through <gdk/gdktexture.h>.  See PLAN.md
+ * "Dependency surgery". */
 #include <gdk/gdkpopup.h>
 #include <gdk/gdkpopuplayout.h>
 #include <gdk/gdkrectangle.h>

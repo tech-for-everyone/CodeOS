@@ -32,7 +32,7 @@
 #include "gdkmemorytextureprivate.h"
 #include "gdkprivate.h"
 
-#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdkpixbuf.h>
 #include <string.h>
 
 

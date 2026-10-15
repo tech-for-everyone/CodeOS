@@ -18,7 +18,7 @@
 #include "gtkiconcachevalidatorprivate.h"
 
 #include <glib.h>
-#include <gdk-pixbuf/gdk-pixdata.h>
+#include <gdk/gdkpixdata.h>
 
 #define VERBOSE(x)
 

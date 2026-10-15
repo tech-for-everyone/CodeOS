@@ -29,7 +29,7 @@
 #include "loaders/gdkpngprivate.h"
 #include "loaders/gdktiffprivate.h"
 
-#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdkpixbuf.h>
 
 
 /**

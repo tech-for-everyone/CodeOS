@@ -23,7 +23,7 @@
 #endif
 
 #include <gdk/gdktypes.h>
-#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdkpixbuf.h>
 
 G_BEGIN_DECLS
 

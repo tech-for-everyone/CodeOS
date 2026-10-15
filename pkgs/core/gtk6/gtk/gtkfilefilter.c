@@ -82,7 +82,7 @@
 #endif
 
 #include <glib/gi18n-lib.h>
-#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdkpixbuf.h>
 #include <string.h>
 
 typedef struct _GtkFileFilterClass GtkFileFilterClass;

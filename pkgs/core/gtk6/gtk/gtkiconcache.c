@@ -23,7 +23,7 @@
 #include "gtkprivate.h"
 
 #include <glib/gstdio.h>
-#include <gdk-pixbuf/gdk-pixdata.h>
+#include <gdk/gdkpixdata.h>
 
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>

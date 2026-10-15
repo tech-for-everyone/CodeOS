@@ -334,8 +334,8 @@ The port itself is not done. What it needs:
   `gdk.h` no longer pulls in `<gdk/gdkcairo.h>`, `<gdk/gdkpango.h>` or
   `<gdk/deprecated/gdkpixbuf.h>`. Those three headers still exist for the `.c`
   files that implement them and get removed as their call sites are ported; the
-  next wall is `gdk-pixbuf` (`cairo_t` and the text types are gone, above and
-  below). The
+  next wall is the GSK GPU backend (`gsk/gpu/gskvulkanrenderer.h`); the text
+  types and `gdk-pixbuf` are gone (above and below). The
   replacements are already prototyped (`qt/qttext`, `gsk/qt`, `gdk/qt`) and get
   wired in during the bring-up.
 * **The text API is gone from the sources: `PangoDirection` was the last
@@ -371,6 +371,24 @@ The port itself is not done. What it needs:
   the unrenamed vendored copies and is always followed by them. The cairo
   renamer gained one rule here (`cairo_font_type_t`→`GdkPaintFontType`, which
   `pangocairo.h` names) and `gdk/gdkpaint.h` the matching enum.
+* **gdk-pixbuf is gone too: GTK6 owns `GdkPixbuf`.** The ledger went from
+  **84/621** (blocked by `gdk-pixbuf/gdk-pixbuf.h`, 471 files) to **147/621**,
+  and its top blocker is now the GSK GPU backend (`gsk/gpu/gskvulkanrenderer.h`,
+  390 files). Unlike cairo and Pango, this needed no symbol rename: every type
+  gdk-pixbuf defines already lives in the `Gdk` namespace (`GdkPixbuf`,
+  `GdkPixbufFormat`, `GdkColorspace`, `GdkInterpType`, `GDK_TYPE_PIXBUF`,
+  `GDK_PIXBUF_MAGIC_NUMBER`), so GTK6 simply declares them itself. It is also
+  a far smaller surface than Pango: only four files include the pixbuf header
+  directly, but one of them is `gdk/gdktexture.h`, which is why the count is in
+  the hundreds. `gdk/gdkpixbuf.h` and `gdk/gdkpixdata.h` are hand-written to
+  exactly what the tree names — two types, the `GdkPixdata` struct and
+  twenty-odd functions — in the style of `gdk/gdkpaint.h`; the implementations
+  are QImage-backed and land with the `gdk/qt` backend. `scripts/gtk4-rename-pixbuf.py`
+  is the include swap (the only mechanical change) and is idempotent:
+  `<gdk-pixbuf/gdk-pixbuf.h>`→`<gdk/gdkpixbuf.h>`,
+  `<gdk-pixbuf/gdk-pixdata.h>`→`<gdk/gdkpixdata.h>`,
+  `<gdk/deprecated/gdkpixbuf.h>`→`<gdk/gdkpixbuf.h>`. `tests/gdkpixbuf.c` is
+  the compile-only probe over the new surface.
 * **Upstream's `meson.build` files are imported as reference** but not used;
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's
