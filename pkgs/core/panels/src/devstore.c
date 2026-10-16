@@ -27,6 +27,7 @@
 #include "fb.h"
 #include "keyboard.h"
 #include "pkg.h"
+#include "fetch.h"
 #undef pkg_repo_t
 
 /* Geometry. Fixed, like the other fixed-size panels in this directory; the
@@ -71,6 +72,11 @@ static int ds_mode = DS_MODE_INSTALLED;
  * made devstore_is_open() report closed for a legitimately empty store, and
  * a caller polling that flag would reopen the panel on every tick. */
 static int ds_open;
+
+/* The reapified "Proceed? [Y/N]" from the original console helper. Clicking
+ * Install only *arms* it; the fetch runs when the user answers Y. */
+static int  ds_confirm;
+static char ds_confirm_name[FS_NAME_MAX];
 
 static int ds_rows_visible(void) {
     int rows = (DS_LIST_BOT - DS_LIST_TOP) / DS_ROW_H;
@@ -350,6 +356,15 @@ void devstore_draw(uint32_t scr_w, uint32_t scr_h) {
             fb_drawstr_px(DS_BTN_X + 10, DS_BTN_Y + 7, "Install Selected", C_TEXT, C_SURFACE2);
     } else
         fb_drawstr_px(DS_BTN_X + 10, DS_BTN_Y + 7, "Install App", C_TEXT, C_SURFACE2);
+
+    /* Confirmation overlay -- the ported "Proceed? [Y/N]" prompt. */
+    if (ds_confirm) {
+        fb_fillrect(20, 100, DS_W - 40, 80, C_SURFACE0);
+        fb_drawrect(20, 100, DS_W - 40, 80, C_OVERLAY0);
+        fb_drawstr_px(32, 116, "Install package?", C_TEXT, C_SURFACE0);
+        fb_drawstr_px(32, 136, ds_confirm_name, C_SKY, C_SURFACE0);
+        fb_drawstr_px(32, 156, "Proceed? [Y/N]", C_SUBTEXT1, C_SURFACE0);
+    }
 }
 
 /* ----------------------------------------------------------------- input */
@@ -369,11 +384,11 @@ int devstore_click(int mx, int my) {
         if (ds_mode == DS_MODE_STORE && ds_entry_cnt > 0 && ds_scroll >= 0) {
             int idx = ds_scroll;
             if (idx < ds_entry_cnt && ds_entries[idx].type == DS_PKG) {
-#ifdef KERNEL
-                extern void pkg_install_with_deps(const char *name);
-                pkg_install_with_deps(ds_entries[idx].name);
-#endif
-                devstore_refresh();
+                /* Arm the Y/N prompt rather than installing immediately, so
+                 * the confirmation step survives the port. */
+                strncpy_safe(ds_confirm_name, ds_entries[idx].name,
+                             sizeof(ds_confirm_name));
+                ds_confirm = 1;
                 return DS_MISS;
             }
         }
@@ -390,6 +405,19 @@ int devstore_click(int mx, int my) {
 
 /* Returns 1 if the key was consumed, so the caller knows not to pass it on. */
 int devstore_key(int key) {
+    /* A pending install owns every key until it is answered. */
+    if (ds_confirm) {
+        if (key == 'y' || key == 'Y') {
+            ds_confirm = 0;
+#ifdef KERNEL
+            fetch_install_package(ds_confirm_name);
+#endif
+            devstore_refresh();
+        } else if (key == 'n' || key == 'N') {
+            ds_confirm = 0;
+        }
+        return 1;
+    }
     int rows = ds_rows_visible();
     int max_off = ds_entry_cnt - rows;
 

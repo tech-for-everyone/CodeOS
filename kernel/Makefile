@@ -154,6 +154,9 @@ SRC_C   += $(QT_BACKEND_DIR)/lgame_rooms.c
 # nothing noticed. Compiling it keeps it honest even though the Qt panel
 # layer, not the legacy C panel, is what the desktop currently draws.
 SRC_C   += $(QT_BACKEND_DIR)/devstore.c
+# fetch.c is DevStore's fetch inner-workings (the CodeOS-native curl
+# alternative); it is listed explicitly for the same reason as devstore.c.
+SRC_C   += $(QT_BACKEND_DIR)/fetch.c
 SRC_C   += kernel/x11_server.c kernel/x11_stubs.c
     SRC_CXX = kernel/cxx_support.cpp kernel/stdcxx_support.cpp kernel/xserver.cpp arch/fb.cpp \
               arch/cursor_theme.cpp \
