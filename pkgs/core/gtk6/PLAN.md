@@ -387,9 +387,35 @@ The port itself is not done. What it needs:
   is the include swap (the only mechanical change) and is idempotent:
   `<gdk-pixbuf/gdk-pixbuf.h>`→`<gdk/gdkpixbuf.h>`,
   `<gdk-pixbuf/gdk-pixdata.h>`→`<gdk/gdkpixdata.h>`,
-  `<gdk/deprecated/gdkpixbuf.h>`→`<gdk/gdkpixbuf.h>`. `tests/gdkpixbuf.c` is
-  the compile-only probe over the new surface.
-* **Upstream's `meson.build` files are imported as reference** but not used;
+   `<gdk/deprecated/gdkpixbuf.h>`→`<gdk/gdkpixbuf.h>`. `tests/gdkpixbuf.c` is
+   the compile-only probe over the new surface.
+* **The GPU renderer is dropped from the kept GSK before the pattern is
+  repeated for the platform layer.** `scripts/gtk4-gsk-cpuonly.py` removes
+  `<gsk/gpu/gskvulkanrenderer.h>` / `<gsk/gpu/gskglrenderer.h>` from the
+   `gsk/gsk.h` umbrella and rewrites the private `gskrendernodeprivate.h`
+   include of `gpu/gskgputypesprivate.h` to opaque forward declarations for
+   `GskGpuRenderPass` / `GskGpuOcclusion`. `gsk/gpu/gskgpuocclusionprivate.h`
+   is now GTK6's own small header (the GPU occlusion entry points the node
+   `occlusion` vfuncs name), not upstream's.
+ * **The platform widget files are the same prune as the platform directories.**
+   `scripts/gtk4-prune-platform.py` removes the macOS/Quartz, Windows, X11,
+   Wayland, Broadway and Android `gtk_*.c` files that `gtk/meson.build` guards
+   behind those OSes (22 files); `scripts/import-gtk4.sh` already drops the
+   matching directories. The include-path additions in `Makefile`
+   (`build/gen/gtk/css`, `build/gen/gtk/svg`) are what let the svg/css enum
+   headers resolve by their short names.
+ * **The version header is generated, exactly as meson would.**
+   `gtk/gtkversion.h` is `gtk/gtkversion.h.in` with the 4.25.0 placeholders
+   filled, placed at the path `<gtk/gtkversion.h>` expects.
+ * **The pruned subsystems are shimmed, not silently absent.** `gtk/deprecated`,
+   `gtk/print`, and the loading/platform headers (`gtk/inspector`,
+   `gtk/a11y`, `gdk/loaders`, `gsk/gpu`, `gsk/gl`, `gdk/{x11,win32,...}`) are
+   present so `gtk/gtk.h` and the platform `.c` files resolve their includes;
+   the copies still carry upstream declarations and are rewritten by
+   `gtk4-rename-{cairo,pango}.py` like the rest of the tree. Ledger is
+   **554/600** after the platform prune.
+ * **Upstream's `meson.build` files are imported as reference** but not used;
+   gtk6's freestanding `Makefile` owns the build.
   gtk6's freestanding `Makefile` owns the build.
 * **Re-licensing is deferred.** The imported headers still carry upstream's
   `LGPL-2.1-or-later`; the glib tree was swept to `GPL-3.0-or-later` and the

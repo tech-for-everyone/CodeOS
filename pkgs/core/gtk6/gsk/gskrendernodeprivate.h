@@ -6,7 +6,10 @@
 #include "gdk/gdkmemoryformatprivate.h"
 #include "gdk/gdkcolorprivate.h"
 #include "gskgradientprivate.h"
-#include "gpu/gskgputypesprivate.h"
+/* GTK6: the GPU renderer is replaced by gsk/qt (QPainter); these two types
+ * only appear as pointers in the vestigial occlusion vfunc below. */
+typedef struct _GskGpuRenderPass GskGpuRenderPass;
+typedef struct _GskGpuOcclusion  GskGpuOcclusion;
 
 G_BEGIN_DECLS
 

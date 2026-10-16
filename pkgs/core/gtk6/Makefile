@@ -140,8 +140,10 @@ GTK4_CFLAGS = \
     -I$(GLIB_SYSROOT)/include/gmodule \
     -I$(GLIB_SYSROOT)/include/graphene-1.0 \
     -I$(GLIB_SYSROOT)/lib/graphene-1.0/include \
+    -I$(HERE)/subprojects/graphene/include \
     -I$(GLIB_BUILD) -I$(GLIB_BUILD)/glib \
     -I$(GTK4_GEN) -I$(GTK4_GEN)/gdk -I$(GTK4_GEN)/gtk -I$(GTK4_GEN)/gsk \
+    -I$(GTK4_GEN)/gtk/css -I$(GTK4_GEN)/gtk/svg \
     -I$(HERE) \
     -I$(HERE)/gdk -I$(HERE)/gsk -I$(HERE)/gtk \
     -I$(HERE)/gtk/css -I$(HERE)/gtk/svg \
