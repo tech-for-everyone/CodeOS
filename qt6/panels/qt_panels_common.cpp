@@ -45,6 +45,7 @@ QColor appIconColor(const QString &name) {
     if (name == "Convert")     return QColor(0x7E, 0xE7, 0x87);
     if (name == "Android")     return QColor(0x3D, 0xDC, 0x84);
     if (name == "LaunchApp")   return QColor(0x5E, 0x5C, 0xE6);
+    if (name == "DevStore")    return QColor(0xBF, 0x5A, 0xF2);
     return QColor(0x89, 0xB4, 0xFA);
 }
 

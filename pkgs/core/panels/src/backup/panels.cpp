@@ -7,7 +7,6 @@ extern "C" {
 #include "wm.h"
 #include "terminal.h"
 #include "about.h"
-#include "devstore.h"
 #include "settings.h"
 #include "openweb.h"
 #include "fmanager.h"
@@ -105,7 +104,7 @@ static void launch_app(int item) {
         case 0: terminal_open(); break;
         case 1: about_open(); break;
         case 2: calc_open(); break;
-        case 3: if (!devstore_is_open()) devstore_open(); break;
+        case 3: break; /* DevStore is now the live Qt panel, not this legacy stack */
         case 4: settings_open(); break;
         case 5: openweb_open(); break;
         case 6: fmanager_open(); break;

@@ -1443,7 +1443,7 @@ void QtLauncherOverlay::showLauncher(bool androidMode) {
     if (m_appNames.isEmpty()) m_appNames = QStringList{"Terminal","About","Calc","Settings","OpenWeb",
                                                        "Explorer","Exit","Sys Info","SysMon",
                                                        "Install CodeOS","LT","NetBeam","Ziggy","Notes","Clock",
-                                                       "Convert","LaunchApp","Android"};
+                                                       "Convert","LaunchApp","Android","DevStore"};
     updateGrid(); rebuildItemRects(); show(); raise(); setFocus(); update();
 }
 

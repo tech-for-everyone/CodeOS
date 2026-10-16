@@ -152,7 +152,7 @@ reports changed files; repair deletes changed executable/code files only.
 CodeOS/
 ├── kernel/           # Kernel sources, drivers, arch, bootloader, userspace build
 │   ├── kernel/       # Core kernel C/C++ (mm, sched, syscall, desktop glue, ...)
-│   ├── drivers/      # PCI NICs, USB, input, audio, devstore, ...
+│   ├── drivers/      # PCI NICs, USB, input, audio, ...
 │   ├── arch/         # x86_64 + arm64 boot / low-level
 │   ├── gui/          # GUI primitives (desktop, windows, widgets)
 │   ├── userspace/    # crt0, libc stubs, link scripts → builds user ELFs

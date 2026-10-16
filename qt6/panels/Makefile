@@ -108,7 +108,7 @@ CFLAGS = $(BASE_FLAGS) -std=gnu11 \
 APP_OBJS = terminal.o app_host.o calc.o settings.o \
     about.o sys_info.o exit.o \
     sys_mon.o explorer.o \
-    netbeam.o ziggy.o notes.o clock.o convert.o
+    netbeam.o ziggy.o notes.o clock.o convert.o devstore.o
 
 OBJS = codeos_platform.o codeos_plugin.o \
     qt_panels_common.o qt_panels_shell.o $(APP_OBJS) qt_panels_openweb.o \

@@ -67,6 +67,7 @@ class QtZiggyWidget;
 class QtNotesWidget;
 class QtClockWidget;
 class QtConvertWidget;
+class QtDevStoreWidget;
 class QPlainTextEdit;
 class QResizeEvent;
 class QComboBox;
@@ -562,6 +563,52 @@ private:
     QComboBox *m_to = nullptr;
     QLineEdit *m_in = nullptr;
     QLabel *m_out = nullptr;
+};
+
+/* DevStore — the CodeOS application store.
+ *
+ * A live Qt application window (NOT the legacy fb.h C panel that used to sit
+ * in pkgs/core/panels/src/devstore.c): the software catalogue is read straight
+ * from the package manager's repo tables, "installed" comes from pkg_get_info,
+ * and the Install button drives fetch_install_package() — download, verify,
+ * install — behind a Proceed? [Y/N] confirmation. Nothing shells out. */
+class QtDevStoreWidget : public QtAppWindow {
+    Q_OBJECT
+public:
+    explicit QtDevStoreWidget(QWidget *parent = nullptr);
+protected:
+    void paintContent(QPainter &p, const QRect &r) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+private:
+    struct Entry {
+        QString name;
+        QString version;
+        QString desc;
+        bool    installed;
+    };
+    void reload();
+    void ensureVisible();
+    void beginInstall(int idx);
+    void runInstall();
+    int  rowAt(const QPoint &pos) const;
+
+    QList<Entry> m_entries;
+    int  m_mode = 0;                 /* 0 = Store, 1 = Installed */
+    int  m_selected = -1;
+    int  m_scroll = 0;
+    int  m_hoverRow = -1;
+    int  m_hoverBtn = -1;
+    bool m_confirm = false;
+    QString m_confirmName;
+    QString m_status;
+    bool m_statusOk = true;
+    QRect m_listRect;
+    QRect m_storeTab, m_installedTab, m_installBtn;
+    QRect m_yesBtn, m_noBtn;
 };
 
 class QtSysInfoWidget : public QtAppWindow {

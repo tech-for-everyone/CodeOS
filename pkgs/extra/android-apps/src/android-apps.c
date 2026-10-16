@@ -13,7 +13,8 @@
 #define MAX_APPS 16
 #define NAME_LEN 48
 
-/* Bundled Android apps that CodeOS ships with (entries mirror devstore.c) */
+/* Bundled Android apps that CodeOS ships with (kept in step with the
+ * android repo table in the kernel package manager). */
 static const char *android_apps[MAX_APPS] = {
     "android-launcher", "android-browser", "android-calendar",
     "android-camera",   "android-keyboard"
