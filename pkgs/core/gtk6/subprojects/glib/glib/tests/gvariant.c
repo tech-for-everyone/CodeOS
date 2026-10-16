@@ -3687,7 +3687,8 @@ test_varargs (void)
                    NULL);
 
     /* NULL values */
-    memset (justs, 1, sizeof justs);
+    justs[0] = justs[1] = justs[2] = justs[3] = justs[4] =
+      justs[5] = justs[6] = justs[7] = justs[8] = justs[9] = TRUE;
     g_variant_get (value, "(mymbmnmqmimumxmtmhmdmv)",
                    &justs[0], NULL,
                    &justs[1], NULL,
@@ -3704,7 +3705,8 @@ test_varargs (void)
                      justs[5] || justs[6] || justs[7] || justs[8] || justs[9]));
 
     /* both non-NULL */
-    memset (justs, 1, sizeof justs);
+    justs[0] = justs[1] = justs[2] = justs[3] = justs[4] =
+      justs[5] = justs[6] = justs[7] = justs[8] = justs[9] = TRUE;
     byteval = i16val = u16val = i32val = u32val = i64val = u64val = hval = 88;
     vval = (void *) 1;
     bval = TRUE;
@@ -3784,7 +3786,8 @@ test_varargs (void)
                    NULL);
 
     /* NULL values */
-    memset (justs, 0, sizeof justs);
+    justs[0] = justs[1] = justs[2] = justs[3] = justs[4] =
+      justs[5] = justs[6] = justs[7] = justs[8] = justs[9] = FALSE;
     g_variant_get (value, "(mymbmnmqmimumxmtmhmdmv)",
                    &justs[0], NULL,
                    &justs[1], NULL,
@@ -3801,7 +3804,8 @@ test_varargs (void)
                    justs[5] && justs[6] && justs[7] && justs[8] && justs[9]);
 
     /* both non-NULL */
-    memset (justs, 0, sizeof justs);
+    justs[0] = justs[1] = justs[2] = justs[3] = justs[4] =
+      justs[5] = justs[6] = justs[7] = justs[8] = justs[9] = FALSE;
     byteval = i16val = u16val = i32val = u32val = i64val = u64val = hval = 88;
     vval = (void *) 1;
     bval = FALSE;
