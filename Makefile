@@ -46,6 +46,7 @@ check:
 	$(MAKE) ncvm-check
 	$(MAKE) codec-check
 	$(MAKE) bas-check
+	$(MAKE) netbeam-check
 
 jengine-check:
 	@printf "$(CYAN)$(BOLD)==> Checking Jengine...$(RESET)\n"
