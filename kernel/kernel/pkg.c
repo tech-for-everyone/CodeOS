@@ -497,6 +497,7 @@ const pkg_repo_t pkg_repo_dev[] = {
     {"rustc", "1.70.0", "Rust compiler", "", "MIT/Apache2", 73400320, 0, 0, 0, 0, 0, 0, 0, 2},
     {"perl", "5.36.0", "Perl programming language", "", "GPLv2", 8388608, 0, 0, 0, 0, 0, 0, 0, 2},
     {"lua", "5.4.6", "Lua scripting language", "", "MIT", 524288, 0, 0, 0, 0, 0, 0, 0, 2},
+    {"bas", "0.1.0", "bas systems language compiler (C-style syntax, Rust-inspired ownership, emits C)", "https://github.com/CodeOS-Comunity/bas", "MIT", 8388608, 0, 0, 0, 0, 0, 0, 0, 2},
     {"openssl", "3.0.5", "Cryptography and TLS toolkit", "", "Apache2.0", 2621440, (const char*[]){"zlib", 0}, 1, 0, 0, 0, 0, 0, 3},
     {"zip", "3.0", "ZIP compression utility", "", "BSD", 294912, (const char*[]){"zlib", 0}, 1, 0, 0, 0, 0, 0, 6},
     {"unzip", "6.0", "ZIP extraction utility", "", "BSD", 262144, 0, 0, 0, 0, 0, 0, 0, 6},

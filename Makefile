@@ -34,6 +34,7 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
+.PHONY: bas bas-check
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -44,6 +45,7 @@ check:
 	$(MAKE) jengine-check
 	$(MAKE) ncvm-check
 	$(MAKE) codec-check
+	$(MAKE) bas-check
 
 jengine-check:
 	@printf "$(CYAN)$(BOLD)==> Checking Jengine...$(RESET)\n"
@@ -86,6 +88,30 @@ codec-check:
 codec-fuzz-check:
 	@printf "$(CYAN)$(BOLD)==> Fuzzing codec decoders...$(RESET)\n"
 	@sh pkgs/core/codec/tests/fuzz.sh
+
+# bas is an optional sibling checkout, like OpenWeb: the language lives in its
+# own repository (CodeOS-Comunity/bas) and CodeOS integrates it as a host
+# toolchain rather than vendoring the compiler, so `make check` keeps working on
+# a tree without it. Program sources use the `.ba` extension; tests/run.sh
+# rebuilds the compiler with cargo, then runs every examples/*.ba program and
+# rejects tests/errors/*.ba with the matching diagnostic.
+BAS_DIR ?= $(firstword $(wildcard ../bas /usr/local/share/bas))
+
+bas:
+	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_DIR)/compiler/Cargo.toml" ]; then \
+	    echo "bas: no checkout at '$(BAS_DIR)'; set BAS_DIR=/path/to/bas"; \
+	    exit 1; \
+	fi
+	@cargo build --manifest-path "$(BAS_DIR)/compiler/Cargo.toml" -p bas-cli
+	@echo "bas: $(BAS_DIR)/compiler/target/debug/bas"
+
+bas-check:
+	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_DIR)/tests/run.sh" ]; then \
+	    printf "$(DIM)bas-check: no bas checkout at '$(BAS_DIR)' (optional); skipping$(RESET)\n"; \
+	else \
+	    printf "$(CYAN)$(BOLD)==> Checking bas language...$(RESET)\n"; \
+	    bash "$(BAS_DIR)/tests/run.sh"; \
+	fi
 
 # pkgs/extra/netbeam/src/netbeam.c is a CodeOS userspace ELF, so it issues
 # `int $0x80` with CodeOS syscall numbers and cannot run on Linux. The test

@@ -1,0 +1,13 @@
+{
+    "name": "bas",
+    "version": "0.1.0",
+    "description": "bas systems language compiler — C-style syntax with Rust-inspired ownership, sum types and pattern matching; lowers to C",
+    "author": "CodeOS Team",
+    "license": "MIT",
+    "type": "tool",
+    "category": "Development",
+    "dependencies": ["gcc", "clang"],
+    "install_path": "/usr/bin/bas",
+    "homepage": "https://github.com/CodeOS-Comunity/bas",
+    "source": "https://github.com/CodeOS-Comunity/bas"
+}
