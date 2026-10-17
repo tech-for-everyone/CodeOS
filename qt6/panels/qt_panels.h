@@ -571,7 +571,13 @@ private:
  * in pkgs/core/panels/src/devstore.c): the software catalogue is read straight
  * from the package manager's repo tables, "installed" comes from pkg_get_info,
  * and the Install button drives fetch_install_package() — download, verify,
- * install — behind a Proceed? [Y/N] confirmation. Nothing shells out. */
+ * install — behind a Proceed? [Y/N] confirmation. Nothing shells out.
+ *
+ * "Sync repos" pulls pkg.index from the enabled http(s) repositories; anything
+ * it discovers lands in the package manager's dynamic remote repo and is then
+ * listed here (tagged Remote). Installing one of those is the case that really
+ * pulls a .stone across the network rather than synthesizing it from the
+ * compiled-in metadata. */
 class QtDevStoreWidget : public QtAppWindow {
     Q_OBJECT
 public:
@@ -589,11 +595,13 @@ private:
         QString version;
         QString desc;
         bool    installed;
+        bool    remote;      /* discovered via pkg.index — Install downloads it */
     };
     void reload();
     void ensureVisible();
     void beginInstall(int idx);
     void runInstall();
+    void runSync();
     int  rowAt(const QPoint &pos) const;
 
     QList<Entry> m_entries;
@@ -601,13 +609,14 @@ private:
     int  m_selected = -1;
     int  m_scroll = 0;
     int  m_hoverRow = -1;
-    int  m_hoverBtn = -1;
+    int  m_hoverBtn = -1;            /* 1 = Install, 2 = Sync */
     bool m_confirm = false;
+    bool m_syncing = false;
     QString m_confirmName;
     QString m_status;
     bool m_statusOk = true;
     QRect m_listRect;
-    QRect m_storeTab, m_installedTab, m_installBtn;
+    QRect m_storeTab, m_installedTab, m_installBtn, m_syncBtn;
     QRect m_yesBtn, m_noBtn;
 };
 

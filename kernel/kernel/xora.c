@@ -18,6 +18,7 @@
 #include "string.h"
 #include "slab.h"
 #include "fs.h"
+#include "../../pkgs/core/codec/src/codec.h"
 
 /* ── Minimal tar header (ustar, 512-byte blocks) ── */
 #define TAR_BLOCK_SIZE 512
@@ -75,12 +76,22 @@ void xora_inspect(const char *path) {
 
     uint8_t *data = (uint8_t *)buf;
     int dlen = flen;
+    uint8_t *decomp_buf = NULL;
+    int decomp_cap = 0;
 
     if (is_gzip(data, dlen)) {
-        kprintf("xora: '%s' is gzip-compressed — use host tools to decompress:\n", path);
-        kprintf("  gzip -dc %s | tar tf -\n", path);
-        kprintf("  Or: python3 scripts/xora.py inspect %s\n", path);
-        return;
+        uint8_t *dec = NULL;
+        int declen = 0;
+        if (xora_gzip_decompress(data, dlen, &dec, &declen) == 0 && dec && declen > 0) {
+            data = dec;
+            dlen = declen;
+            decomp_buf = dec;
+            decomp_cap = declen; /* best effort size */
+            kprintf("xora: decompressed %d bytes\n", declen);
+        } else {
+            kprintf("xora: gzip decompression failed\n");
+            return;
+        }
     }
 
     if (!is_tar(data, dlen)) {
@@ -133,11 +144,22 @@ void xora_install(const char *path) {
 
     uint8_t *data = (uint8_t *)buf;
     int dlen = flen;
+    uint8_t *decomp_buf = NULL;
+    int decomp_cap = 0;
 
     if (is_gzip(data, dlen)) {
-        kprintf("xora: cannot install gzip-compressed archives in-kernel.\n");
-        kprintf("  Decompress first: gzip -dc %s > /tmp/pkg.tar && xora install /tmp/pkg.tar\n", path);
-        return;
+        uint8_t *dec = NULL;
+        int declen = 0;
+        if (xora_gzip_decompress(data, dlen, &dec, &declen) == 0 && dec && declen > 0) {
+            data = dec;
+            dlen = declen;
+            decomp_buf = dec;
+            decomp_cap = declen; /* best effort size */
+            kprintf("xora: decompressed %d bytes\n", declen);
+        } else {
+            kprintf("xora: gzip decompression failed\n");
+            return;
+        }
     }
 
     if (!is_tar(data, dlen)) {
@@ -233,6 +255,9 @@ void xora_install(const char *path) {
                            const char *desc, uint32_t size);
     pkg_install(pkg_name, pkg_version, "installed via xora", (uint32_t)flen);
 
+    if (decomp_buf) {
+        kfree(decomp_buf);
+    }
     kprintf("✓ %s %s installed (%d files)\n", pkg_name, pkg_version, extracted);
 }
 
@@ -361,4 +386,54 @@ void cmd_nettest(int argc, char **argv) {
     kprintf("\n");
 
     kprintf("\n═══ done ═══\n");
+}
+
+/* ── gzip decompression (in-kernel) ── */
+int xora_gzip_decompress(const uint8_t *gzdata, int gzlen, uint8_t **out, int *outlen) {
+    if (!gzdata || gzlen < 18) return -1;
+    if (gzdata[0] != 0x1f || gzdata[1] != 0x8b) return -1;
+    if (gzdata[2] != 0x08) return -1; /* DEFLATE */
+
+    /* Skip header: FLG(3) + MTIME(4) + XFL(1) + OS(1) = 10 bytes minimum */
+    const uint8_t *flg = gzdata + 3;
+    const uint8_t *deflate_start = gzdata + 10;
+    int hlen = 10;
+    if (flg[0] & 0x04) { /* FEXTRA */
+        int xlen = gzdata[hlen] | (gzdata[hlen + 1] << 8);
+        hlen += 2 + xlen;
+    }
+    if (flg[0] & 0x08) { /* FNAME */
+        while (hlen < gzlen && gzdata[hlen]) hlen++;
+        hlen++;
+    }
+    if (flg[0] & 0x10) { /* FCOMMENT */
+        while (hlen < gzlen && gzdata[hlen]) hlen++;
+        hlen++;
+    }
+    if (flg[0] & 0x02) { /* FHCRC */
+        hlen += 2;
+    }
+    deflate_start = gzdata + hlen;
+    int deflate_len = gzlen - hlen - 8;
+    if (deflate_len < 0) return -1;
+
+    /* Guess output size from ISIZE at end (optional, but gives a bound) */
+    uint32_t isize = gzdata[gzlen - 4] |
+                     (gzdata[gzlen - 3] << 8) |
+                     (gzdata[gzlen - 2] << 16) |
+                     (gzdata[gzlen - 1] << 24);
+    size_t outcap = isize ? (size_t)isize : (size_t)deflate_len * 4;
+    if (outcap < (size_t)deflate_len) outcap = (size_t)deflate_len * 2;
+    if (outcap > 128 * 1024 * 1024) outcap = 128 * 1024 * 1024; /* cap */
+    uint8_t *obuf = (uint8_t *)kmalloc((uint32_t)outcap);
+    if (!obuf) return -1;
+    size_t got = outcap;
+    codec_err_t ce = codec_inflate(deflate_start, (size_t)deflate_len, obuf, &got);
+    if (ce != CODEC_OK) {
+        kfree(obuf);
+        return -1;
+    }
+    *out = obuf;
+    *outlen = (int)got;
+    return 0;
 }

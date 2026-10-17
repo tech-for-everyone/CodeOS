@@ -24,21 +24,24 @@ const OW_TXT_LINES: usize = 512;
 const OW_TXT_COLS: usize = 120;
 const OW_MAX_LINKS: usize = 128;
 const OW_MAX_IMAGES: usize = 32;
-const OW_URL_MAX: usize = 512;
-const OW_MAX_FORMS: usize = 8;
-const OW_MAX_FIELDS: usize = 40;
-const OW_MAX_SELECT_OPTS: usize = 16;
-const OW_SELECT_OPT_SZ: usize = 56;
+/* OW_URL_MAX / OW_MAX_FORMS / OW_MAX_FIELDS / OW_MAX_SELECT_OPTS /
+ * OW_SELECT_OPT_SZ are shared with the form API in `ow_form.rs`, so they are
+ * visible to the whole crate (see the matching C contract in ow_html.h). */
+pub(crate) const OW_URL_MAX: usize = 512;
+pub(crate) const OW_MAX_FORMS: usize = 8;
+pub(crate) const OW_MAX_FIELDS: usize = 40;
+pub(crate) const OW_MAX_SELECT_OPTS: usize = 16;
+pub(crate) const OW_SELECT_OPT_SZ: usize = 56;
 
 /* ── field types (ow_html.h) ── */
-const OW_FT_TEXT: u8 = 0;
-const OW_FT_PASSWORD: u8 = 1;
-const OW_FT_SUBMIT: u8 = 2;
-const OW_FT_BUTTON: u8 = 3;
-const OW_FT_CHECKBOX: u8 = 4;
-const OW_FT_RADIO: u8 = 5;
-const OW_FT_TEXTAREA: u8 = 6;
-const OW_FT_SELECT: u8 = 7;
+pub(crate) const OW_FT_TEXT: u8 = 0;
+pub(crate) const OW_FT_PASSWORD: u8 = 1;
+pub(crate) const OW_FT_SUBMIT: u8 = 2;
+pub(crate) const OW_FT_BUTTON: u8 = 3;
+pub(crate) const OW_FT_CHECKBOX: u8 = 4;
+pub(crate) const OW_FT_RADIO: u8 = 5;
+pub(crate) const OW_FT_TEXTAREA: u8 = 6;
+pub(crate) const OW_FT_SELECT: u8 = 7;
 
 /* ── line types (ow_html.h) ── */
 const OW_LT_NORMAL: u8 = 0;
@@ -86,26 +89,26 @@ struct OwLineInfo {
 }
 
 #[repr(C)]
-struct OwForm {
-    action: [u8; OW_URL_MAX],
-    method: u8,
-    field_start: u8,
-    field_count: u8,
+pub(crate) struct OwForm {
+    pub(crate) action: [u8; OW_URL_MAX],
+    pub(crate) method: u8,
+    pub(crate) field_start: u8,
+    pub(crate) field_count: u8,
 }
 
 #[repr(C)]
-struct OwFormField {
-    typ: u8,
-    form: c_int,
-    name: [u8; OW_URL_MAX],
-    value: [u8; OW_URL_MAX],
-    line: c_int,
-    col: c_int,
-    width: c_int,
-    checked: u8,
-    opt_cnt: u8,
-    opt_sel: u8,
-    opts: [[u8; OW_SELECT_OPT_SZ]; OW_MAX_SELECT_OPTS],
+pub(crate) struct OwFormField {
+    pub(crate) typ: u8,
+    pub(crate) form: c_int,
+    pub(crate) name: [u8; OW_URL_MAX],
+    pub(crate) value: [u8; OW_URL_MAX],
+    pub(crate) line: c_int,
+    pub(crate) col: c_int,
+    pub(crate) width: c_int,
+    pub(crate) checked: u8,
+    pub(crate) opt_cnt: u8,
+    pub(crate) opt_sel: u8,
+    pub(crate) opts: [[u8; OW_SELECT_OPT_SZ]; OW_MAX_SELECT_OPTS],
 }
 
 /* Globals owned by qt6/panels/ow_html.c — written here, read by the Qt
@@ -121,13 +124,15 @@ extern "C" {
     static mut ow_line_info: [OwLineInfo; OW_TXT_LINES];
     static mut ow_line_img: [c_int; OW_TXT_LINES];
     static mut ow_page_title: [u8; OW_URL_MAX];
-    static mut ow_forms: [OwForm; OW_MAX_FORMS];
-    static mut ow_form_cnt: c_int;
-    static mut ow_form_fields: [OwFormField; OW_MAX_FIELDS];
-    static mut ow_field_cnt: c_int;
+    /* The form tables are shared with the Rust form API in `ow_form.rs`
+     * (ow_field_set_value/toggle/at, ow_form_build_query, edit cache). */
+    pub(crate) static mut ow_forms: [OwForm; OW_MAX_FORMS];
+    pub(crate) static mut ow_form_cnt: c_int;
+    pub(crate) static mut ow_form_fields: [OwFormField; OW_MAX_FIELDS];
+    pub(crate) static mut ow_field_cnt: c_int;
 
-    /* Field-value edit cache lives in C (ow_html.c); the renderer delegates
-     * identity-check + restore/store to it exactly like the old C renderer. */
+    /* Field-value edit cache is now implemented in Rust (`ow_form.rs`); the
+     * renderer still calls it through this C-ABI bridge, unchanged. */
     fn ow_fv_restore(f: *mut OwFormField, fi: c_int);
     fn ow_fv_store(f: *const OwFormField, fi: c_int);
 }

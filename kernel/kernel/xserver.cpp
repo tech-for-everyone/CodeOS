@@ -54,7 +54,14 @@ static void xs_clear_window_buffer(xs_window_t *win) {
 }
 
 xs_screen_t *xs_screen_create(int width, int height, uint32_t *fb_addr, int stride) {
-    uint64_t screen_phys = pmm_alloc_page();
+    /* xs_screen_t embeds 64 xs_window_t + 8 xs_gc_t and is far larger than a
+     * single page (~13 KB). Allocating one page and then memset()ing the whole
+     * struct walked over whatever owned the following pages — including, at
+     * boot, the 32-byte size-class page backing Qt's QResourceRoot list, which
+     * made QResourcePrivate::load() dereference a null root and page-fault.
+     * Allocate the real footprint, contiguously. */
+    const size_t screen_pages = (sizeof(xs_screen_t) + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint64_t screen_phys = pmm_alloc_pages(screen_pages);
     if (!screen_phys) return 0;
     xs_screen_t *screen = (xs_screen_t*)phys_to_virt(screen_phys);
     memset(screen, 0, sizeof(xs_screen_t));
@@ -71,7 +78,7 @@ xs_screen_t *xs_screen_create(int width, int height, uint32_t *fb_addr, int stri
 
     pixelman_buffer_t *buf = pixelman_buffer_create(width, height, stride);
     if (!buf) {
-        pmm_free_page(screen_phys);
+        pmm_free_pages(screen_phys, screen_pages);
         return 0;
     }
     screen->buffer = buf;
@@ -99,7 +106,8 @@ void xs_screen_destroy(xs_screen_t *screen) {
     if (screen->fb_img) pixelman_image_unref(screen->fb_img);
 
     if (default_screen == screen) default_screen = 0;
-    pmm_free_page(virt_to_phys((uint64_t)screen));
+    pmm_free_pages(virt_to_phys((uint64_t)screen),
+                   (sizeof(xs_screen_t) + PAGE_SIZE - 1) / PAGE_SIZE);
 }
 
 void xs_screen_set_titlebar_fn(xs_screen_t *screen, int (*fn)(xs_window_t *, int)) {

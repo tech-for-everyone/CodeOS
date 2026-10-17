@@ -1,17 +1,18 @@
-/* ow_html.c — OpenWeb's shared render output structures + form/image services.
+/* ow_html.c — OpenWeb's shared render output structures + image services.
  *
- * The HTML renderer itself now lives in Rust:
+ * The HTML renderer itself lives in Rust:
  *   kernel/kernel/rust_ow/src/ow_render.rs  →  ow_render_rs()
- * It writes the C-owned globals declared in ow_html.h (ow_txt, ow_links,
+ * The form API and its persistent per-control edit cache also live in Rust:
+ *   kernel/kernel/rust_ow/src/ow_form.rs    →  ow_field_set_value/toggle/at,
+ *                                              ow_form_build_query,
+ *                                              ow_fv_restore/store
+ * Both write the C-owned globals declared in ow_html.h (ow_txt, ow_links,
  * ow_images, ow_forms, ow_form_fields, ow_page_title, ...) via extern statics,
  * exactly like the old C render_html() did — so the Qt frontend is unchanged.
  *
  * What remains here in C:
- *   - the output globals + line/form types (ow_html.h contract)
+ *   - the output globals + line/form type definitions (the ow_html.h contract)
  *   - the parallel image fetch workers + ow_image_download()
- *   - the form-field API the Qt frontend calls (set/toggle/hit-test/query)
- *   - the persistent per-control edit cache, bridged to Rust via
- *     ow_fv_restore() / ow_fv_store()
  */
 
 #include "ow_html.h"
@@ -138,196 +139,10 @@ int  ow_form_cnt;
 ow_form_field_t ow_form_fields[OW_MAX_FIELDS];
 int  ow_field_cnt;
 
-/* Persistent per-control edit cache (keys name+type+form action). The renderer
- * is rebuilt on every paint, so user-typed values live here and are re-applied
- * to the matching new field on the next render. The Rust renderer calls the
- * ow_fv_restore()/ow_fv_store() bridges below instead of touching these. */
-static char   s_fv_name[OW_MAX_FIELDS][OW_URL_MAX];
-static uint8_t s_fv_type[OW_MAX_FIELDS];
-static char   s_fv_action[OW_MAX_FIELDS][OW_URL_MAX];
-static char   s_fv_value[OW_MAX_FIELDS][OW_URL_MAX];
-static uint8_t s_fv_checked[OW_MAX_FIELDS];
-static uint8_t s_fv_sel[OW_MAX_FIELDS];
-static uint8_t s_fv_edited[OW_MAX_FIELDS];
-
-static void ow_strncpy_n(char *dst, const char *src, int max) {
-    int i = 0;
-    while (src[i] && i < max - 1) { dst[i] = src[i]; i++; }
-    dst[i] = 0;
-}
-
-/* Find the form a field belongs to (or -1). */
-static int field_form_idx(int fi) {
-    for (int k = 0; k < ow_form_cnt; k++)
-        if (fi >= ow_forms[k].field_start &&
-            fi < ow_forms[k].field_start + ow_forms[k].field_count)
-            return k;
-    return -1;
-}
-
-/* The enclosing form's action (for the persistent cache key). */
-static const char *field_form_action(int fi) {
-    int k = field_form_idx(fi);
-    return (k >= 0) ? ow_forms[k].action : "";
-}
-
-/* Apply a cached user edit to a freshly parsed field, if the field identity
- * (form action, name, type) matches the cache slot. */
-static void fv_restore(ow_form_field_t *f, int fi) {
-    if (fi < 0 || fi >= OW_MAX_FIELDS) return;
-    if (!s_fv_edited[fi]) { s_fv_name[fi][0] = 0; return; }
-    if (strcmp(s_fv_name[fi], f->name) != 0 || s_fv_type[fi] != f->type ||
-        strcmp(s_fv_action[fi], field_form_action(fi)) != 0) {
-        s_fv_edited[fi] = 0;
-        s_fv_name[fi][0] = 0;
-        return;
-    }
-    if (f->type == OW_FT_CHECKBOX || f->type == OW_FT_RADIO) {
-        f->checked = s_fv_checked[fi] ? 1 : 0;
-        if (f->type == OW_FT_RADIO && f->checked)
-            ow_strncpy_n(f->value, s_fv_value[fi], OW_URL_MAX);
-    } else if (f->type == OW_FT_SELECT) {
-        f->value[0] = 0;
-        if (s_fv_sel[fi] < f->opt_cnt) {
-            f->opt_sel = s_fv_sel[fi];
-            ow_strncpy_n(f->value, f->opts[f->opt_sel], OW_URL_MAX);
-        }
-    } else {
-        ow_strncpy_n(f->value, s_fv_value[fi], OW_URL_MAX);
-    }
-}
-
-/* Persist the field's current identity + values into the cache slot. */
-static void fv_store(const ow_form_field_t *f, int fi) {
-    if (fi < 0 || fi >= OW_MAX_FIELDS) return;
-    ow_strncpy_n(s_fv_name[fi], f->name, OW_URL_MAX);
-    s_fv_type[fi] = f->type;
-    ow_strncpy_n(s_fv_action[fi], field_form_action(fi), OW_URL_MAX);
-    if (f->type != OW_FT_CHECKBOX)
-        ow_strncpy_n(s_fv_value[fi], f->value, OW_URL_MAX);
-    if (s_fv_edited[fi]) {
-        if (f->type == OW_FT_CHECKBOX) s_fv_checked[fi] = f->checked ? 1 : 0;
-    } else {
-        s_fv_checked[fi] = f->checked ? 1 : 0;
-    }
-    s_fv_sel[fi] = f->opt_sel;
-}
-
-/* ── Rust renderer bridge ──
- * Called by ow_render_rs() (ow_render.rs) around each control it lays out. */
-
-void ow_fv_restore(ow_form_field_t *f, int fi) { fv_restore(f, fi); }
-void ow_fv_store(const ow_form_field_t *f, int fi) { fv_store(f, fi); }
-
-/* ── exported form API ── */
-
-void ow_field_set_value(int fi, const char *v) {
-    ow_form_field_t *f;
-    if (fi < 0 || fi >= ow_field_cnt) return;
-    f = &ow_form_fields[fi];
-    if (!v) v = "";
-    if (f->type == OW_FT_SELECT) {
-        uint8_t k;
-        for (k = 0; k < f->opt_cnt; k++) {
-            if (strcmp(f->opts[k], v) == 0) {
-                f->opt_sel = k;
-                ow_strncpy_n(f->value, f->opts[k], OW_URL_MAX);
-                s_fv_edited[fi] = 1;
-                s_fv_sel[fi] = k;
-                return;
-            }
-        }
-        f->opt_sel = (f->opt_cnt) ? (uint8_t)(f->opt_cnt - 1) : 0;
-        return;
-    }
-    ow_strncpy_n(f->value, v, OW_URL_MAX);
-    s_fv_edited[fi] = 1;
-    ow_strncpy_n(s_fv_value[fi], v, OW_URL_MAX);
-}
-
-void ow_field_toggle(int fi) {
-    ow_form_field_t *f;
-    if (fi < 0 || fi >= ow_field_cnt) return;
-    f = &ow_form_fields[fi];
-    if (f->type == OW_FT_CHECKBOX) {
-        f->checked = f->checked ? 0 : 1;
-        s_fv_edited[fi] = 1;
-        s_fv_checked[fi] = f->checked ? 1 : 0;
-    } else if (f->type == OW_FT_RADIO) {
-        int form = f->form;
-        int k;
-        for (k = 0; k < ow_field_cnt; k++) {
-            ow_form_field_t *r = &ow_form_fields[k];
-            if (r->type == OW_FT_RADIO && r->form == form &&
-                strcmp(r->name, f->name) == 0) {
-                if (k == fi) {
-                    r->checked = 1;
-                    s_fv_checked[k] = 1;
-                    s_fv_edited[k] = 1;
-                    ow_strncpy_n(s_fv_value[k], r->value, OW_URL_MAX);
-                    s_fv_edited[fi] = 1;
-                } else {
-                    r->checked = 0;
-                    s_fv_checked[k] = 0;
-                }
-            }
-        }
-    }
-}
-
-int ow_field_at(int line, int col) {
-    int k;
-    if (line < 0) return -1;
-    for (k = 0; k < ow_field_cnt; k++) {
-        ow_form_field_t *f = &ow_form_fields[k];
-        if (f->line == line && col >= f->col && col < f->col + f->width)
-            return k;
-    }
-    return -1;
-}
-
-/* URL-encode one name/value pair into out; returns bytes written. */
-static int qpart(char *out, int out_max, const char *name, const char *val) {
-    static const char hex[] = "0123456789ABCDEF";
-    static const char unres[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
-    int i = 0, n = 0;
-    const char *s;
-    for (s = name; *s; s++) {
-        if (n + 3 >= out_max) return n;
-        if (strchr(unres, *s)) out[n++] = *s;
-        else { out[n++] = '%'; out[n++] = hex[((unsigned char)*s) >> 4]; out[n++] = hex[((unsigned char)*s) & 15]; }
-    }
-    if (n + 1 >= out_max) return n;
-    out[n++] = '=';
-    for (s = val; *s; s++) {
-        if (n + 3 >= out_max) return n;
-        if (*s == ' ') out[n++] = '+';
-        else if (strchr(unres, *s)) out[n++] = *s;
-        else { out[n++] = '%'; out[n++] = hex[((unsigned char)*s) >> 4]; out[n++] = hex[((unsigned char)*s) & 15]; }
-    }
-    (void)i;
-    return n;
-}
-
-int ow_form_build_query(const ow_form_t *f, char *out, int out_max) {
-    int n = 0, k;
-    if (!f || !out || out_max <= 0) return 0;
-    out[0] = 0;
-    for (k = f->field_start; k < f->field_start + f->field_count && k < ow_field_cnt; k++) {
-        ow_form_field_t *fd = &ow_form_fields[k];
-        if (fd->type == OW_FT_SUBMIT || fd->type == OW_FT_BUTTON) continue;
-        if ((fd->type == OW_FT_CHECKBOX || fd->type == OW_FT_RADIO) && !fd->checked) continue;
-        if (!fd->name[0]) continue;
-        if (n) { if (n + 1 >= out_max) break; out[n++] = '&'; }
-        {
-            const char *qv = fd->value;
-            if ((fd->type == OW_FT_CHECKBOX || fd->type == OW_FT_RADIO) && !qv[0]) qv = "on";
-            n += qpart(out + n, out_max - n, fd->name, qv);
-        }
-    }
-    out[n] = 0;
-    return n;
-}
+/* The form API (ow_field_set_value/toggle/at, ow_form_build_query) and the
+ * persistent per-control edit cache (ow_fv_restore/ow_fv_store) now live in
+ * Rust: kernel/kernel/rust_ow/src/ow_form.rs. The globals above stay here
+ * because they are the shared contract with the Qt frontend. */
 
 /* ── image fetch ── */
 

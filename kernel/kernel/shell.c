@@ -2630,6 +2630,7 @@ static void cmd_appvm(int argc, char **argv) {
  * definitions. */
 __attribute__((weak)) void ow_core_navigate(const char *text) { (void)text; }
 __attribute__((weak)) void ow_core_dump_active(void) {}
+__attribute__((weak)) void ow_core_forms_dump(void) {}
 __attribute__((weak)) void ow_core_back(void) {}
 __attribute__((weak)) void ow_core_forward(void) {}
 __attribute__((weak)) void ow_core_stop(void) {}
@@ -2670,9 +2671,14 @@ static void cmd_ow(int argc, char **argv) {
         kprintf("OWDBG stop: RETURNED\n");
         return;
     }
+    if (argc >= 2 && strcmp(argv[1], "form") == 0) {
+        ow_core_forms_dump();
+        return;
+    }
     kprintf("usage: ow render <url>   (fetch + render + dump the page grid)\n");
     kprintf("       ow state           (print can_go_back/can_go_forward/progress)\n");
     kprintf("       ow back|forward|stop\n");
+    kprintf("       ow form            (render + query forms + exercise edit cache)\n");
 }
 
 #include "pe_loader.h"

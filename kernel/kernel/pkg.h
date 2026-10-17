@@ -163,6 +163,13 @@ void pkg_list_mirrors(const char *repo_name);
 
 void pkg_fetch(const char *name, const char *out_dir);
 void pkg_repo_update(void);
+
+/* Read-only view of the packages pkg_repo_update() discovered over the
+ * network (the dynamic remote repo). These are the ones whose Install
+ * performs a real http(s) download. */
+int  pkg_remote_count(void);
+const pkg_repo_t *pkg_remote_at(int idx);
+
 void pkg_sync(int update);
 void pkg_net_selftest(void);
 void pkg_b64_selftest(void);

@@ -92,8 +92,9 @@ int  ow_form_build_query(const ow_form_t *f, char *out, int out_max);
  * and fills all of the globals above. */
 void ow_render_rs(const char *html, int len);
 
-/* Edit-cache bridge used by the Rust renderer around each laid-out control
- * (identity-checked restore/store of user edits; C-owned cache). */
+/* Form edit-cache bridge, called by the Rust renderer around each laid-out
+ * control (identity-checked restore/store of user edits). Implemented in Rust
+ * alongside the form API: kernel/kernel/rust_ow/src/ow_form.rs. */
 void ow_fv_restore(ow_form_field_t *f, int fi);
 void ow_fv_store(const ow_form_field_t *f, int fi);
 

@@ -47,7 +47,7 @@ USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 
 USER_LDFLAGS = -nostdlib -z max-page-size=0x1000 -z noexecstack
 
-PROGRAMS = init shell csl zircapp zircon-notify zircon-clock zircon-info \
+PROGRAMS = init shell csl zircapp zircon-notify zircon-clock zircon-info ace_ui \
            apk-parser android-container android-apps code-music \
            linux-runner ld-codeos terminal syscall_test openweb \
            wineserver wine-runner linux-probe run-as dnslookup \
@@ -211,3 +211,7 @@ apk-parser-check:
 	@sh ../../pkgs/extra/apk-parser/tests/run.sh
 
 .PHONY: all clean check apk-parser-check
+
+# ace_ui: ArkUI UI app (from ace-host freestanding build)
+ace_ui: ../../ace-host/build/ace_codeos_elf
+	cp $< $@

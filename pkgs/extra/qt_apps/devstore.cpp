@@ -58,6 +58,7 @@ void QtDevStoreWidget::reload() {
 
             pkg_info_t info;
             e.installed = (pkg_get_info(p->name, &info) == 0);
+            e.remote    = false;
             m_entries.append(e);
         }
     };
@@ -68,6 +69,28 @@ void QtDevStoreWidget::reload() {
     appendTable(pkg_repo_ccp);
     appendTable(pkg_repo_aur);
     appendTable(pkg_repo_android);
+
+    /* Packages discovered over the network by pkg_repo_update() ("Sync repos").
+     * These are the ones whose Install actually downloads a .stone over
+     * http(s). Skip any that a static table already lists, so a package that
+     * is both shipped and published does not appear twice. */
+    for (int i = 0; i < pkg_remote_count(); i++) {
+        const pkg_repo_t *p = pkg_remote_at(i);
+        if (!p || !p->name) continue;
+        bool dup = false;
+        for (const Entry &e : m_entries)
+            if (e.name == QString::fromUtf8(p->name)) { dup = true; break; }
+        if (dup) continue;
+
+        Entry e;
+        e.name    = QString::fromUtf8(p->name);
+        e.version = p->version ? QString::fromUtf8(p->version) : QString();
+        e.desc    = p->desc    ? QString::fromUtf8(p->desc)    : QString();
+        pkg_info_t info;
+        e.installed = (pkg_get_info(p->name, &info) == 0);
+        e.remote    = true;
+        m_entries.append(e);
+    }
 
     /* The Installed tab is the same catalogue filtered down to what the
      * package manager reports as present. */
@@ -118,18 +141,58 @@ void QtDevStoreWidget::runInstall() {
     m_confirmName.clear();
     if (name.isEmpty()) return;
 
-    m_status = "Installing " + name + "…";
+    /* reload() rebuilds the list below, so capture where this package came
+     * from first — it decides which step the failure text should name. */
+    bool remote = false;
+    for (const Entry &e : m_entries)
+        if (e.name == name) { remote = e.remote; break; }
+
+    m_status = (remote ? "Downloading " : "Installing ") + name + "…";
     m_statusOk = true;
     update();
 
     /* The native package-manager flow: download, verify, install, clean up.
      * Same three steps the original console helper performed with curl and
-     * installer, reapified onto http_get + pkg_install_with_deps. */
+     * installer, reapified onto http_get + pkg_install_with_deps. For a
+     * remote package pkg_fetch() really transfers the .stone over http(s);
+     * for a static one it synthesizes the stone from the bundled metadata. */
     int rc = fetch_install_package(name.toUtf8().constData());
 
-    m_status = (rc == 0) ? (name + " installed.") : ("Could not install " + name + ".");
+    if (rc == 0)
+        m_status = name + " installed.";
+    else if (remote)
+        m_status = "Download of " + name + " failed — check the repo URL and network.";
+    else
+        m_status = "Could not install " + name + ".";
     m_statusOk = (rc == 0);
     reload();
+    update();
+}
+
+void QtDevStoreWidget::runSync() {
+    if (m_syncing) return;
+    m_syncing = true;
+    m_status = "Syncing repository metadata…";
+    m_statusOk = true;
+    update();
+
+    /* Fetches pkg.index from every enabled http(s) repo; file:// repos are
+     * static tables and are skipped. Discovered packages land in the package
+     * manager's remote repo, which reload() then lists. */
+    pkg_repo_update();
+
+    m_syncing = false;
+    reload();
+
+    int remote = pkg_remote_count();
+    if (remote > 0) {
+        m_status = QString::number(remote) +
+                   " package(s) discovered from remote repos.";
+        m_statusOk = true;
+    } else {
+        m_status = "Sync done — no http(s) repo returned packages.";
+        m_statusOk = false;
+    }
     update();
 }
 
@@ -155,13 +218,22 @@ void QtDevStoreWidget::paintContent(QPainter &p, const QRect &r) {
     drawTab(m_storeTab, "Store", m_mode == 0);
     drawTab(m_installedTab, "Installed", m_mode == 1);
 
-    /* Count of what the active tab is showing, top-right. */
+    /* "Sync repos" — pulls pkg.index from the http(s) repositories so that
+     * network-discovered packages show up in the Store. */
+    m_syncBtn = QRect(r.right() - DS_PAD - 122, tabsY, 122, DS_TAB_H);
+    drawGlassButton(p, m_syncBtn, m_syncing ? "Syncing…" : "Sync repos",
+                    m_syncing ? BtnDisabled
+                              : (m_hoverBtn == 2 ? BtnHover : BtnNormal),
+                    /*primary=*/false);
+
+    /* Count of what the active tab is showing. */
     {
         QFont cf = f; cf.setPointSize(10); p.setFont(cf);
         p.setPen(c_subtext);
-        QString caption = QString("%1 packages").arg(m_entries.size());
-        p.drawText(QRect(r.right() - DS_PAD - 220, tabsY, 220, DS_TAB_H),
-                   Qt::AlignVCenter | Qt::AlignRight, caption);
+        QString caption = QString::number(m_entries.size()) + " packages";
+        int cx = m_installedTab.right() + 10;
+        p.drawText(QRect(cx, tabsY, qMax(0, m_syncBtn.left() - cx - 10), DS_TAB_H),
+                   Qt::AlignVCenter | Qt::AlignLeft, caption);
     }
 
     /* ── List area ── */
@@ -224,15 +296,19 @@ void QtDevStoreWidget::paintContent(QPainter &p, const QRect &r) {
         p.drawText(QRect(row.right() - 100, row.y() + 7, 92, 16),
                    Qt::AlignVCenter | Qt::AlignRight, m_entries[i].version);
 
-        /* Installed badge (bottom-right) */
-        if (m_entries[i].installed) {
+        /* Status badge (bottom-right): Installed wins, else the package is a
+         * network one whose Install will download it. */
+        if (m_entries[i].installed || m_entries[i].remote) {
+            bool inst = m_entries[i].installed;
+            QColor fg = inst ? QColor(0x30, 0xD1, 0x58) : c_sky;
+            QColor bg = fg; bg.setAlpha(inst ? 60 : 55);
             QRect b(row.right() - 100, row.y() + 27, 92, 16);
             p.setPen(Qt::NoPen);
-            p.setBrush(QColor(0x30, 0xD1, 0x58, 60));
+            p.setBrush(bg);
             p.drawRoundedRect(b, 8, 8);
             QFont bf = f; bf.setPointSize(9); bf.setBold(true); p.setFont(bf);
-            p.setPen(QColor(0x30, 0xD1, 0x58));
-            p.drawText(b, Qt::AlignCenter, "Installed");
+            p.setPen(fg);
+            p.drawText(b, Qt::AlignCenter, inst ? "Installed" : "Remote");
         }
     }
     p.restore();
@@ -252,10 +328,12 @@ void QtDevStoreWidget::paintContent(QPainter &p, const QRect &r) {
 
     bool selected = (m_selected >= 0 && m_selected < m_entries.size());
     bool installed = selected && m_entries[m_selected].installed;
+    bool remote = selected && m_entries[m_selected].remote;
     m_installBtn = QRect(r.right() - DS_PAD - DS_BTN_W, footerY, DS_BTN_W, DS_BTN_H);
 
     QString label = !selected ? "Select a package"
-                             : (installed ? "Installed" : "Install");
+                             : (installed ? "Installed"
+                                          : (remote ? "Download" : "Install"));
     ButtonState st = (!selected || installed) ? BtnDisabled
                    : (m_hoverBtn == 1 ? BtnHover : BtnNormal);
     drawGlassButton(p, m_installBtn, label, st, /*primary=*/true);
@@ -306,6 +384,7 @@ void QtDevStoreWidget::mousePressEvent(QMouseEvent *e) {
 
     if (m_storeTab.contains(pos))     { m_mode = 0; reload(); update(); return; }
     if (m_installedTab.contains(pos)) { m_mode = 1; reload(); update(); return; }
+    if (m_syncBtn.contains(pos))      { runSync(); return; }
 
     if (m_installBtn.contains(pos)) {
         beginInstall(m_selected);
@@ -322,7 +401,8 @@ void QtDevStoreWidget::mousePressEvent(QMouseEvent *e) {
 void QtDevStoreWidget::mouseMoveEvent(QMouseEvent *e) {
     QPoint pos = e->pos();
     m_hoverRow = rowAt(pos);
-    m_hoverBtn = m_installBtn.contains(pos) ? 1 : -1;
+    m_hoverBtn = m_installBtn.contains(pos) ? 1
+               : (m_syncBtn.contains(pos) ? 2 : -1);
     update();
     QtAppWindow::mouseMoveEvent(e);
 }
@@ -364,6 +444,8 @@ void QtDevStoreWidget::keyPressEvent(QKeyEvent *e) {
         ensureVisible(); update(); return;
     case Qt::Key_Tab:
         m_mode = (m_mode == 0) ? 1 : 0; reload(); update(); return;
+    case Qt::Key_F5:
+        runSync(); return;
     case Qt::Key_Return:
     case Qt::Key_Enter:
         beginInstall(m_selected); update(); return;

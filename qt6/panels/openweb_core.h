@@ -29,4 +29,10 @@ int  ow_core_load_progress(void);
  * shell `ow render <url>` command. */
 void ow_core_dump_active(void);
 
+/* Headless diagnostic: render the active tab, print every form's built query
+ * (the Rust ow_form_build_query), then exercise the set/toggle edit API and
+ * re-render to prove a user edit survives the repaint via the Rust edit cache.
+ * Used by the kernel shell `ow form` command. */
+void ow_core_forms_dump(void);
+
 #endif

@@ -4,6 +4,7 @@
 use core::ffi::{c_char, c_int};
 use core::ptr;
 
+mod ow_form;
 mod ow_render;
 
 /* ── Panic reporting ─────────────────────────────────────────────────────

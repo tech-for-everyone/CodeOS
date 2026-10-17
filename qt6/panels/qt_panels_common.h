@@ -11,7 +11,7 @@
 /* ── Layout constants ── */
 #define MENUBAR_H   28
 #define DOCK_H      80
-#define APP_COUNT   19
+#define APP_COUNT   20
 
 /* "LaunchApp" — the dock's app-picker icon. It lives in m_appNames at this
  * index (so the dock and launcher grid pick it up) but is excluded from the

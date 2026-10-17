@@ -1675,6 +1675,22 @@ int pkg_find_in_repos(const char *name, int *repo_idx, int *pkg_idx) {
     return -1;
 }
 
+/* ── Remote (network-discovered) package accessors ──
+ * pkg_repo_update() fills the dynamic remote_repo[] table by parsing the
+ * pkg.index served by each enabled http(s) repository. The static tables
+ * (pkg_repo_core..pkg_repo_android) are exported directly, but this one is
+ * file-local, so the Qt DevStore needs a read-only view of it to list what a
+ * sync discovered — packages whose Install genuinely transfers a .stone over
+ * the network (see pkg_fetch's REMOTE_REPO_IDX branch). */
+int pkg_remote_count(void) {
+    return remote_count;
+}
+
+const pkg_repo_t *pkg_remote_at(int idx) {
+    if (idx < 0 || idx >= remote_count) return NULL;
+    return &remote_repo[idx];
+}
+
 /* ── Transaction log ── */
 
 void pkg_txn_log(const char *name, const char *version, int action, const char *old_version) {
