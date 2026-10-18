@@ -384,6 +384,26 @@ void kernel_panic(const char *fmt, ...) {
 /* ═══════════════════════════════════════════════════════════════════════
  *                      MAIN ENTRY POINT
  * ═══════════════════════════════════════════════════════════════════════ */
+/* ─────────────────────────────────────────────────────────────────
+ *  Zircon UI pump: drives user_wm_tick + input in Zircon mode
+ *  (no LVGL compositor, so we do it from a kernel thread)
+ * ───────────────────────────────────────────────────────────────── */
+static void zircon_ui_pump(void) {
+    for (;;) {
+        /* Poll PS/2 + USB input (keyboard + mouse) */
+        extern void input_poll(void);
+        input_poll();
+
+        /* Drive user-window bridge (creates/blits/destroys windows) */
+        extern void user_wm_tick(void);
+        user_wm_tick();
+
+        /* ~60 Hz frame pacing */
+        extern void sched_sleep_ms(uint64_t ms);
+        sched_sleep_ms(16);
+    }
+}
+
 void kernel_main(uint32_t magic __attribute__((unused)),
                  multiboot_info_t *mb_info __attribute__((unused))) {
 
@@ -793,6 +813,12 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         /* Boot straight into Zircon userspace (e.g. /sbin/zircon_init). */
         bootsplash_set_progress(100, "Zircon");
         bootsplash_finish();
+        /* Arm the user-window bridge so zircond can open WM windows. */
+        extern void user_wm_init(void);
+        user_wm_init();
+        /* Start the UI pump thread that drives user_wm_tick + input. */
+        extern int sched_create_thread(const char *name, void (*entry)(void));
+        sched_create_thread("zircon-ui", zircon_ui_pump);
         zircon_launch_elf(boot_zircon_init);
     } else if (has_fb && !boot_no_desktop) {
         /* Wire the X11 compositor into the desktop render path. */

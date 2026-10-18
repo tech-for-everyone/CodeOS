@@ -24,6 +24,7 @@ void user_wm_init(void);
 /* 1 once user_wm_init() has armed the bridge (independent of whether the
  * compositor is actually ticking -- apps self-report console fallback). */
 int  user_wm_ready(void);
+int  user_wm_ready_raw(void); /* for debug: raw uw_ready flag */
 
 /* Register a process (by pid) as a window client. Idempotent per pid. */
 int  user_wm_setup(int pid);

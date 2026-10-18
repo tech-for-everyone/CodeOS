@@ -26,6 +26,9 @@
 
 #include "../arch/arm64/font8x16.h"
 
+/* Backdrop color for Zircon mode (matches bootsplash C_BASE). */
+#define UW_BACKDROP 0xFF1C1C1E
+
 /* ─── WM protocol constants (userspace/include/wm_protocol.h) ─── */
 enum {
     WM_CREATE_WIN = 0x01,
@@ -262,9 +265,125 @@ static void uw_destroy_window(uw_win_t *w) {
         c->win = 0;
 }
 
+/* ─── raw-framebuffer presenter (Zircon mode, no LVGL) ─── */
+
+static void uw_raw_blit_window(uw_win_t *w) {
+    if (!w->used || !w->have_canvas || !w->buf) return;
+    uint32_t *dst = fb_get_active_buffer();
+    if (!dst) return;
+
+    int fb_w = (int)fb_getwidth();
+    int fb_h = (int)fb_getheight();
+    int fb_stride = fb_get_pitch() / 4;
+    if (fb_stride <= 0) fb_stride = fb_w;
+
+    int wx = w->x;
+    int wy = w->y;
+    int ww = w->w;
+    int wh = w->h;
+
+    /* clip to framebuffer */
+    int sx = 0, sy = 0;
+    if (wx < 0) { sx = -wx; wx = 0; }
+    if (wy < 0) { sy = -wy; wy = 0; }
+    if (wx + ww > fb_w) ww = fb_w - wx;
+    if (wy + wh > fb_h) wh = fb_h - wy;
+    if (ww <= 0 || wh <= 0) return;
+
+    uint32_t *src = w->buf + (size_t)sy * w->w + sx;
+    for (int row = 0; row < wh; row++) {
+        uint32_t *d = dst + (size_t)(wy + row) * fb_stride + wx;
+        uint32_t *s = src + (size_t)row * w->w;
+        for (int i = 0; i < ww; i++) d[i] = s[i];
+    }
+}
+
+static void uw_raw_tick(void) {
+    /* In raw mode, place windows centered and blit them directly to the fb. */
+    int fb_w = (int)fb_getwidth();
+    int fb_h = (int)fb_getheight();
+
+    /* clear backdrop once on first tick (bootsplash_finish leaves C_BASE) */
+    static int backdrop_done = 0;
+    if (!backdrop_done) {
+        fb_fill(UW_BACKDROP);
+        backdrop_done = 1;
+    }
+
+    uw_lock();
+    /* create */
+    for (int i = 0; i < UW_MAX_WINDOWS; i++) {
+        uw_win_t *w = &uw_windows[i];
+        if (w->used && w->want_create && !w->have_canvas) {
+            /* center the window on the framebuffer */
+            w->x = (fb_w - w->w) / 2;
+            w->y = (fb_h - w->h) / 2;
+            if (w->x < 0) w->x = 0;
+            if (w->y < 0) w->y = 0;
+            w->have_canvas = 1;
+            w->dirty = 1;
+            uw_client_t *c = uw_client_find(w->pid);
+            uint8_t ev[2] = { WM_EV_CONN, (uint8_t)w->handle };
+            uw_queue_event(c, ev, 2);
+            w->want_create = 0;
+        }
+    }
+
+    /* blit dirty surfaces */
+    for (int i = 0; i < UW_MAX_WINDOWS; i++) {
+        uw_win_t *w = &uw_windows[i];
+        if (w->used && w->have_canvas && w->dirty) {
+            uw_raw_blit_window(w);
+            w->dirty = 0;
+        }
+    }
+
+    /* destroy */
+    for (int i = 0; i < UW_MAX_WINDOWS; i++) {
+        uw_win_t *w = &uw_windows[i];
+        if (w->used && w->want_destroy) {
+            /* clear the window rect on the fb */
+            uint32_t *dst = fb_get_active_buffer();
+            int fb_stride = fb_get_pitch() / 4;
+            if (dst && fb_stride > 0) {
+                int wx = w->x, wy = w->y, ww = w->w, wh = w->h;
+                if (wx < 0) { ww += wx; wx = 0; }
+                if (wy < 0) { wh += wy; wy = 0; }
+                if (ww > 0 && wh > 0) {
+                    for (int row = 0; row < wh; row++)
+                        for (int col = 0; col < ww; col++)
+                            dst[(size_t)(wy + row) * fb_stride + wx + col] = UW_BACKDROP;
+                }
+            }
+            uw_destroy_window(w);
+        }
+    }
+
+    /* reap dead clients */
+    for (int i = 0; i < UW_MAX_CLIENTS; i++) {
+        uw_client_t *c = &uw_clients[i];
+        if (!c->used) continue;
+        if (proc_get(c->pid) == 0 && c->win == 0) {
+            uw_client_free(c);
+            continue;
+        }
+        if (proc_get(c->pid) == 0) {
+            for (int j = 0; j < UW_MAX_WINDOWS; j++)
+                if (uw_windows[j].used && uw_windows[j].pid == c->pid)
+                    uw_windows[j].want_destroy = 1;
+            uw_client_free(c);
+        }
+    }
+    uw_unlock();
+}
+
 void user_wm_tick(void) {
     if (!uw_ready) return;
-    if (!lvgl_port_ready()) return;
+
+    if (!lvgl_port_ready()) {
+        uw_raw_tick();
+        return;
+    }
 
     uw_lock();
     uw_ensure_wm();
@@ -328,6 +447,10 @@ int user_wm_ready(void) {
     return uw_ready;
 }
 
+int user_wm_ready_raw(void) {
+    return uw_ready;
+}
+
 /* ─── input routing (compositor thread) ─── */
 
 static int pid_of_handle(int handle) {
@@ -340,18 +463,33 @@ void user_wm_input_pointer(int x, int y, int pressed) {
     uw_win_t *w;
     int hid;
 
-    if (!uw_ready || !uw_wm_init_done) return;
+    if (!uw_ready) return;
 
     uw_lock();
     if (pressed) {
-        int r = lvgl_wm_hit_test(&uw_wm, x, y);
-        hid = 0;
-        if (r) {
-            lvgl_wm_window_t *lw = lvgl_wm_find_window(&uw_wm, r);
-            if (lw) {
-                for (int i = 0; i < UW_MAX_WINDOWS; i++)
-                    if (uw_windows[i].used && uw_windows[i].lw == r)
+        if (lvgl_port_ready() && uw_wm_init_done) {
+            int r = lvgl_wm_hit_test(&uw_wm, x, y);
+            hid = 0;
+            if (r) {
+                lvgl_wm_window_t *lw = lvgl_wm_find_window(&uw_wm, r);
+                if (lw) {
+                    for (int i = 0; i < UW_MAX_WINDOWS; i++)
+                        if (uw_windows[i].used && uw_windows[i].lw == r)
+                            hid = uw_windows[i].handle;
+                }
+            }
+        } else {
+            /* raw mode: find topmost window containing the point */
+            hid = 0;
+            for (int i = UW_MAX_WINDOWS - 1; i >= 0; i--) {
+                if (uw_windows[i].used && uw_windows[i].have_canvas) {
+                    int wx = x - uw_windows[i].x;
+                    int wy = y - uw_windows[i].y;
+                    if (wx >= 0 && wx < uw_windows[i].w && wy >= 0 && wy < uw_windows[i].h) {
                         hid = uw_windows[i].handle;
+                        break;
+                    }
+                }
             }
         }
         if (hid) uw_last_click_win = hid;
@@ -443,6 +581,7 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
 
     switch (m[0]) {
     case WM_CREATE_WIN: {
+        kprintf("user_wm: WM_CREATE_WIN pid=%d len=%d\n", pid, len);
         if (len < 6) { uw_unlock(); return -1; }
         int ww = m[1] | (m[2] << 8);
         int wh = m[3] | (m[4] << 8);
@@ -472,6 +611,7 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
             for (int i = 0; i < tlen && 6 + i < len; i++)
                 w->title[i] = m[6 + i];
         }
+        kprintf("user_wm: window slot=%d handle=%d %dx%d want_create=1\n", slot, w->handle, ww, wh);
         if (uw_surface_alloc(w) < 0) {
             memset(w, 0, sizeof(*w));
             uw_unlock();
