@@ -1708,7 +1708,7 @@ int main(void) {
     sys_getcwd(cwd, sizeof(cwd));
     var_set("SHELL", "/bin/shell", 1);
     var_set("USER", "root", 1);
-    var_set("HOME", "/root", 1);
+    var_set("HOME", "/root/root/home", 1);
     var_set("PWD", cwd, 1);
     var_set("TERM", "codeos-tty", 1);
     var_set("PATH", "/bin:/usr/bin", 1);

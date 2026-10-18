@@ -35,7 +35,7 @@ static int fm_hover_file = -1;
 
 #define FM_SIDES 5
 static const char *fm_side_names[FM_SIDES] = {"Home", "Root", "etc", "bin", "mnt"};
-static const char *fm_side_paths[FM_SIDES] = {"/home", "/", "/etc", "/bin", "/mnt"};
+static const char *fm_side_paths[FM_SIDES] = {"/root/root/home", "/", "/etc", "/bin", "/mnt"};
 static int fm_side_sel;
 
 static void fm_refresh(void) {

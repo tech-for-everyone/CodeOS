@@ -504,13 +504,13 @@ $(LIVE_DISK_IMG): $(USER_ELF) $(wildcard userspace/ld-codeos) $(wildcard disk/sc
 	@echo "Creating pre-baked disk image ($(LIVE_DISK_SIZE_M) MB)..."
 	rm -f $(LIVE_DISK_IMG) fs.img
 	FS_TREE=$$(mktemp -d); \
-	mkdir -p $$FS_TREE/bin $$FS_TREE/lib $$FS_TREE/etc $$FS_TREE/home $$FS_TREE/scripts $$FS_TREE/usr/share/applications; \
+	mkdir -p $$FS_TREE/bin $$FS_TREE/lib $$FS_TREE/etc $$FS_TREE/root/root/home $$FS_TREE/scripts $$FS_TREE/usr/share/applications; \
 	$(foreach prog,$(USER_PROGS),cp userspace/$(prog) $$FS_TREE/bin/$(prog) 2>/dev/null; ) \
 	cp userspace/ld-codeos $$FS_TREE/lib/ld-codeos.so 2>/dev/null || true; \
 	cp disk/scripts/*.script $$FS_TREE/scripts/ 2>/dev/null || true; \
 	cp disk/etc/* $$FS_TREE/etc/ 2>/dev/null || true; \
 	cp -r disk/usr/. $$FS_TREE/usr/ 2>/dev/null || true; \
-	chmod -R 755 $$FS_TREE/bin $$FS_TREE/lib $$FS_TREE/scripts $$FS_TREE/etc $$FS_TREE/home; \
+	chmod -R 755 $$FS_TREE/bin $$FS_TREE/lib $$FS_TREE/scripts $$FS_TREE/etc $$FS_TREE/root; \
 	mke2fs -d $$FS_TREE -F -q fs.img $(LIVE_DISK_SIZE_M)M; \
 	dd if=/dev/zero of=$(LIVE_DISK_IMG) bs=1M count=$(LIVE_DISK_SIZE_M) 2>/dev/null; \
 	parted -s $(LIVE_DISK_IMG) mklabel msdos 2>/dev/null; \

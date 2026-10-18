@@ -925,7 +925,7 @@ int vm_create_linux(const char *name, const char *rootfs, uint64_t memory_mb) {
     cfg.cpu_count = 1;
     cfg.enable_network = 1;
     cfg.enable_9p = 1;
-    strlcpy(cfg.shared_path, "/home", VM_IMAGE_PATH_MAX);
+    strlcpy(cfg.shared_path, "/root/root/home", VM_IMAGE_PATH_MAX);
     strlcpy(cfg.shared_mount, "/mnt/host", VM_IMAGE_PATH_MAX);
     return vm_create(&cfg);
 }
@@ -942,7 +942,7 @@ int vm_create_android(const char *name, const char *rootfs, uint64_t memory_mb) 
     cfg.enable_network = 1;
     cfg.enable_gpu = 1;
     cfg.enable_9p = 1;
-    strlcpy(cfg.shared_path, "/home", VM_IMAGE_PATH_MAX);
+    strlcpy(cfg.shared_path, "/root/root/home", VM_IMAGE_PATH_MAX);
     strlcpy(cfg.shared_mount, "/mnt/host", VM_IMAGE_PATH_MAX);
     return vm_create(&cfg);
 }
@@ -961,7 +961,7 @@ int vm_create_crosvm(const char *name, const char *kernel, const char *initrd,
     cfg.enable_network = 1;
     cfg.enable_gpu = 0;  /* crosvm handles GPU via virtio */
     cfg.enable_9p = 1;
-    strlcpy(cfg.shared_path, "/home", VM_IMAGE_PATH_MAX);
+    strlcpy(cfg.shared_path, "/root/root/home", VM_IMAGE_PATH_MAX);
     strlcpy(cfg.shared_mount, "/mnt/host", VM_IMAGE_PATH_MAX);
     return vm_create(&cfg);
 }
