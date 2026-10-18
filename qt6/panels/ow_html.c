@@ -133,6 +133,8 @@ int  ow_need_render;
 ow_line_info_t ow_line_info[OW_TXT_LINES];
 int  ow_line_img[OW_TXT_LINES];
 char ow_page_title[OW_URL_MAX];
+/* <meta name="description"> / og:description text ("" if none). */
+char ow_page_desc[OW_URL_MAX];
 
 ow_form_t ow_forms[OW_MAX_FORMS];
 int  ow_form_cnt;

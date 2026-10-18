@@ -125,6 +125,9 @@ extern "C" {
     static mut ow_line_info: [OwLineInfo; OW_TXT_LINES];
     static mut ow_line_img: [c_int; OW_TXT_LINES];
     static mut ow_page_title: [u8; OW_URL_MAX];
+    /* <meta name="description"> / og:description, same contract as the
+     * title: written here, read by the Qt frontend. */
+    static mut ow_page_desc: [u8; OW_URL_MAX];
     /* The form tables are shared with the Rust form API in `ow_form.rs`
      * (ow_field_set_value/toggle/at, ow_form_build_query, edit cache). */
     pub(crate) static mut ow_forms: [OwForm; OW_MAX_FORMS];
@@ -820,6 +823,7 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
         ow_link_cnt = 0;
         ow_image_cnt = 0;
         ow_page_title[0] = 0;
+        ow_page_desc[0] = 0;
         ow_form_cnt = 0;
         ow_field_cnt = 0;
     }
@@ -873,9 +877,53 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 i = skip_tag_end(html, i);
                 continue;
             }
+            /* ── <meta> extraction (description, og:title fallback) ── */
+            if tag_match(html, i, b"meta") == 1 {
+                let mut attrs = [Attr {
+                    name: [0; 16],
+                    value: [0; OW_URL_MAX],
+                }; MAX_ATTR];
+                let na = parse_attrs(html, i + 1, &mut attrs);
+                let mut key: &[u8] = b"";
+                let mut content: &[u8] = b"";
+                for k in 0..na {
+                    let (name, value) = (cstr(&attrs[k].name), cstr(&attrs[k].value));
+                    if name == b"name" || name == b"property" {
+                        key = value;
+                    } else if name == b"content" {
+                        content = value;
+                    }
+                }
+                if !content.is_empty() {
+                    /* Description: og/twitter win over the plain name= one,
+                     * and once set they are never downgraded. */
+                    let is_desc = key == b"description"
+                        || key == b"og:description"
+                        || key == b"twitter:description";
+                    if is_desc {
+                        let cur_empty = unsafe { ow_page_desc[0] == 0 };
+                        let strong = key != b"description";
+                        if cur_empty || strong {
+                            unsafe {
+                                cpy(&mut ow_page_desc, content);
+                            }
+                        }
+                    }
+                    /* Title fallback when the page has no <title> (or an
+                     * empty one): og:title / twitter:title. */
+                    if key == b"og:title" || key == b"twitter:title" {
+                        unsafe {
+                            if ow_page_title[0] == 0 && !content.is_empty() {
+                                cpy(&mut ow_page_title, content);
+                            }
+                        }
+                    }
+                }
+                i = skip_tag_end(html, i);
+                continue;
+            }
             if tag_match_exact(html, i, b"head") != 0
                 || tag_match(html, i, b"base") == 1
-                || tag_match(html, i, b"meta") == 1
                 || tag_match(html, i, b"link") == 1
                 || tag_match(html, i, b"source") == 1
                 || tag_match(html, i, b"wbr") == 1

@@ -74,6 +74,9 @@ extern ow_line_info_t ow_line_info[OW_TXT_LINES];
 extern int  ow_line_img[OW_TXT_LINES];
 /* <title> text extracted while rendering ("" if none). */
 extern char ow_page_title[OW_URL_MAX];
+/* <meta name="description"> / og:description text extracted while rendering
+ * ("" if none). */
+extern char ow_page_desc[OW_URL_MAX];
 
 extern ow_form_t ow_forms[OW_MAX_FORMS];
 extern int  ow_form_cnt;
