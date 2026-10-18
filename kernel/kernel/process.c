@@ -222,16 +222,20 @@ int proc_fork(void) {
 
     child->pml4 = (uint64_t *)new_pml4_phys;
 
-    /* Copy file descriptors (deep copy pipe refs) */
+    /* Share pipe endpoints with the child -- never copy the buffer.
+     *
+     * fork() duplicates each descriptor, so parent and child must reach the
+     * *same* pipe or a byte written in one is invisible to the other.  The
+     * old deep copy also gave every descriptor a private pipe, which made
+     * the readers/writers counts meaningless and let either side's close
+     * tear down a buffer the other still held.  Bump the endpoint refcount
+     * exactly as proc_fd_dup2() does; pipe_close() is refcounted on
+     * readers/writers and only frees at zero. */
     for (int i = 0; i < PROC_FD_MAX; i++) {
-        if (child->fds[i].pipe) {
-            pipe_t *new_pipe = (pipe_t *)pmm_alloc_page();
-            if (new_pipe) {
-                memcpy((void *)phys_to_virt((uint64_t)new_pipe),
-                       child->fds[i].pipe, sizeof(pipe_t));
-                child->fds[i].pipe = (pipe_t *)phys_to_virt((uint64_t)new_pipe);
-            }
-        }
+        pipe_t *pp = child->fds[i].pipe;
+        if (!pp) continue;
+        if (child->fds[i].type == 1) pp->readers++;
+        else if (child->fds[i].type == 2) pp->writers++;
     }
 
     /* Add as child of parent */
@@ -399,7 +403,12 @@ process_t *proc_get(int pid) {
 int proc_fd_alloc(void) {
     process_t *p = current_process;
     if (!p) return -1;
-    for (int i = 0; i < PROC_FD_MAX; i++) {
+    /* fds 0-2 are the console by convention: sys_read() treats fd 0 as the
+     * tty and sys_write() prints, both without consulting this table.  A
+     * pipe that lands there can never be read -- the probe in the shell
+     * measured exactly that as "sys_pipe read returns 1 garbage byte" --
+     * so allocation starts at 3, the way POSIX reserves 0-2. */
+    for (int i = 3; i < PROC_FD_MAX; i++) {
         if (p->fds[i].type == 0 && p->fds[i].pipe == 0 && p->fds[i].inode == 0) {
             p->fds[i].type = 1;
             return i;
@@ -412,7 +421,13 @@ int proc_fd_close(int fd) {
     process_t *p = current_process;
     if (!p || fd < 0 || fd >= PROC_FD_MAX) return -1;
     if (p->fds[fd].pipe) {
-        pipe_close(p->fds[fd].pipe, p->fds[fd].type == 2);
+        /* Only real pipe endpoints (types 1/2) go through pipe_close.  shm
+         * descriptors (type 3) hold a shm_segment_t in the same field; a
+         * pipe_close() there decrements "readers" 0x1000 bytes past the
+         * 16-byte header -- inside the mapped data -- and can free a page
+         * another process is still using. */
+        if (p->fds[fd].type == 1 || p->fds[fd].type == 2)
+            pipe_close(p->fds[fd].pipe, p->fds[fd].type == 2);
         p->fds[fd].pipe = 0;
     }
     p->fds[fd].type = 0;
@@ -504,7 +519,10 @@ void *shm_map(int fd) {
     uint64_t cur = base;
     for (int i = 0; i < seg->pages; i++) {
         uint64_t page_phys = seg->phys + i * 0x1000;
-        if (vmm_map_page(cur, page_phys, PAGE_PRESENT | PAGE_WRITE) < 0)
+        /* PAGE_USER matters: vmm_map_page() stores the caller's flags
+         * verbatim, so without it the page is supervisor-only and the
+         * first user access faults (err=7, CR2 at mmap_base). */
+        if (vmm_map_page(cur, page_phys, PAGE_PRESENT | PAGE_WRITE | PAGE_USER) < 0)
             return 0;
         cur += 0x1000;
     }
@@ -518,14 +536,16 @@ void *shm_map(int fd) {
 int pipe_create(int fd[2]) {
     pipe_t *p = (pipe_t *)pmm_alloc_page();
     if (!p) return -1;
-    memset((void *)phys_to_virt((uint64_t)p), 0, sizeof(pipe_t));
-    p->rpos = 0;
-    p->wpos = 0;
-    p->readers = 1;
-    p->writers = 1;
-    p->open = 1;
-
+    /* Reach the page through the HHDM: p is a *physical* address and the low
+     * half of the address space is the caller's program (see proc_fork's
+     * note). Writing p->field directly faults on the user image at 0x400000+
+     * with err=present+write, e.g. CR2=0x405000 for the first field past the
+     * buffer, which is why sys_pipe() never survived a first call. */
     pipe_t *pipe_virt = (pipe_t *)phys_to_virt((uint64_t)p);
+    memset(pipe_virt, 0, sizeof(pipe_t));
+    pipe_virt->readers = 1;
+    pipe_virt->writers = 1;
+    pipe_virt->open = 1;
 
     int r = proc_fd_alloc();
     int w = proc_fd_alloc();

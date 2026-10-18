@@ -544,9 +544,10 @@ static inline void *sys_sbrk(int inc) {
 }
 
 /* GET_INFO commands */
-#define INFO_KERNEL_VERSION 0
+#define INFO_KERNEL_VERSION 0 /* e.g. "#1 SMP CodeOS Andromeda x86_64 1.5.0.1-t" */
 #define INFO_KERNEL_NAME    1
 #define INFO_APPHOST        2 /* returns 1 when the app runs under the async apphost (Qt dock) */
+#define INFO_RTC_STRING     3 /* fills "YYYY-MM-DD HH:MM:SS" from the CMOS RTC; -1 when no RTC */
 
 static inline int sys_get_info(int cmd, char *buf, int max_len) {
     int ret;

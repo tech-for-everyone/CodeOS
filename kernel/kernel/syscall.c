@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "../arch/x86_64/io.h"
+#include "../arch/x86_64/rtc.h"
 #include "sched.h"
 #include "kprintf.h"
 #include "idt.h"
@@ -500,6 +501,21 @@ static int64_t sys_lseek(int fd, int64_t off, int whence) {
 }
 
 static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
+    /* A pipe read end explicitly installed on fd 0 -- via dup2, the way a
+     * shell redirects stdin -- must win over the console fast-path below,
+     * or the read comes from the serial port instead of the pipe.  Only a
+     * type-1 endpoint triggers this, so an untouched fd 0 (fds[0].pipe ==
+     * 0) still reaches the console. */
+    if (fd == 0) {
+        process_t *p0 = current_process;
+        if (p0 && p0->fds[0].pipe && p0->fds[0].type == 1) {
+            uint8_t kbuf[PROC_PIPE_BUF];
+            int n = pipe_read(p0->fds[0].pipe, kbuf, (int)count);
+            if (n > 0 && copy_to_user(user_buf, kbuf, n) < 0)
+                return -1;
+            return n;
+        }
+    }
     if (fd == 0) {
         if (apphost_active()) {
             uint8_t buf[256];
@@ -2433,6 +2449,23 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         }
         case 2: /* apphost context: 1 when stdin is the async apphost terminal */
             return apphost_active() ? 1 : 0;
+        case 3: { /* RTC wall clock, "YYYY-MM-DD HH:MM:SS"; -1 when no RTC.
+                   * Zircon's ZircApp host formats this for the Clock app so
+                   * userspace can show real time without a CMOS driver. */
+            if (!rtc_available()) return -1;
+            rtc_time_t t;
+            rtc_read(&t);
+            char rtc_buf[24];
+            snprintf(rtc_buf, sizeof(rtc_buf), "%04d-%02d-%02d %02d:%02d:%02d",
+                     t.year, t.month, t.day, t.hour, t.minute, t.second);
+            int len = (int)strlen(rtc_buf) + 1;
+            if (user_buf && max_len > 0) {
+                if (len > (int)max_len) len = (int)max_len;
+                if (copy_to_user(user_buf, rtc_buf, len) < 0)
+                    return -1;
+            }
+            return len;
+        }
         default:
             return -1;
         }
