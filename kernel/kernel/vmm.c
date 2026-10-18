@@ -11,6 +11,7 @@
 #define PT_SHIFT    12
 
 static uint64_t *kernel_pml4;
+static uint64_t kernel_pml4_phys;
 static spinlock_t vmm_lock = SPINLOCK_INIT;
 
 /* phys_to_virt/virt_to_phys defined in vmm.h using phys_to_virt_base */
@@ -43,8 +44,15 @@ static inline void write_page_table_base(uint64_t val) {
 #endif
 }
 
+/* Page-table walks start at the *current* address space, not at the boot
+ * pml4.  A forked process runs on its own CR3 (proc_fork COW-clones the user
+ * half), so its COW faults and its exec must be resolved in that process's
+ * own tables.  Before per-process address spaces every process shared
+ * kernel_pml4, which is why this used to be a constant -- the result is the
+ * same for every kernel-space walk, since all pml4s share the kernel half. */
 static inline uint64_t *pml4_entry(uint64_t virt) {
-    return &kernel_pml4[(virt >> PML4_SHIFT) & 0x1FF];
+    uint64_t *pml4 = (uint64_t *)phys_to_virt(read_page_table_base() & ~0xFFFULL);
+    return &pml4[(virt >> PML4_SHIFT) & 0x1FF];
 }
 
 static inline uint64_t *get_pdp(uint64_t *pml4e) {
@@ -76,6 +84,7 @@ static inline uint64_t *pt_entry(uint64_t virt, uint64_t *pt) {
 
 void vmm_init(void) {
     kernel_pml4 = (uint64_t *)phys_to_virt(read_page_table_base());
+    kernel_pml4_phys = read_page_table_base() & ~0xFFFULL;
 }
 
 static uint64_t *alloc_table(void) {
@@ -319,4 +328,9 @@ void vmm_set_cr3(uint64_t *pml4) { vmm_switch_pml4(pml4); }
 /* The shared kernel address space — kernel threads must run on this
  * even if a stale user-process CR3 is still loaded. */
 uint64_t *vmm_kernel_pml4(void) { return kernel_pml4; }
+
+/* The kernel pml4 as a physical address, for CR3.  vmm_kernel_pml4() returns
+ * the HHDM virtual pointer, and vmm_switch_pml4() writes its argument
+ * straight into CR3, so the two are not interchangeable. */
+uint64_t vmm_kernel_pml4_phys(void) { return kernel_pml4_phys; }
 

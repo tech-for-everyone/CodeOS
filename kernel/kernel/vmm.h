@@ -43,6 +43,7 @@ void *vmm_alloc_page_at(uint64_t virt, uint64_t flags);
 void vmm_switch_pml4(uint64_t *pml4);
 uint64_t *vmm_current_pml4(void);
 uint64_t *vmm_kernel_pml4(void);
+uint64_t vmm_kernel_pml4_phys(void);
 
 /* CR3 helpers for context-switch. */
 void vmm_set_cr3(uint64_t *pml4);

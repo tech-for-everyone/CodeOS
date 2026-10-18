@@ -90,11 +90,15 @@ typedef struct proc_fd {
  * of the parent's context with rax forced to 0, so it resumes inside fork()
  * and returns 0 while the parent resumes with the child's pid.
  *
- * All-zero with @has_ctx clear means "this process has never been switched
- * out", which is the state of every process under the old single-context
- * design. Nothing may iretq out of such a context.
+ * proc_fork() fills this from the live int $0x80 trapframe of the parent's
+ * fork() syscall (thread_t::syscall_frame) and proc_resume_child() re-enters
+ * user mode through user_mode_enter_ctx(). All-zero with @has_ctx clear means
+ * "no captured context": that is the state of a process created by
+ * proc_create() -- those are entered directly with user_mode_enter() -- and
+ * of a kernel-context fork() (container_launch_console), whose child is left
+ * without a thread and therefore never runs.
  */
-typedef struct {
+typedef struct proc_ctx {
     uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp;
     uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
     uint64_t rip, cs, rflags, rsp, ss;
@@ -196,34 +200,45 @@ process_t *proc_get(int pid);
 int proc_getpid(void);
 int proc_getppid(void);
 
-/* ── Process run queue / context switching ──
+/* ── Process scheduling ──
  *
- * The kernel has two independent schedulers: thread_t (kernel threads, each
- * with its own stacks) and process_t (userspace address spaces). Until the
- * fields above existed, current_process was assigned exactly once — by
- * proc_create(), and only when no process was current — so a forked child
- * could never run: proc_fork() built the child and returned its pid, and
- * nothing ever made it current. sched_switch_to_process() was the only code
- * that could, and it had no callers at all.
+ * Processes are executed by threads. thread_t::proc names the process a
+ * thread runs for, and the scheduler switch in sched.c moves current_process,
+ * CR3 and TSS.RSP0 with the thread. There is no separate process scheduler
+ * and no process run queue: readiness is a live thread.
+ *
+ * - A process launched from kernel context (cmd_exec, container start, the
+ *   Zircon launcher) borrows the launching thread: owns_proc = 0, the thread
+ *   runs user code through user_mode_enter() and, when the program exits, the
+ *   session unwinds through user_mode_force_return() to the C frame that
+ *   launched it.
+ * - A fork()ed child gets a thread of its own (sched_create_thread_proc) that
+ *   resumes the parent's user context captured from the int $0x80 trapframe
+ *   (proc_ctx_t with rax = 0) and dies with the process (owns_proc = 1). Its
+ *   exit runs proc_thread_exit_leaf(), which retires process and thread
+ *   together -- the process may only become reapable once its thread can no
+ *   longer be scheduled, or proc_wait() would free the page tables under it.
+ * - proc_wait() polls the process table instead of blocking forever: a
+ *   child's exit wakes the parent *process*, never the parent's thread, and
+ *   sleep_until = -1 (the old block-forever hack) would never be woken.
  *
  * An earlier version of this change also added proc_sched_runnable() /
  * proc_sched_pick() plus a run_next linked list, and both were reverted. The
  * accessors had no callers, so --gc-sections dropped them from the image
- * (`nm codeos-1-kernel.bin | grep -c proc_sched` -> 0) — shipping uncalled
+ * (`nm codeos-1-kernel.bin | grep -c proc_sched` -> 0) -- shipping uncalled
  * functions is how jengine ended up as build-verified-but-dead. The list was
  * never read, because the picker scanned the table. It was wrong besides: the
  * "already queued" test (run_next != 0) misses a lone element or a tail, the
  * tail search skipped run_next == 0 entries so it found the second-to-last
  * node and orphaned the real last one, and with an empty or single-element
- * queue the new process was never linked in at all.
- *
- * Readiness is therefore the predicate
- * "state == PROC_READY && p != current_process" over proc_table; PROC_MAX is
- * 64, so a linear scan is a few hundred instructions. Add a run-queue list
- * only alongside a real consumer and a head/tail invariant.
- *
- * The fields above are inert until a switch path is wired to them.
+ * queue the new process was never linked in at all. The fields above are
+ * inert under the thread-based design too -- do not resurrect them.
  */
+
+/* Fork()ed child: thread entry point (resumes the captured user context) and
+ * user-mode exit, which retires process and thread together. */
+void proc_resume_child(void);
+void proc_thread_exit_leaf(void);
 
 /* ── File descriptor management ── */
 int proc_fd_alloc(void);

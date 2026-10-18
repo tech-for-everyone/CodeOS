@@ -2,11 +2,10 @@
 .section .text
 .global user_mode_enter
 .global user_mode_force_return
-.extern pmm_alloc_page
-.extern pmm_alloc_pages
-.extern gdt_set_rsp0
+.global user_mode_enter_ctx
+.extern umode_rsp0_alloc
+.extern umode_note_entry
 .extern user_mode_return_override
-.extern phys_to_virt_base
 .extern user_mode_exit_flag
 
 /* void user_mode_enter(uint64_t entry, uint64_t stack_top) */
@@ -35,28 +34,30 @@ user_mode_enter:
     movq %rdi, %r14            /* entry */
     movq %rsi, %r15            /* stack_top */
 
-    /* Allocate kernel stack for TSS.RSP0. This stack backs every int0x80/IRQ
-     * taken from user mode, so it must be large enough for the deepest syscall
-     * handler chain (syscall_handler -> copy_to_user -> kprintf/print_hex/...).
-     * A single 4KB page overflowed onto the adjacent user stack pages and
-     * corrupted them; use 16 pages (64KB). */
+    /* This thread's TSS.RSP0 stack -- allocated once per thread and reused
+     * across entries (the old code allocated 16 fresh pages here on every
+     * entry and leaked the previous ones), and pointed at by the scheduler on
+     * every context switch so an interrupt from ring 3 always lands on the
+     * running thread's own stack. */
     pushq %rdi
     pushq %rsi
-    movq $16, %rdi
-    callq pmm_alloc_pages
+    callq umode_rsp0_alloc
     popq %rsi
     popq %rdi
-    test %rax, %rax
+    testq %rax, %rax
     jnz 1f
     lea msg_fail(%rip), %rdi
     callq kprintf
     cli
     hlt
 1:
-    addq $0x10000, %rax        /* kstack_top = phys + 16*4096 */
-    addq phys_to_virt_base(%rip), %rax  /* convert to virtual */
-    movq %rax, %rdi            /* rsp0 = kstack_top (virtual) */
-    callq gdt_set_rsp0
+    /* Attribute this thread to the process it is about to run, so a context
+     * switch restores current_process together with the thread. */
+    pushq %rdi
+    pushq %rsi
+    callq umode_note_entry
+    popq %rsi
+    popq %rdi
 
     /* Build iretq frame on current kernel stack */
     cli
@@ -78,6 +79,38 @@ user_mode_force_return:
     movq umode_saved_r15(%rip), %r15
     movq user_mode_kernel_rsp(%rip), %rsp
     jmp *user_mode_return_rip(%rip)
+
+/* void user_mode_enter_ctx(const proc_ctx_t *ctx)
+ *
+ * Resume a saved user context on the current thread: the iretq frame of a
+ * fork()ed child, captured from the parent's int $0x80 trapframe with rax
+ * forced to 0.  proc_ctx_t (process.h) is 15 GPRs followed by rip, cs,
+ * rflags, rsp and ss.  The outgoing frame is built on this thread's kernel
+ * stack; kernel re-entry goes through TSS.RSP0 (umode_rsp0_alloc()).
+ * Never returns. */
+user_mode_enter_ctx:
+    pushq 0x98(%rdi)           /* ss */
+    pushq 0x90(%rdi)           /* rsp */
+    pushq 0x88(%rdi)           /* rflags */
+    pushq 0x80(%rdi)           /* cs */
+    pushq 0x78(%rdi)           /* rip */
+    /* GPRs in the struct's order; rdi is the pointer, so it goes last */
+    movq 0x00(%rdi), %rax
+    movq 0x08(%rdi), %rbx
+    movq 0x10(%rdi), %rcx
+    movq 0x18(%rdi), %rdx
+    movq 0x20(%rdi), %rsi
+    movq 0x30(%rdi), %rbp
+    movq 0x38(%rdi), %r8
+    movq 0x40(%rdi), %r9
+    movq 0x48(%rdi), %r10
+    movq 0x50(%rdi), %r11
+    movq 0x58(%rdi), %r12
+    movq 0x60(%rdi), %r13
+    movq 0x68(%rdi), %r14
+    movq 0x70(%rdi), %r15
+    movq 0x28(%rdi), %rdi
+    iretq
 
 .section .bss
 .align 8

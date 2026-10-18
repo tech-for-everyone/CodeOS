@@ -1680,9 +1680,29 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             }
         }
         if (!rsp) return -LINUX_ENOMEM;
+
+        /* Same trapframe redirect as the native execve (SYSCALL_EXECVE): the
+         * new program is resumed by the iretq that ends this syscall, and the
+         * thread's session record keeps pointing at whoever launched the
+         * process, not at this (dead) syscall frame. */
+        thread_t *cur = sched_current();
+        if (cur && cur->syscall_frame) {
+            int_frame_t *fr = cur->syscall_frame;
+            fr->rip = entry;
+            fr->rsp = rsp;
+            fr->cs = 0x23;
+            fr->ss = 0x1b;
+            fr->rflags = 0x202;
+            fr->rax = fr->rbx = fr->rcx = fr->rdx = 0;
+            fr->rsi = fr->rdi = fr->rbp = 0;
+            fr->r8 = fr->r9 = fr->r10 = fr->r11 = 0;
+            fr->r12 = fr->r13 = fr->r14 = fr->r15 = 0;
+            user_mode_begin();
+            return 0;
+        }
+
         user_mode_set_return(shell_exec_done);
         user_mode_begin();
-        thread_t *cur = sched_current();
         if (cur && cur->syscall_stack_top)
             syscall_kernel_rsp = (uint64_t)cur->syscall_stack_top;
         user_mode_enter(entry, rsp);
@@ -1984,6 +2004,17 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         return 0;
     case SYSCALL_EXIT:
         {
+            /* A fork()ed child owns its thread: process and thread are
+             * retired together in proc_thread_exit_leaf(), which syscall_irq's
+             * epilogue calls once this syscall returns.  Skipping proc_exit()
+             * here is what keeps the process from becoming reapable while
+             * this thread can still be scheduled -- the parent waits on the
+             * process, not on the thread. */
+            thread_t *cur = sched_current();
+            if (cur && cur->owns_proc) {
+                user_mode_end_from_exit((int)a1);
+                return 0;
+            }
             /* Inside a container session the same process hosts pid-1, so a
              * container exit must NOT kill the enclosing user program. */
             process_t *xp = proc_current();
@@ -2072,9 +2103,40 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         }
         if (!rsp) return -1;
 
+        /* Resume the new program inside the trapframe this syscall arrived
+         * on: when the syscall returns, isr_common's iretq drops straight
+         * into it.  Going through user_mode_enter() instead would record this
+         * syscall's own stack as the session's return stack, and on exit the
+         * named leaf would be entered on a frame that belongs to a syscall
+         * that is never resumed (the old program's post-`int $0x80` RIP no
+         * longer exists -- proc_exec() replaced the program).  Redirecting
+         * leaves the thread's user-mode session record as it was, so the exit
+         * unwinds to whoever actually launched the process.
+         *
+         * For a fork()ed child that record is the child's own (its exit leaf
+         * is proc_thread_exit_leaf): it must not be overwritten with this
+         * thread's -- the blocked parent still needs its own record, and the
+         * two sessions run concurrently. */
+        thread_t *cur = sched_current();
+        if (cur && cur->syscall_frame) {
+            int_frame_t *fr = cur->syscall_frame;
+            fr->rip = entry;
+            fr->rsp = rsp;
+            fr->cs = 0x23;
+            fr->ss = 0x1b;
+            fr->rflags = 0x202;
+            fr->rax = fr->rbx = fr->rcx = fr->rdx = 0;
+            fr->rsi = fr->rdi = fr->rbp = 0;
+            fr->r8 = fr->r9 = fr->r10 = fr->r11 = 0;
+            fr->r12 = fr->r13 = fr->r14 = fr->r15 = 0;
+            user_mode_begin();
+            return 0;
+        }
+
+        /* No trapframe (the `syscall` instruction path): fall back to the
+         * direct re-entry, which needs a named leaf. */
         user_mode_set_return(shell_exec_done);
         user_mode_begin();
-        thread_t *cur = sched_current();
         if (cur && cur->syscall_stack_top)
             syscall_kernel_rsp = (uint64_t)cur->syscall_stack_top;
         user_mode_enter(entry, rsp);
@@ -3007,13 +3069,28 @@ static void syscall_irq(int_frame_t *frame) {
     uint64_t a5 = frame->r8;
     uint64_t a6 = frame->r9;
 
+    /* Publish the trapframe for the duration of the handler: proc_fork()
+     * captures a fork()ed child's user context from it and execve() redirects
+     * it.  The frame sits on this thread's ring-0 stack and the handler may
+     * block (proc_wait) or switch threads, so it is recorded per thread, not
+     * in a global. */
+    thread_t *cur = sched_current();
+    if (cur) cur->syscall_frame = frame;
+
     sched_preempt_disable();
     int64_t ret = syscall_handler(n, a1, a2, a3, a4, a5, a6);
     frame->rax = (uint64_t)ret;
+    if (cur) cur->syscall_frame = 0;
     sched_preempt_enable();
 
     if (user_mode_exit_flag) {
         user_mode_exit_flag = 0;
+        /* A fork()ed child retires its process and its own thread together:
+         * it has no enclosing kernel frame for force_return() to unwind to.
+         * (owns_proc is what distinguishes it from a session a kernel thread
+         * borrowed through user_mode_enter().) */
+        if (cur && cur->owns_proc)
+            proc_thread_exit_leaf();   /* does not return */
         user_mode_force_return();
     }
 }

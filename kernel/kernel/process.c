@@ -4,6 +4,8 @@
 #include "string.h"
 #include "sched.h"
 #include "vmm.h"
+#include "idt.h"
+#include "umode.h"
 #include "elf.h"
 #include "fs.h"
 #include "ext2.h"
@@ -12,6 +14,18 @@
 process_t proc_table[PROC_MAX];
 process_t *current_process;
 int next_pid = 1;
+
+/* Drop one stale TLB entry for the current address space.
+ *
+ * proc_fork() rewrites the *live parent's* page tables (clearing PAGE_WRITE,
+ * setting PAGE_COW) and the CPU keeps running on them immediately afterwards.
+ * A cached translation that still says writable lets the parent's very next
+ * store skip the COW fault entirely -- no trap, no page copy -- and land in
+ * the physical page the child is still sharing, silently corrupting the
+ * child's memory. */
+static inline void invlpg_va(uint64_t virt) {
+    __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
+}
 
 static void setup_fds(process_t *p) {
     for (int i = 0; i < PROC_FD_MAX; i++) {
@@ -177,7 +191,23 @@ int proc_fork(void) {
                         new_pt[l] = (new_pt[l] & ~PAGE_WRITE) | PAGE_COW;
                     }
                     if (new_pt[l] & PAGE_COW) {
-                        old_pt[l] = (old_pt[l] & ~PAGE_WRITE) | PAGE_COW;
+                        uint64_t was = old_pt[l];
+                        old_pt[l] = (was & ~PAGE_WRITE) | PAGE_COW;
+                        /* Writing the PTE is not enough: the parent is
+                         * executing on these tables at this instant and its
+                         * TLB still holds the writable translation we just
+                         * revoked, so the parent's next store would bypass
+                         * the fault and write into the page the child is
+                         * still sharing. That is not theoretical: it made
+                         * the very first Zircon compositor child resume
+                         * from fork() at a stale address -- the parent's
+                         * own printf() had overwritten the child's shared
+                         * stack slot -- and re-run the launch loop instead
+                         * of execl(). Flush the parent's translation for
+                         * every page whose write permission changed. */
+                        if (was & PAGE_WRITE)
+                            invlpg_va(((uint64_t)i << 39) | ((uint64_t)j << 30) |
+                                      ((uint64_t)k << 21) | ((uint64_t)l << 12));
                     }
                 }
 
@@ -245,6 +275,50 @@ int proc_fork(void) {
     /* Inherit parent's linux file descriptors */
     linux_fd_fork_update(parent->pid, child->pid);
 
+    /* Give the child a way to run: capture its user context from the fork()
+     * trapframe and start a thread on it.  Before this, fork() built the
+     * process and returned its pid, and nothing could ever make the child
+     * run -- there was no process scheduler.  The thread *is* the scheduler
+     * now (see process.h).
+     *
+     * Nothing can run the child before this function returns: syscall
+     * handlers execute with preemption off and this path never yields, so
+     * the child's state is complete by the time the scheduler can pick it.
+     *
+     * No frame (or a kernel-mode frame) means fork() was called from kernel
+     * context -- container_launch_console() does that -- and there is no user
+     * context to resume: the child is left without a thread, inert, which is
+     * the behaviour every forked child had before. */
+    thread_t *self = sched_current();
+    int_frame_t *fr = self ? self->syscall_frame : 0;
+    if (fr && (fr->cs & 3) == 3) {
+        child->ctx.rax = 0;          /* fork() returns 0 in the child */
+        child->ctx.rbx = fr->rbx;
+        child->ctx.rcx = fr->rcx;
+        child->ctx.rdx = fr->rdx;
+        child->ctx.rsi = fr->rsi;
+        child->ctx.rdi = fr->rdi;
+        child->ctx.rbp = fr->rbp;
+        child->ctx.r8  = fr->r8;
+        child->ctx.r9  = fr->r9;
+        child->ctx.r10 = fr->r10;
+        child->ctx.r11 = fr->r11;
+        child->ctx.r12 = fr->r12;
+        child->ctx.r13 = fr->r13;
+        child->ctx.r14 = fr->r14;
+        child->ctx.r15 = fr->r15;
+        child->ctx.rip = fr->rip;     /* the instruction after `int $0x80` */
+        child->ctx.cs = fr->cs;       /* ring 3 */
+        child->ctx.rflags = fr->rflags;
+        child->ctx.rsp = fr->rsp;     /* parent's user stack, COW-cloned */
+        child->ctx.ss = fr->ss;
+        child->has_ctx = 1;
+
+        int tid = sched_create_thread_proc(child->name, proc_resume_child, child);
+        if (tid < 0)
+            kprintf("proc: fork: no thread slot for pid %d\n", child->pid);
+    }
+
     return child->pid;
 }
 
@@ -282,6 +356,68 @@ int proc_exit(int status) {
     return 0;
 }
 
+/* Exit path of a fork()ed child: the process and the thread that owns it die
+ * together.  Reached at the end of SYSCALL_EXIT (syscall_irq calls it), from
+ * user_mode_force_return via the LSTAR path, and from nowhere else; never
+ * returns.
+ *
+ * Order is the whole point.  The parent waits on the *process*, so the
+ * process becomes zombie here -- but it may only do so once this thread can
+ * no longer be scheduled, or proc_wait() would free the page tables under a
+ * live thread and the next switch-in would load a freed CR3.  Detaching the
+ * thread from the process, then marking process and thread zombie in one
+ * uninterrupted sequence (no yield between), closes that window: sched_exit()
+ * is what finally switches away, and by then both halves are dead. */
+void proc_thread_exit_leaf(void) {
+    process_t *p = current_process;
+    thread_t *t = sched_current();
+
+    if (t) {
+        t->proc = 0;
+        t->owns_proc = 0;
+    }
+    current_process = 0;
+
+    if (p) {
+        p->state = PROC_ZOMBIE;
+        p->exit_status = user_mode_last_exit_status();
+        if (p->parent && p->parent->state == PROC_SLEEPING)
+            p->parent->state = PROC_READY;
+    }
+    sched_exit(0);
+}
+
+/* First entry of a fork()ed child.  The thread was created with the child's
+ * process in thread_t::proc, so the scheduler has already made it
+ * current_process and loaded its CR3; from here the child is an ordinary user
+ * program.  proc_fork() captured the user context from the parent's int $0x80
+ * trapframe with rax = 0, so the child returns 0 from fork(). */
+void proc_resume_child(void) {
+    thread_t *t = sched_current();
+    process_t *p = t ? t->proc : 0;
+    if (!p || !p->has_ctx) {
+        kprintf("proc: child thread without a context\n");
+        sched_exit(1);
+        return;
+    }
+
+    /* This thread's ring-0 entry stack (every int $0x80 and IRQ from the
+     * child's user mode lands there), and the exit record: a fork()ed child
+     * has no enclosing kernel frame to unwind to, so its user mode returns
+     * through proc_thread_exit_leaf. */
+    if (!umode_rsp0_alloc()) {
+        kprintf("proc: child without a ring-0 stack\n");
+        sched_exit(1);
+        return;
+    }
+    umode_child_set_return(proc_thread_exit_leaf, (uint64_t)t->kernel_stack_top);
+    user_mode_begin();
+
+    user_mode_enter_ctx(&p->ctx);
+    /* Not reached: user_mode_enter_ctx iretqs into the child. */
+    for (;;) asm volatile("cli; hlt");
+}
+
 /* Send a signal to a process. Returns 0 on success.
  * SIGSTOP -> PROC_SLEEPING (suspended), SIGCONT -> PROC_READY,
  * SIGTERM/SIGKILL -> PROC_ZOMBIE (reaped by parent). */
@@ -308,6 +444,10 @@ int proc_kill(int pid, int sig) {
     case KILL_SIGTERM:
     case KILL_SIGKILL:
     default:
+        /* Retire the process's thread before it becomes reapable: the parent
+         * frees the page tables on reap, and a thread that can still be
+         * scheduled must not be left pointing at them. */
+        sched_retire_proc_thread(target);
         target->state = PROC_ZOMBIE;
         target->exit_status = 0;
         if (target->parent && target->parent->state == PROC_SLEEPING)
@@ -367,17 +507,15 @@ int proc_wait(int pid, int *status) {
                 return cpid;
             }
         }
-        /* Block until a child exits - use THREAD_BLOCKED to allow sched to skip us */
-        {
-            extern thread_t *sched_current(void);
-            thread_t *cur = sched_current();
-            if (cur) {
-                cur->state = THREAD_BLOCKED;
-                cur->sleep_until = (uint64_t)-1;
-            }
-        }
+        /* A fork()ed child runs on its own thread, so nothing wakes the
+         * parent's *thread* when it exits: proc_exit() only ever set the
+         * parent process ready, while the parent's thread sat in
+         * THREAD_BLOCKED with sleep_until = -1 -- never woken, which is why
+         * the parent used to hang here forever.  Poll a tick at a time
+         * instead; 10ms is the scheduler's own granularity and it is what
+         * lets both sides make progress. */
         p->state = PROC_SLEEPING;
-        sched_yield();
+        sched_sleep_ms(10);
     }
 }
 

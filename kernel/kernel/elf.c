@@ -60,9 +60,9 @@ static int parse_shebang(const char *buf, int buflen, char *interp, int interp_s
 #define ELF_MAX_PAGES 1024       /* 4 MiB of file; the ArkUI ELF is ~2.8 MiB */
 #define ELF_SEG_PAGES_MAX 4096   /* 16 MiB of mapped segment virtual address */
 
-/* The ELF loader runs single-threaded (exec is serial in this kernel), and a
- * whole-file image plus the mapped-page bookkeeping no longer fit on a stack
- * that also holds a 64 KiB ramfs buffer. Keep them at file scope. */
+/* The ELF loader runs single-threaded (exec is serial in this kernel), and
+ * the whole-file page table plus the mapped-page bookkeeping are too large
+ * for the 64 KiB kernel stack. Keep them at file scope. */
 static uint8_t *elf_file_pages[ELF_MAX_PAGES];
 static uint64_t elf_map_pa[ELF_SEG_PAGES_MAX];
 static uint64_t elf_map_phys[ELF_SEG_PAGES_MAX];
@@ -73,49 +73,52 @@ static uint64_t elf_map_prot[ELF_SEG_PAGES_MAX];
 /* Returns 0 on success, -1 on error. */
 static int elf_load_segments(const char *path, struct elf64_hdr *hdr,
                              uint8_t *ph_buf, int from_ramfs,
-                             const char *ramfs_buf, int ramfs_len,
                              uint64_t *entry_out, elf_auxv_info_t *auxv,
                              char *interp_out) {
     uint64_t entry = hdr->entry;
     int page_count = 0;
     int file_len = 0;
 
-    if (from_ramfs && ramfs_buf) {
-        for (int p = 0; p < ELF_MAX_PAGES && p * 4096 < ramfs_len; p++) {
-            elf_file_pages[p] = (uint8_t*)pmm_alloc_page();
-            if (!elf_file_pages[p]) break;
-            page_count++;
-            int chunk = ramfs_len - p * 4096;
-            if (chunk > 4096) chunk = 4096;
-            memcpy((void*)phys_to_virt((uint64_t)elf_file_pages[p]), ramfs_buf + p * 4096, chunk);
-        }
-        file_len = ramfs_len;
+    /* Load the file into page-sized chunks. Both sources are read at their
+     * true file offsets: an initramfs file can be larger than one fs node's
+     * inline content, in which case it is backed by an image-resident blob
+     * (see fs_attach_blob) that must never be expected to fit a stack
+     * buffer. The old ramfs path copied from a whole-file buffer that
+     * fs_read() had already clamped to FS_CONTENT_MAX, so every page past
+     * that point was zeroed. */
+    if (from_ramfs) {
+        int size = 0, is_dir = 0;
+        if (fs_get_info(path, &size, &is_dir) < 0 || is_dir || size <= 0)
+            return -1;
+        file_len = size;
     } else {
         /* Read the whole file, page by page, at its true file offset. The old
          * loop called ext2_read_file_path() with no offset, so every page got
          * byte 0..4095 and any binary past the first read was corrupt. */
-        int fsz = ext2_read_file_path(path, NULL, 0);
-        if (fsz <= 0) return -1;
-        if ((uint64_t)fsz > (uint64_t)ELF_MAX_PAGES * 4096u) {
-            kprintf("elf: %s too large (%d bytes, max %d)\n",
-                    path, fsz, ELF_MAX_PAGES * 4096);
-            return -1;
-        }
-        file_len = fsz;
-        for (int p = 0; p < ELF_MAX_PAGES && p * 4096 < fsz; p++) {
-            elf_file_pages[p] = (uint8_t*)pmm_alloc_page();
-            if (!elf_file_pages[p]) break;
-            page_count++;
-            int want = fsz - p * 4096;
-            if (want > 4096) want = 4096;
-            int r = ext2_read_file_at(path, p * 4096,
-                                      (void*)phys_to_virt((uint64_t)elf_file_pages[p]), want);
-            if (r <= 0) { pmm_free_page((uint64_t)elf_file_pages[p]); page_count--; break; }
-        }
-        if (page_count == 0 || (uint64_t)page_count * 4096u < (uint64_t)fsz) {
-            for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)elf_file_pages[p]);
-            return -1;
-        }
+        file_len = ext2_read_file_path(path, NULL, 0);
+        if (file_len <= 0) return -1;
+    }
+    if ((uint64_t)file_len > (uint64_t)ELF_MAX_PAGES * 4096u) {
+        kprintf("elf: %s too large (%d bytes, max %d)\n",
+                path, file_len, ELF_MAX_PAGES * 4096);
+        return -1;
+    }
+    for (int p = 0; p < ELF_MAX_PAGES && p * 4096 < file_len; p++) {
+        elf_file_pages[p] = (uint8_t*)pmm_alloc_page();
+        if (!elf_file_pages[p]) break;
+        page_count++;
+        int want = file_len - p * 4096;
+        if (want > 4096) want = 4096;
+        int r = from_ramfs
+                    ? fs_read_at(path, p * 4096,
+                                 (char*)phys_to_virt((uint64_t)elf_file_pages[p]), want)
+                    : ext2_read_file_at(path, p * 4096,
+                                        (void*)phys_to_virt((uint64_t)elf_file_pages[p]), want);
+        if (r <= 0) { pmm_free_page((uint64_t)elf_file_pages[p]); page_count--; break; }
+    }
+    if (page_count == 0 || (uint64_t)page_count * 4096u < (uint64_t)file_len) {
+        for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)elf_file_pages[p]);
+        return -1;
     }
 
     /* Check for PT_INTERP first */
@@ -284,9 +287,14 @@ static int elf_load_depth(const char *path, uint64_t *entry_out, uint64_t *stack
     struct elf64_hdr hdr;
     int from_ramfs = 0;
     int ramfs_len = 0;
-    char ramfs_buf[FS_CONTENT_MAX];
+    /* Only the ELF header, the program-header table (ph_end is capped at 4096
+     * below) and a possible shebang line are read from here, so this does not
+     * need to hold the whole file: the kernel stack is 64 KiB and a
+     * FS_CONTENT_MAX buffer would fill it completely. The file's pages are
+     * read separately, at their true offsets, by elf_load_segments(). */
+    char ramfs_buf[4096];
 
-    int n = fs_read(path, ramfs_buf, FS_CONTENT_MAX);
+    int n = fs_read(path, ramfs_buf, (int)sizeof(ramfs_buf));
     if (n > 0) {
         from_ramfs = 1;
         ramfs_len = n;
@@ -351,7 +359,7 @@ static int elf_load_depth(const char *path, uint64_t *entry_out, uint64_t *stack
     char interp_path[SHEBANG_MAX];
     memset(&main_auxv, 0, sizeof(main_auxv));
 
-    if (elf_load_segments(path, &hdr, ph_buf, from_ramfs, ramfs_buf, ramfs_len,
+    if (elf_load_segments(path, &hdr, ph_buf, from_ramfs,
                           &main_entry, &main_auxv, interp_path) < 0)
         return -1;
 

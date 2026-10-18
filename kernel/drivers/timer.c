@@ -62,7 +62,6 @@ static volatile uint64_t tick_count = 0;
 static uint32_t timer_frequency = 100;
 
 static void timer_irq(int_frame_t *frame) {
-    (void)frame;
     tick_count++;
     sched_timer_tick(frame);
 }

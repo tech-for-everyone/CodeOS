@@ -11,6 +11,12 @@ typedef struct {
     int  is_dir;
     char content[FS_CONTENT_MAX];
     int  content_len;
+    /* Files too large for `content` (an initramfs binary bigger than
+     * FS_CONTENT_MAX) keep their bytes in an image-resident blob instead;
+     * content/content_len are then unused and blob/blob_len describe the
+     * whole file. See fs_attach_blob(). */
+    const char *blob;
+    int  blob_len;
     int  parent;
     int  first_child;
     int  next_sibling;
@@ -24,6 +30,8 @@ int  fs_rm(const char *path);
 int  fs_rmdir(const char *path);
 int  fs_write(const char *path, const char *data, int len);
 int  fs_read(const char *path, char *buf, int max);
+int  fs_read_at(const char *path, int off, char *buf, int len);
+int  fs_attach_blob(const char *path, const char *data, int len);
 void fs_ls(const char *path);
 int  fs_dir_list(const char *path, char *out, int max);
 int  fs_resolve(const char *path, int *is_dir);

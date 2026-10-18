@@ -1,5 +1,10 @@
 #include "umode.h"
 #include "kprintf.h"
+#include "sched.h"
+#include "process.h"
+#include "pmm.h"
+#include "vmm.h"
+#include "gdt.h"
 
 static volatile int umode_running;
 static volatile int umode_exit_status;
@@ -93,4 +98,69 @@ void user_mode_end_from_exit(int status) {
     umode_exit_status = status;
     umode_running = 0;
     user_mode_exit_flag = 1;
+}
+
+/* ── Per-thread user-mode state ──
+ *
+ * The entry/exit machinery above is written against globals, which was
+ * correct while exactly one thread could be inside a user session at a time.
+ * A fork()ed child runs concurrently with its (blocked) parent, so the
+ * globals are treated as "the running thread's session" and sched_yield()
+ * swaps them through the thread_t umode_* fields on every context switch. */
+
+uint64_t umode_rsp0_alloc(void) {
+    thread_t *t = sched_current();
+    if (!t) return 0;
+    if (!t->rsp0_top) {
+        /* Allocate once per thread and reuse: the old code allocated 16 fresh
+         * pages on every user_mode_enter() and leaked the previous ones. */
+        uint64_t phys = (uint64_t)pmm_alloc_pages(UMODE_KSTACK_SIZE / PAGE_SIZE);
+        if (!phys) return 0;
+        t->rsp0_top = phys_to_virt(phys) + UMODE_KSTACK_SIZE;
+    }
+    gdt_set_rsp0(t->rsp0_top);
+    return t->rsp0_top;
+}
+
+void umode_note_entry(void) {
+    thread_t *t = sched_current();
+    if (t) t->proc = current_process;
+}
+
+void umode_child_set_return(void (*leaf)(void), uint64_t kernel_stack_top) {
+    user_mode_return_rip = (uint64_t)leaf;
+    user_mode_kernel_rsp = kernel_stack_top;
+    user_mode_return_override = 0;
+}
+
+void umode_switch_save(thread_t *t) {
+    t->umode_return_rip = user_mode_return_rip;
+    t->umode_kernel_rsp = user_mode_kernel_rsp;
+    t->umode_return_override = (uint64_t)user_mode_return_override;
+    t->umode_saved_rbx = umode_saved_rbx;
+    t->umode_saved_rbp = umode_saved_rbp;
+    t->umode_saved_r12 = umode_saved_r12;
+    t->umode_saved_r13 = umode_saved_r13;
+    t->umode_saved_r14 = umode_saved_r14;
+    t->umode_saved_r15 = umode_saved_r15;
+    t->umode_saved_user_rsp = saved_user_rsp;
+    t->umode_running = umode_running;
+    t->umode_exit_status = umode_exit_status;
+    t->umode_exit_flag = user_mode_exit_flag;
+}
+
+void umode_switch_load(thread_t *t) {
+    user_mode_return_rip = t->umode_return_rip;
+    user_mode_kernel_rsp = t->umode_kernel_rsp;
+    user_mode_return_override = (void (*)(void))t->umode_return_override;
+    umode_saved_rbx = t->umode_saved_rbx;
+    umode_saved_rbp = t->umode_saved_rbp;
+    umode_saved_r12 = t->umode_saved_r12;
+    umode_saved_r13 = t->umode_saved_r13;
+    umode_saved_r14 = t->umode_saved_r14;
+    umode_saved_r15 = t->umode_saved_r15;
+    saved_user_rsp = t->umode_saved_user_rsp;
+    umode_running = t->umode_running;
+    umode_exit_status = t->umode_exit_status;
+    user_mode_exit_flag = t->umode_exit_flag;
 }

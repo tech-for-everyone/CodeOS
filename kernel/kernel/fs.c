@@ -16,6 +16,8 @@ static int alloc_node(void) {
     for (int j = 0; j < FS_CONTENT_MAX; j++) nodes[i].content[j] = 0;
     nodes[i].is_dir = 0;
     nodes[i].content_len = 0;
+    nodes[i].blob = 0;
+    nodes[i].blob_len = 0;
     nodes[i].parent = -1;
     nodes[i].first_child = -1;
     nodes[i].next_sibling = -1;
@@ -266,6 +268,10 @@ int fs_write(const char *path, const char *data, int len) {
     int idx = fs_resolve(path, &is_dir);
     if (idx < 0 || is_dir) return -1;
     if (!data || len < 0) return -1;
+    /* A write replaces the whole file, so drop any image-resident blob it
+     * was backed by (see fs_attach_blob). */
+    nodes[idx].blob = 0;
+    nodes[idx].blob_len = 0;
     if (len > FS_CONTENT_MAX) len = FS_CONTENT_MAX;
     for (int i = 0; i < len; i++) nodes[idx].content[i] = data[i];
     nodes[idx].content_len = len;
@@ -274,14 +280,57 @@ int fs_write(const char *path, const char *data, int len) {
     return len;
 }
 
+/* Where a file's bytes live: an image-resident blob when the file is larger
+ * than a node's inline content, else the content itself. */
+static const char *node_data(int idx) {
+    return nodes[idx].blob ? nodes[idx].blob : nodes[idx].content;
+}
+
+static int node_size(int idx) {
+    return nodes[idx].blob ? nodes[idx].blob_len : nodes[idx].content_len;
+}
+
 int fs_read(const char *path, char *buf, int max) {
     int is_dir;
     int idx = fs_resolve(path, &is_dir);
     if (idx < 0 || is_dir) return -1;
     if (!buf || max < 0) return -1;
-    int len = nodes[idx].content_len;
+    const char *src = node_data(idx);
+    int len = node_size(idx);
     if (len > max) len = max;
-    for (int i = 0; i < len; i++) buf[i] = nodes[idx].content[i];
+    for (int i = 0; i < len; i++) buf[i] = src[i];
+    return len;
+}
+
+/* Read up to `len` bytes at byte offset `off`. Returns the number of bytes
+ * read (0 when `off` is at or past EOF), or -1 on error. fs_read() can only
+ * start at 0, which cannot serve a file larger than FS_CONTENT_MAX -- see
+ * fs_attach_blob(). */
+int fs_read_at(const char *path, int off, char *buf, int len) {
+    int is_dir;
+    int idx = fs_resolve(path, &is_dir);
+    if (idx < 0 || is_dir) return -1;
+    if (!buf || off < 0 || len < 0) return -1;
+    const char *src = node_data(idx);
+    int flen = node_size(idx);
+    if (off >= flen) return 0;
+    if (len > flen - off) len = flen - off;
+    for (int i = 0; i < len; i++) buf[i] = src[off + i];
+    return len;
+}
+
+/* Back a file with a blob that lives in the kernel image (an initramfs byte
+ * array), for files too large to fit a node's inline content. The memory is
+ * referenced, not copied, so it must outlive the node. */
+int fs_attach_blob(const char *path, const char *data, int len) {
+    int is_dir;
+    int idx = fs_resolve(path, &is_dir);
+    if (idx < 0 || is_dir) return -1;
+    if (!data || len <= 0) return -1;
+    nodes[idx].blob = data;
+    nodes[idx].blob_len = len;
+    nodes[idx].content_len = 0;
+    nodes[idx].content[0] = 0;
     return len;
 }
 
@@ -389,7 +438,7 @@ int fs_get_info(const char *path, int *size, int *is_dir_out) {
     idx = fs_resolve(path, &is_dir_val);
     if (idx < 0) return -1;
     if (is_dir_out) *is_dir_out = is_dir_val;
-    if (size) *size = is_dir_val ? 0 : nodes[idx].content_len;
+    if (size) *size = is_dir_val ? 0 : node_size(idx);
     return 0;
 }
 

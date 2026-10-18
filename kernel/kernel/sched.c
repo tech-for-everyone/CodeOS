@@ -7,6 +7,7 @@
 #include "idt.h"
 #include "process.h"
 #include "umode.h"
+#include "gdt.h"
 #include "spinlock.h"
 
 static thread_t threads[THREAD_MAX] __attribute__((aligned(64)));
@@ -156,6 +157,9 @@ static void reap_zombies(void) {
             if (t->syscall_stack_top)
                 pmm_free_pages((uint64_t)virt_to_phys((uint64_t)t->syscall_stack_top - SYSCALL_STACK_SIZE),
                                SYSCALL_STACK_SIZE / PAGE_SIZE);
+            if (t->rsp0_top)
+                pmm_free_pages(virt_to_phys(t->rsp0_top - UMODE_KSTACK_SIZE),
+                               UMODE_KSTACK_SIZE / PAGE_SIZE);
             memset(t, 0, sizeof(thread_t));
             thread_count--;
         }
@@ -164,6 +168,20 @@ static void reap_zombies(void) {
 
 int sched_create_thread(const char *name, void (*entry)(void)) {
     return sched_create_thread_prio(name, entry, SCHED_PRIO_NORMAL);
+}
+
+int sched_create_thread_proc(const char *name, void (*entry)(void),
+                             process_t *proc) {
+    int tid = sched_create_thread_prio(name, entry, SCHED_PRIO_NORMAL);
+    if (tid < 0) return -1;
+    for (int i = 0; i < THREAD_MAX; i++) {
+        if (threads[i].tid == tid) {
+            threads[i].proc = proc;
+            threads[i].owns_proc = 1;
+            break;
+        }
+    }
+    return tid;
 }
 
 int sched_create_thread_prio(const char *name, void (*entry)(void), int priority) {
@@ -343,6 +361,40 @@ void sched_yield(void) {
             current_thread = next;
             syscall_kernel_rsp = (uint64_t)next->syscall_stack_top;
 
+            /* The user-mode session state (return leaf, ring-3 entry stack,
+             * saved registers) belongs to the thread that is running, not to
+             * the machine: a fork()ed child and its parent are both inside a
+             * user session at the same time.  Swap before the pages are
+             * touched so the incoming thread's own session is restored. */
+            umode_switch_save(prev);
+            umode_switch_load(next);
+
+            /* Address space, ring-0 stack and "who is running" all move with
+             * the thread.  The steps below run on the outgoing thread's
+             * kernel stack until ctx_switch, and every kernel stack lives in
+             * the shared kernel half, so it is still mapped after the CR3
+             * change.  next->proc is 0 for a pure kernel thread: it keeps
+             * running in the kernel address space and leaves current_process
+             * alone (the same "stale value" the kernel has always had there,
+             * and what systemm's fail-closed level check relies on).  A reaped
+             * process (proc_wait memsets it and frees its tables) has
+             * pml4 == 0: adopting it would load a freed CR3, so it is treated
+             * as a kernel thread. */
+            int next_has_proc = next->proc && next->proc->pml4;
+            if (next_has_proc) {
+                current_process = next->proc;
+                next->proc->state = PROC_RUNNING;
+            }
+            if (prev->proc && prev->proc->pml4 &&
+                prev->proc != next->proc &&
+                prev->proc->state == PROC_RUNNING)
+                prev->proc->state = PROC_READY;
+            vmm_switch_pml4((uint64_t *)(next_has_proc
+                                             ? (uint64_t)next->proc->pml4
+                                             : vmm_kernel_pml4_phys()));
+            if (next->rsp0_top)
+                gdt_set_rsp0(next->rsp0_top);
+
             sched_in_yield = 0;
             spin_unlock(&sched_lock);
 
@@ -365,6 +417,27 @@ void sched_exit(int code) {
     current_thread->state = THREAD_ZOMBIE;
     sched_yield();
     while (1) asm volatile("cli; hlt");
+}
+
+/* Retire the thread that owns @proc on behalf of proc_kill().  A process may
+ * not be reaped while a thread that can still be scheduled points at it: the
+ * parent would memset the process_t and free its page tables under a live
+ * thread, and the next switch-in would load a freed (or zero) CR3.  The
+ * caller is another thread on this single CPU, so @proc's thread is only
+ * blocked or sitting in a ready queue; dequeuing it and marking it zombie is
+ * enough, and reap_zombies() collects it. */
+void sched_retire_proc_thread(process_t *proc) {
+    if (!proc) return;
+    spin_lock(&sched_lock);
+    for (int i = 0; i < THREAD_MAX; i++) {
+        thread_t *t = &threads[i];
+        if (t == idle_thread || t->proc != proc) continue;
+        if (t->state == THREAD_READY) ready_queue_remove(t);
+        t->state = THREAD_ZOMBIE;
+        t->proc = 0;
+        t->owns_proc = 0;
+    }
+    spin_unlock(&sched_lock);
 }
 
 void sched_sleep_ms(uint64_t ms) {
@@ -432,22 +505,5 @@ void sched_timer_tick(int_frame_t *frame) {
             need_resched = 1;
         }
     }
-
-    if (user_mode_active() && current_process && need_resched) {
-        current_process->preempt_ticks++;
-        /* Increase time slice from 3 to 10 ticks for faster app execution */
-        if (current_process->preempt_ticks >= 10) {
-            current_process->state = PROC_READY;
-            current_process = 0;
-        }
-    }
     spin_unlock(&sched_lock);
-}
-
-void sched_switch_to_process(process_t *p) {
-    if (!p || p->state != PROC_READY) return;
-    current_process = p;
-    p->state = PROC_RUNNING;
-    p->preempt_ticks = 0;
-    vmm_switch_pml4(p->pml4);
 }
