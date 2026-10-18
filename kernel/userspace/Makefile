@@ -116,7 +116,7 @@ ZC_APPS = $(ZC_ROOT)/pkgs/apps
 
 # One object per app package: pkgs/apps/<name>/src/<name>.c -> zc_<name>.o.
 # The list is discovered, not hand-kept: home.c registers *every* sibling by
-# name (phone_app, notes_app, ...), so a new Zircon app must be compiled in
+# name (kall_app, notes_app, ...), so a new Zircon app must be compiled in
 # here or the link fails on the missing struct.  ZC_APP_INCLUDES has to be
 # built with $(wildcard) per app -- writing it as $(wildcard $(ZC_APPS)/*)/src
 # would attach "/src" to only the last match.
