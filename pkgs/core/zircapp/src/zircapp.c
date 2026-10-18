@@ -31,8 +31,8 @@
 #include <stdio.h>
 #include <time.h>
 
-/* The launcher.  Registering it also registers the nine phone apps
- * (Zircon/apps/home.c: home_init calls zircapp_register for each). */
+/* The launcher.  Registering it also registers the app suite
+ * (Zircon's home app: home_init calls zircapp_register for each). */
 extern zircapp_app_t home_app;
 
 /* Provided by pkgs/core/zircapp/src/zircapp_platform.c (and declared the
@@ -156,7 +156,7 @@ static struct {
     long calc_cur;       /* current operand value                   */
     int  calc_op;        /* 0 none, 1 +, 2 -, 3 *, 4 /              */
     int  calc_err;       /* divide by zero                          */
-    /* Phone */
+    /* Kall */
     char dial[16];
     int  calling;
     /* Notes */
@@ -458,7 +458,7 @@ static void draw_calc(void) {
     }
 }
 
-/* ── Phone: dial pad + call state ── */
+/* ── Kall: dial pad + call state ── */
 
 #define DIAL_X0  60
 #define DIAL_Y0  156
@@ -500,7 +500,7 @@ static int dial_call_at(int x, int y) {
            y < DIAL_Y0 + 4 * (DIAL_CH + DIAL_GAP) + 8 + 46;
 }
 
-static void draw_phone(void) {
+static void draw_kall(void) {
     char buf[36];
     if (ast.calling) {
         snprintf(buf, sizeof(buf), "Calling %s ...", ast.dial);
@@ -934,7 +934,7 @@ static void draw_app_screen(void) {
     const char *n = a->name;
     if (!strcmp(n, "Clock"))            draw_clock();
     else if (!strcmp(n, "Calculator"))  draw_calc();
-    else if (!strcmp(n, "Phone"))       draw_phone();
+    else if (!strcmp(n, "Kall"))       draw_kall();
     else if (!strcmp(n, "Notes"))       draw_notes();
     else if (!strcmp(n, "Terminal"))    draw_terminal();
     else if (!strcmp(n, "Music"))       draw_music();
@@ -966,7 +966,7 @@ static void app_click(int x, int y) {
     if (!strcmp(n, "Calculator")) {
         char k = calc_key_at(x, y);
         if (k) { calc_input(k); draw_app_screen(); }
-    } else if (!strcmp(n, "Phone")) {
+    } else if (!strcmp(n, "Kall")) {
         char k = dial_key_at(x, y);
         if (k) {
             dial_input(k);
@@ -1003,7 +1003,7 @@ static void app_key(int key) {
     } else if (!strcmp(n, "Notes")) {
         note_input(key < 256 ? key : 0);
         draw_app_screen();
-    } else if (!strcmp(n, "Phone")) {
+    } else if (!strcmp(n, "Kall")) {
         dial_input(key < 256 ? key : 0);
         draw_app_screen();
     } else if (!strcmp(n, "Terminal")) {
@@ -1193,7 +1193,7 @@ static int run_windowed(void) {
 /* ── Console session (no compositor, or --selftest) ── */
 
 static const char *kSubApps[] = {
-    "Phone", "SMS", "Settings", "Camera", "Clock",
+    "Kall", "SMS", "Settings", "Camera", "Clock",
     "Calculator", "Music", "Gallery", "Browser",
 };
 
