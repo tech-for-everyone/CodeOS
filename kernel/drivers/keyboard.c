@@ -245,6 +245,18 @@ void keyboard_set_repeat(int delay_ms, int rate_ms) {
 int keyboard_get_repeat_delay(void) { return repeat_delay_ms; }
 int keyboard_get_repeat_rate(void)  { return repeat_rate_ms; }
 
+/* ── LED control ────────────────────────────────────────────────────────
+ * Write the LED mask to the keyboard controller:
+ *   0xED  — command to enable LEDs
+ *   mask  — bit 0 = Scroll Lock, bit 1 = Num Lock, bit 2 = Caps Lock
+ * Port 0x64 is the command port, port 0x60 is the data port.
+ */
+void keyboard_led_set(int leds) {
+    outb(KB_CMD, 0xED);
+    outb(KB_DATA, (uint8_t)leds);
+}
+
+
 void keyboard_set_scancode_set(int set) {
     if (set < 1 || set > 3) return;
     active_scancode_set = set;

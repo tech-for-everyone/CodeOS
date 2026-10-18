@@ -61,6 +61,7 @@ const OW_LT_BOLD: u8 = 13;
 const OW_LT_ITALIC: u8 = 14;
 const OW_LT_CODE: u8 = 15;
 const OW_LT_IMAGE: u8 = 16;
+const OW_LT_PRE: u8 = 17;
 
 /* ── output structures — must match ow_html.h exactly ── */
 #[repr(C)]
@@ -1049,6 +1050,22 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                         ow_txt_lines = (ln + 1) as c_int;
                     }
                 }
+                i = skip_tag_end(html, i);
+                continue;
+            }
+
+            /* ── preformatted text ── */
+            if tag_match_exact(html, i, b"pre") == 1 {
+                st.in_pre = true;
+                st.flush_buf();
+                St::add_blank_line();
+                i = skip_tag_end(html, i);
+                continue;
+            }
+            if tag_match_exact(html, i, b"pre") == 2 {
+                st.in_pre = false;
+                st.flush_buf();
+                St::add_blank_line();
                 i = skip_tag_end(html, i);
                 continue;
             }
