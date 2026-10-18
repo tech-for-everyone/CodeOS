@@ -473,6 +473,9 @@ struct St {
     in_pre: bool,
     in_title: bool,
     in_row: bool,
+    in_thead: bool,
+    in_tbody: bool,
+    in_tfoot: bool,
     cell_count: i32,
     blockquote_depth: i32,
 }
@@ -503,6 +506,9 @@ impl St {
             in_pre: false,
             in_title: false,
             in_row: false,
+            in_thead: false,
+            in_tbody: false,
+            in_tfoot: false,
             cell_count: 0,
             blockquote_depth: 0,
         }
@@ -1290,6 +1296,55 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 continue;
             }
             if tag_match_exact(html, i, b"table") == 2 {
+
+/* ── thead ── */
+            if tag_match(html, i, b"thead") == 1 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_thead = true;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+            if tag_match_exact(html, i, b"thead") == 2 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_thead = false;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+
+/* ── tbody ── */
+            if tag_match(html, i, b"tbody") == 1 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_tbody = true;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+            if tag_match_exact(html, i, b"tbody") == 2 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_tbody = false;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+
+/* ── tfoot ── */
+            if tag_match(html, i, b"tfoot") == 1 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_tfoot = true;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+            if tag_match_exact(html, i, b"tfoot") == 2 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_tfoot = false;
+                i = skip_tag_end(html, i);
+                continue;
+            }
+
                 st.flush_buf();
                 St::add_blank_line();
                 st.in_row = false;
@@ -1343,6 +1398,12 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 continue;
             }
             if tag_match(html, i, b"th") == 2 || tag_match(html, i, b"td") == 2 {
+                st.flush_buf();
+                if st.in_row {
+                    st.in_row = false;
+                    st.cell_count = 0;
+                    st.cell_type = OW_LT_NORMAL;
+                }
                 i = skip_tag_end(html, i);
                 continue;
             }
