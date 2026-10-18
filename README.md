@@ -4,7 +4,7 @@ A from-scratch hobby operating system with its own kernel, desktop GUI, package
 layout, and **ZircApp** app toolkit. Built for people who want to see how an OS
 works — not a bajillion distros, one approachable system.
 
-**Version:** 1.5.1-t
+**Version:** 1.5.0.1-t
 
 **Internal Codename:** Andromeda
 ## Features
