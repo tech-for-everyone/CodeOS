@@ -748,6 +748,15 @@ private:
     /* start page quick links (name, url) */
     QList<QString> m_quickNames;
     QList<QString> m_quickUrls;
+    /* find-in-page (Ctrl+F) */
+    bool m_findVisible = false;
+    QString m_findQuery;
+    QList<int> m_findLines;      /* rendered lines containing the query */
+    int m_findCurrent = -1;      /* index into m_findLines */
+    QRect m_findBarRect;
+    QRect m_findCloseRect;
+    void findUpdateMatches(bool scrollToFirst);
+    void findJump(int dir);
     QTimer m_refreshTimer;
 };
 

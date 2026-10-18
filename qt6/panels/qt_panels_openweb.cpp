@@ -289,6 +289,59 @@ void QtOpenWebWidget::clearActiveField() {
     m_fieldCursor = 0;
 }
 
+/* ── find-in-page ─────────────────────────────────────────────────────
+ * Searches the rendered text grid (ow_txt) case-insensitively. Matches are
+ * tracked as rendered line indices so the view can scroll straight to them
+ * and the painter can highlight the active one. */
+static bool ow_line_contains(const char *line, const QString &needle) {
+    if (needle.isEmpty()) return false;
+    int nlen = needle.length();
+    int len = 0;
+    while (len < OW_TXT_COLS && line[len]) len++;
+    if (nlen > len) return false;
+    for (int i = 0; i + nlen <= len; i++) {
+        int k = 0;
+        while (k < nlen) {
+            char a = line[i + k];
+            QChar b = needle.at(k);
+            if (a >= 'A' && a <= 'Z') a = char(a - 'A' + 'a');
+            char bc = b.toLatin1();
+            if (bc >= 'A' && bc <= 'Z') bc = char(bc - 'A' + 'a');
+            if (a != bc) break;
+            k++;
+        }
+        if (k == nlen) return true;
+    }
+    return false;
+}
+
+void QtOpenWebWidget::findUpdateMatches(bool scrollToFirst) {
+    m_findLines.clear();
+    m_findCurrent = -1;
+    if (m_findQuery.isEmpty()) { update(); return; }
+    for (int i = 0; i < ow_txt_lines && i < OW_TXT_LINES; i++) {
+        if (ow_line_contains(ow_txt[i], m_findQuery))
+            m_findLines.append(i);
+    }
+    if (!m_findLines.isEmpty()) {
+        m_findCurrent = 0;
+        if (scrollToFirst) {
+            int target = qMax(0, m_findLines[0] * 18 - 40);
+            m_scrollY = qBound(0, target, m_maxScroll);
+        }
+    }
+    update();
+}
+
+void QtOpenWebWidget::findJump(int dir) {
+    if (m_findLines.isEmpty()) return;
+    int n = m_findLines.size();
+    m_findCurrent = ((m_findCurrent + dir) % n + n) % n;
+    int target = qMax(0, m_findLines[m_findCurrent] * 18 - 40);
+    m_scrollY = qBound(0, target, m_maxScroll);
+    update();
+}
+
 void QtOpenWebWidget::activateFieldAt(const QPoint &pos) {
     m_activeField = -1;
     m_fieldCursor = 0;
@@ -397,6 +450,18 @@ void QtOpenWebWidget::renderCurrentTab() {
             m_tabTitles[idx] = QString::fromUtf8(ow_page_title);
         }
         m_imageLoadTick = 0;
+        /* Keep find-in-page matches fresh: the grid was just rebuilt, so
+         * line indices may have changed. No update() here — we are inside
+         * a paint pass; the fresh matches are used by the rest of it. */
+        if (m_findVisible && !m_findQuery.isEmpty()) {
+            m_findLines.clear();
+            for (int i = 0; i < ow_txt_lines && i < OW_TXT_LINES; i++) {
+                if (ow_line_contains(ow_txt[i], m_findQuery))
+                    m_findLines.append(i);
+            }
+            if (m_findCurrent >= m_findLines.size())
+                m_findCurrent = m_findLines.isEmpty() ? -1 : 0;
+        }
     }
     if (tab->status[0]) {
         if (!m_status.startsWith("Loading ") || !tab->error)
@@ -635,6 +700,16 @@ void QtOpenWebWidget::paintPageContent(QPainter &p, const QRect &contentRect) {
         QFont lf = f;
         QColor pen(0x1C, 0x1C, 0x1E);
         bool fillRow = false;
+
+        /* Find-in-page highlight: matches in pale yellow, active match orange. */
+        if (m_findVisible && lt != OW_LT_IMAGE && !m_findLines.isEmpty()) {
+            int mi = m_findLines.indexOf(i);
+            if (mi >= 0) {
+                bool active = (mi == m_findCurrent);
+                p.fillRect(QRect(contentRect.x()+8, ly, contentRect.width()-16, lineH),
+                           active ? QColor(0xFF,0xB2,0x4D,150) : QColor(0xFF,0xF1,0x76,110));
+            }
+        }
         switch (lt) {
             case OW_LT_H1: lf.setPointSize(18); lf.setBold(true); lf.setItalic(false); break;
             case OW_LT_H2: lf.setPointSize(15); lf.setBold(true); lf.setItalic(false); break;
@@ -930,6 +1005,50 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
     if (m_initialized)
         paintPageContent(p, contentRect);
 
+    /* ── Find bar (Ctrl+F) ── */
+    if (m_findVisible) {
+        int fbW = 320, fbH = 30;
+        m_findBarRect = QRect(contentRect.right() - fbW - 16, contentRect.y() + 10, fbW, fbH);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x24,0x24,0x28, 245));
+        p.setPen(QPen(QColor(0x64,0xD9,0xF0,120), 1));
+        p.drawRoundedRect(m_findBarRect, 6, 6);
+        p.setPen(Qt::NoPen);
+
+        /* query text (with placeholder) */
+        QFont ff = f; ff.setPointSize(10); p.setFont(ff);
+        QRect ftext = m_findBarRect.adjusted(10, 0, -(62 + 22), 0);
+        if (m_findQuery.isEmpty()) {
+            p.setPen(QColor(142,142,147,170));
+            p.drawText(ftext, Qt::AlignVCenter, "Find in page...");
+        } else {
+            p.setPen(QColor(245,245,247,230));
+            QFontMetrics ffm(ff);
+            p.drawText(ftext, Qt::AlignVCenter,
+                       ffm.elidedText(m_findQuery, Qt::ElideRight, ftext.width()));
+        }
+
+        /* match counter: "n/m" (or "0/0") */
+        QRect fcount = m_findBarRect.adjusted(m_findBarRect.width() - 80, 0, -24, 0);
+        QFont cf = f; cf.setPointSize(9); p.setFont(cf);
+        int cnt = m_findLines.size();
+        QString cntText = m_findQuery.isEmpty()
+            ? QString("-/-")
+            : (cnt == 0 ? QString("0/0")
+                        : QString("%1/%2").arg(m_findCurrent + 1).arg(cnt));
+        p.setPen(cnt == 0 && !m_findQuery.isEmpty()
+                     ? QColor(0xFF,0x6B,0x5A) : QColor(142,142,147));
+        p.drawText(fcount, Qt::AlignVCenter | Qt::AlignRight, cntText);
+
+        /* close × */
+        m_findCloseRect = QRect(m_findBarRect.right() - 24, m_findBarRect.y() + 3, 20, 24);
+        p.setPen(QColor(160,160,168));
+        p.drawText(m_findCloseRect, Qt::AlignCenter, QString::fromUtf8("\xC3\x97"));
+    } else {
+        m_findBarRect = QRect();
+        m_findCloseRect = QRect();
+    }
+
     /* ── Status bar ── */
     QRect statusBar(r.x(), r.bottom()-20, r.width(), 20);
     p.setPen(Qt::NoPen);
@@ -962,6 +1081,14 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
 
 void QtOpenWebWidget::mousePressEvent(QMouseEvent *e) {
     QPoint pos = e->pos();
+
+    /* Find bar close button (×). */
+    if (m_findVisible && m_findCloseRect.contains(pos)) {
+        m_findVisible = false;
+        m_findLines.clear();
+        m_findCurrent = -1;
+        update(); return;
+    }
 
     if (m_newTabRect.contains(pos)) {
         ow_core_new_tab();
@@ -1150,6 +1277,57 @@ void QtOpenWebWidget::leaveEvent(QEvent *event) {
 
 void QtOpenWebWidget::keyPressEvent(QKeyEvent *e) {
     kprintf("OW key=%d mods=%d\n", e->key(), (int)e->modifiers());
+
+    /* ── find-in-page (Ctrl+F) ──
+     * While the find bar is open it owns the keyboard: characters edit the
+     * query, Enter/Shift+Enter step through matches, Escape closes. */
+    if (m_findVisible) {
+        if (e->key() == Qt::Key_Escape) {
+            m_findVisible = false;
+            m_findLines.clear();
+            m_findCurrent = -1;
+            update(); return;
+        }
+        if (e->key() == Qt::Key_F && (e->modifiers() & Qt::ControlModifier)) {
+            m_findVisible = false;
+            m_findLines.clear();
+            m_findCurrent = -1;
+            update(); return;
+        }
+        if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
+            findJump((e->modifiers() & Qt::ShiftModifier) ? -1 : 1);
+            return;
+        }
+        if (e->key() == Qt::Key_Backspace) {
+            if (!m_findQuery.isEmpty()) {
+                m_findQuery.chop(1);
+                findUpdateMatches(true);
+            }
+            return;
+        }
+        if (e->key() >= Qt::Key_Space && e->key() <= Qt::Key_AsciiTilde &&
+            !(e->modifiers() & Qt::ControlModifier)) {
+            QString txt = e->text();
+            if (txt.isEmpty()) txt = QChar(int(e->key()));
+            m_findQuery += txt;
+            findUpdateMatches(true);
+            return;
+        }
+        /* Anything else: keep the bar open but don't fall through to the
+         * URL bar / page shortcuts. */
+        if (e->key() != Qt::Key_Shift && e->key() != Qt::Key_Control &&
+            e->key() != Qt::Key_Alt && e->key() != Qt::Key_Meta)
+            return;
+    }
+
+    if (e->key() == Qt::Key_F && (e->modifiers() & Qt::ControlModifier)) {
+        m_findVisible = true;
+        m_findQuery.clear();
+        m_findLines.clear();
+        m_findCurrent = -1;
+        m_status = "Find: type to search, Enter for next match";
+        update(); return;
+    }
 
     /* Form field editing takes priority over URL-bar/shortcut handling. */
     if (m_activeField >= 0 && m_activeField < ow_field_cnt) {
