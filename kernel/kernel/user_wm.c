@@ -267,6 +267,28 @@ static void uw_destroy_window(uw_win_t *w) {
 
 /* ─── raw-framebuffer presenter (Zircon mode, no LVGL) ─── */
 
+/* The kernel console and a client draw into the SAME framebuffer, and the
+ * console's fb_putchar() *scrolls* the screen when it reaches the bottom.
+ * A scroll shifts the whole image up -- including the client's UI, which the
+ * client painted once and will not repaint.
+ *
+ * So a single kernel message was enough to punch a black band into the
+ * phone's home screen, and a busy kernel pushed the whole UI off the top:
+ * the Zircon home screen went black within a second of appearing, while the
+ * client's own window buffer still held every pixel.  (The window buffer was
+ * the giveaway -- the framebuffer was scrolled, the buffer was not.)
+ *
+ * The fix is ownership: once a client owns the screen, the console goes
+ * back to the serial port, which is where a kernel log belongs anyway.
+ * Until then the console stays on the framebuffer, so the boot log is
+ * still visible on screen while nothing else has claimed it. */
+static void uw_console_to_serial(void) {
+    static int done = 0;
+    if (done) return;
+    done = 1;
+    kprintf_set_output(0, 0);
+}
+
 static void uw_raw_blit_window(uw_win_t *w) {
     if (!w->used || !w->have_canvas || !w->buf) return;
     uint32_t *dst = fb_get_active_buffer();
@@ -335,6 +357,13 @@ static void uw_raw_tick(void) {
         if (w->used && w->have_canvas && w->dirty) {
             uw_raw_blit_window(w);
             w->dirty = 0;
+            /* The cursor saves the pixels under it so it can put them back
+             * when it moves.  Those pixels were the *previous* content of
+             * the screen, so after a client repaints, the saved copy is
+             * stale: moving the cursor would restore the old image and
+             * leave a black patch where the client had drawn.  Drop the
+             * saved copy so the next cursor render takes a fresh one. */
+            fb_cursor_invalidate();
         }
     }
 
@@ -630,6 +659,12 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
             if (w->y < 0) w->y = 0;
             w->have_canvas = 1;
             w->dirty = 1;
+            /* A client is about to own the screen, so the kernel console
+             * must stop drawing into it -- see uw_console_to_serial().  This
+             * has to happen here, in the raw branch: in raw mode the window
+             * is created inline, so the want_create path in uw_raw_tick()
+             * never runs. */
+            uw_console_to_serial();
             uint8_t ev[2] = { WM_EV_CONN, (uint8_t)w->handle };
             uw_queue_event(c, ev, 2);
         } else {
@@ -704,10 +739,13 @@ int user_wm_events_out(int pid, void *buf, int max) {
     uw_lock();
     c = uw_client_find(pid);
     if (!c) { uw_unlock(); return 0; }
-    kprintf("user_wm_events_out: pid=%d head=%d tail=%d max=%d\n", pid, c->ev_head, c->ev_tail, max);
+    /* No tracing here.  This runs on every event read -- the compositor
+     * polls it 60 times a second -- and a kprintf per call is not a debug
+     * aid, it is a flood: it fills the serial log, and (before the console
+     * was detached from the framebuffer) it scrolled the client's UI off the
+     * screen.  Trace the ring with a debugger, not with the console. */
     while (c->ev_head != c->ev_tail && n < max) {
         int len = c->ev_len[c->ev_head];
-        kprintf("user_wm_events_out: event opcode=%d len=%d\n", c->ev[c->ev_head][0], len);
         if (len > max - n) break;
         memcpy(out + n, c->ev[c->ev_head], len);
         n += len;
