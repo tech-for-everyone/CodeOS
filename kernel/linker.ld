@@ -16,19 +16,50 @@ SECTIONS
         KEEP(*(.note))
     }
 
+    /* The `l`-prefixed catch-alls are load-bearing, not belt-and-braces.
+     *
+     * With the kernel's compile flags (-mcmodel=large -ffunction-sections
+     * -fdata-sections) clang does NOT emit .text.foo / .data.foo / .rodata.foo;
+     * it emits .ltext.foo / .ldata.foo / .lrodata.foo, marked SHF_LINK_ORDER.
+     * The patterns below only matched the non-prefixed names, so every one of
+     * those sections was an ORPHAN: ld placed it outside the script's own
+     * sections and gave it its own segment.
+     *
+     * That is survivable until it is not.  The Zircon kernel link produced
+     *
+     *   LOAD 0x001000 vaddr 0xffffffff80200000 filesz 0x1c3010 memsz 0x4836960
+     *   LOAD 0x1c405c vaddr 0xffffffff803c205c filesz 0x1c0    memsz 0x1c0
+     *
+     * i.e. the second LOAD (.data and the orphans) sat *inside* the first
+     * one's memory range, which is an inconsistent layout.  Limine's ELF
+     * loader rejects it outright:
+     *
+     *   PANIC: elf: Attempted to load ELF file with overlapping PHDRs
+     *          (0 and 1 overlap)
+     *
+     * and the Zircon ISO never reached its kernel.  The CodeOS kernel linked
+     * to a single LOAD by luck of its layout, which is exactly why the bug
+     * looked like a Zircon-only problem.
+     *
+     * Catching the families here makes them ordinary script sections: they
+     * are laid out with everything else, and the image has one segment.
+     */
     .text : AT(ADDR(.text) - _kernel_virt_base) {
         *(.text*)
+        *(.ltext*)
     }
 
     . = ALIGN(32);
     .rodata : AT(ADDR(.rodata) - _kernel_virt_base) {
         *(.rodata*)
+        *(.lrodata*)
     }
 
     . = ALIGN(4096);
     .data : AT(ADDR(.data) - _kernel_virt_base) {
         *(COMMON)
         *(.data*)
+        *(.ldata*)
     }
 
     . = ALIGN(8);
@@ -60,8 +91,8 @@ SECTIONS
     . = ALIGN(8);
     .fini_array : AT(ADDR(.fini_array) - _kernel_virt_base) {
         PROVIDE_HIDDEN (__fini_array_start = .);
-        KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
-        KEEP (*(.fini_array))
+        KEEP (*(.fini_array*))
+        KEEP (*(.fini_array .dtors))
         PROVIDE_HIDDEN (__fini_array_end = .);
     }
 

@@ -82,6 +82,48 @@ lib/errno.o: lib/errno.c include/unistd.h include/errno.h include/string.h
 LIB_OBJ = lib/string.o lib/stdio.o lib/stdlib.o lib/errno.o
 LIB_ANDROID = lib/android.o lib/android_ui.o
 
+# ── bas programs ────────────────────────────────────────────────────────
+# .ba sources under pkgs/core/bas/src/ are cross-compiled into real CodeOS
+# userland ELFs by the bas compiler, using the SDK in pkgs/core/bas/sdk.  bas
+# lives in its own repository (CodeOS-Comunity/bas) and is an OPTIONAL sibling
+# checkout, exactly like the OpenWeb tree, so this section does nothing at all
+# when BAS_DIR is absent -- `make -C kernel all` must never depend on it.
+#
+# The binaries land here as bas-<stem> rather than as <stem>, so a bas program
+# cannot shadow a hand-written userspace program, and the generated list is
+# written to a makefile fragment that ../Makefile includes.  That keeps the
+# kernel Makefile -- which owns USER_PROGS and the disk.img population -- free
+# of any knowledge of bas.  An empty list is written rather than no file, so
+# the include always resolves and BAS_PROGS falls through to its default.
+BAS_SRC_DIR = $(PKG_SRC)/bas/src
+BAS_SDK_DIR = $(PKG_SRC)/bas/sdk
+# The sibling checkout, same default the top-level Makefile uses.  Repeated here
+# so `make -C kernel/userspace bas_progs` works on its own; kernel/Makefile
+# passes it explicitly so an override on the outer invocation still wins.
+BAS_DIR ?= $(firstword $(wildcard ../../../bas /usr/local/share/bas))
+BAS_CC     = $(BAS_DIR)/compiler/target/debug/bas
+BAS_NAMES  = $(notdir $(basename $(wildcard $(BAS_SRC_DIR)/*.ba)))
+BAS_PROGS  = $(addprefix bas-,$(BAS_NAMES))
+
+.PHONY: bas_progs
+all: bas_progs
+
+# Each `bas build` compiles the SDK and the platform libc from source, so the
+# whole set is built in one recipe rather than one rule per program.
+bas_progs:
+	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_CC)" ]; then \
+	    printf 'bas: no compiler at %s; bas programs omitted\n' '$(BAS_CC)'; \
+	else \
+	    set -e; for b in $(BAS_NAMES); do \
+	        echo "  BAS  $$b.ba -> bas-$$b"; \
+	        $(BAS_CC) build $(BAS_SRC_DIR)/$$b.ba \
+	            --target codeos \
+	            --target-dir $(BAS_SDK_DIR)/targets \
+	            --sysroot $(CURDIR)/../.. \
+	            -o $(CURDIR)/bas-$$b; \
+	    done; \
+	fi
+
 # Programs that only need core libs
 CORE_PROGS = init shell csl zircon-notify zircon-clock zircon-info \
              code-music linux-runner syscall_test crosvm-launcher ncvm android-apps \
@@ -196,7 +238,8 @@ linux-probe: $(PSRC)/linux-probe.c
 	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ linux-probe.o
 
 clean:
-	rm -f *.o lib/*.o $(PROGRAMS)
+	rm -f *.o lib/*.o $(PROGRAMS) bas_progs.mk
+	rm -f $(PKG_SRC)/bas/src/*.ba.c
 
 # Host tests. These build the *real* source against a POSIX shim rather than
 # the freestanding CodeOS target, because the only other way to exercise these

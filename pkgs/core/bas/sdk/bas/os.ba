@@ -1,0 +1,126 @@
+// os.ba -- the bas prelude for CodeOS and Zircon.
+//
+// A bas program reaches the OS through these extern declarations:
+//
+//     extern {
+//         fn bas_getpid() -> i32;
+//     }
+//
+//     fn main() {
+//         println!("pid = {}", bas_getpid());
+//     }
+//
+// (This file is the documented list; a program pastes the `extern` block it
+// needs rather than `mod`-ing it, because bas has no import mechanism yet.)
+//
+// SYSCALL ABI, shared by both operating systems because Zircon runs on the
+// CodeOS kernel: RAX = syscall number, then RDI, RSI, RDX, R10, R8, R9 for
+// a1..a6.  Every `extern fn` below is a thin wrapper around one `int $0x80`.
+//
+// Each one is declared identically in sdk/include/bas_os.h, which is where the
+// definitions live.  The codegen emits a C prototype for every extern fn, so a
+// program that uses these needs no C header of its own.
+
+// ── Console ──
+// `s` is a NUL-terminated C string, which is what a bas string literal lowers
+// to, so printing is a single call with no length to compute.
+
+extern {
+    fn bas_print(s: &str) -> i32;
+    fn bas_write(fd: i32, s: &str) -> i32;
+    fn bas_read_char(fd: i32) -> i32;
+}
+
+// ── Process ──
+
+extern {
+    fn bas_exit(status: i32) -> void;
+    fn bas_getpid() -> i32;
+    fn bas_getppid() -> i32;
+    fn bas_sleep_ms(ms: i32) -> i32;
+    fn bas_yield() -> i32;
+}
+
+// ── Filesystem ──
+// No buffer parameters anywhere: bas has no slice or byte-buffer type to hand
+// out, so the whole-file helpers allocate and return a String instead.
+
+extern {
+    fn bas_open(path: &str, flags: i32) -> i32;
+    fn bas_close(fd: i32) -> i32;
+    fn bas_lseek(fd: i32, offset: i64, whence: i32) -> i64;
+
+    // 0 when reachable, -errno otherwise.
+    fn bas_access(path: &str) -> i32;
+
+    // Size in bytes, or -errno.
+    fn bas_stat_size(path: &str) -> i64;
+
+    // The whole file; the length comes back through `out_len`.  The returned
+    // buffer is owned by the caller: copy what you need into a String, then
+    // call bas_release.  A null `out_len` is fine.
+    fn bas_read_file(path: &str, out_len: *const i64) -> &str;
+
+    // Byte count written, or -errno.
+    fn bas_write_file(path: &str, data: &str) -> i32;
+
+    // Directory entries, one per line, owned until bas_release.  "" for an
+    // unreadable directory.
+    fn bas_list_dir(path: &str, out_len: *const i64) -> &str;
+
+    // Free a buffer from bas_read_file / bas_list_dir.  A bas program cannot
+    // free anything else, so this is the only free it can reach.
+    fn bas_release(s: &str) -> void;
+
+    fn bas_mkdir(path: &str) -> i32;
+    fn bas_unlink(path: &str) -> i32;
+}
+
+// ── Time ──
+// Seconds since the epoch (SYSCALL_TIME returns time_t).
+
+extern {
+    fn bas_time() -> i64;
+}
+
+// ── Integer math ──
+// There is no floating point on these targets: userspace is built
+// -mno-sse/-mno-sse2, so a `double` has no ABI at all and clang rejects it
+// outright.  A bas program that wants a square root uses bas_isqrt32.
+
+extern {
+    fn bas_isqrt32(v: u32) -> u32;
+    fn bas_gcd64(a: u64, b: u64) -> u64;
+    fn bas_rand() -> u32;
+    fn bas_srand(seed: u32) -> void;
+}
+
+// ── Errors ────────────────────────────────────────────────────────────
+// The kernel returns -errno and there is no thread-local errno to read, so the
+// values are constants.  A syscall that failed returns -CODE.
+
+const EPERM:  i32 = 1;
+const ENOENT: i32 = 2;
+const ESRCH:  i32 = 3;
+const EINTR:  i32 = 4;
+const EIO:    i32 = 5;
+const ENOMEM: i32 = 12;
+const EACCES: i32 = 13;
+const EFAULT: i32 = 14;
+const EEXIST: i32 = 17;
+
+// ── open() flags ──────────────────────────────────────────────────────
+// The Linux values, which is what the kernel checks.
+
+const O_RDONLY: i32 = 0x0;
+const O_WRONLY: i32 = 0x1;
+const O_RDWR:   i32 = 0x2;
+const O_CREAT:  i32 = 0x40;
+const O_TRUNC:  i32 = 0x200;
+const O_APPEND: i32 = 0x400;
+
+// ── lseek() whence ────────────────────────────────────────────────────
+
+const SEEK_SET: i32 = 0;
+const SEEK_CUR: i32 = 1;
+const SEEK_END: i32 = 2;

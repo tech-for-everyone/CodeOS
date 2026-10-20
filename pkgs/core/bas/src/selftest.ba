@@ -1,0 +1,214 @@
+// selftest.ba -- assert what bas-built programs rely on, on the real OS.
+//
+// Every line prints a value that the serial log can be checked against, in the
+// comment beside it.  Nothing here is "obviously fine" and skipped: each check
+// covers a specific way this integration can build cleanly and still be wrong,
+// which is the failure mode a green build cannot see.
+//
+//   - Vec/String growth, because CodeOS's allocator is a bump allocator with a
+//     no-op free.  A libc-style realloc there drops the contents it is required
+//     to preserve, and only a program that grows past one block sees it.
+//   - integer math, because these targets have no float ABI at all.
+//   - the OS bindings, because a wrapper with the wrong argument register
+//     compiles, links and returns a plausible wrong answer.
+//   - errno, because the kernel returns -errno and there is no errno() to read.
+//
+// The extern block below is copied from sdk/bas/os.ba.  bas has no import
+// mechanism yet, so a program pastes the declarations it needs.
+
+extern {
+    fn bas_open(path: &str, flags: i32) -> i32;
+    fn bas_close(fd: i32) -> i32;
+    fn bas_access(path: &str) -> i32;
+    fn bas_stat_size(path: &str) -> i64;
+    fn bas_read_file(path: &str, out_len: *const i64) -> &str;
+    fn bas_release(s: &str) -> void;
+    fn bas_list_dir(path: &str, out_len: *const i64) -> &str;
+    fn bas_write_file(path: &str, data: &str) -> i32;
+    fn bas_unlink(path: &str) -> i32;
+    fn bas_time() -> i64;
+    fn bas_getpid() -> i32;
+    fn bas_sleep_ms(ms: i32) -> i32;
+    fn bas_isqrt32(v: u32) -> u32;
+    fn bas_gcd64(a: u64, b: u64) -> u64;
+}
+
+// /bin holds the userspace programs on every CodeOS image (disk.img
+// population puts them there), so these paths are always present.
+const SHELL_PATH: &str = "/bin/shell";
+const HOSTNAME_PATH: &str = "/etc/hostname";
+
+fn main() {
+    println!("bas-selftest: start");
+
+    // ── Vec growth across many reallocations ──
+    // 512 pushes means nine doublings from the initial capacity of 4, so this
+    // crosses many allocations.  Every element is written then read back: a
+    // realloc that preserved nothing shows up as zeros, not as a crash.
+    let mut v = vec![0, 1];
+    let mut i = 0;
+    while i < 512 {
+        v.push(i * 3);
+        i = i + 1;
+    }
+    println!("bas-selftest: vec len = {}", v.len());           // 514
+
+    let mut bad = 0;
+    let mut j = 2;
+    while j < v.len() {
+        if v[j] != (j - 2) * 3 {
+            bad = bad + 1;
+        }
+        j = j + 1;
+    }
+    println!("bas-selftest: vec mismatches = {}", bad);        // 0
+
+    let mut sum = 0;
+    for x in v {
+        sum = sum + x;
+    }
+    // 0 + 1 + sum(3k for k in 0..512) = 1 + 3*(511*512/2) = 392449
+    println!("bas-selftest: vec sum = {}", sum);
+    println!("bas-selftest: vec sum correct: {}", sum == 392449);
+
+    // ── String growth ──
+    // Built one character at a time, so the NUL-terminated buffer is realloc'd
+    // on nearly every push.  A lost copy truncates the string rather than
+    // faulting, which is why the length is printed and not just the string.
+    let mut s = String::new();
+    let mut k = 0;
+    while k < 40 {
+        s.push('x');
+        k = k + 1;
+    }
+    s.push('!');
+    println!("bas-selftest: str len = {}", s.len());            // 41
+    println!("bas-selftest: str ends with !: {}", s.ends_with("!"));
+    println!("bas-selftest: str starts with xxxxx: {}", s.starts_with("xxxxx"));
+    println!("bas-selftest: str contains xx: {}", s.contains("xx"));
+
+    // ── format! and the assertion macros ──
+    println!("bas-selftest: formatted = {}", format!("{}+{}={}", 2, 3, 5));
+    assert_eq!(2 + 3, 5);
+    assert!(s.len() == 41);
+    println!("bas-selftest: assert/assert_eq survived");
+
+    // ── Structs, enums, match ──
+    let p = Point { x: 3, y: 4 };
+    println!("bas-selftest: point dist2 = {}", p.dist2());      // 25
+    match Shape::Rect(2, 3) {
+        Shape::Rect(w, h) => println!("bas-selftest: rect area = {}", w * h),   // 6
+        Shape::Circle(_) => println!("bas-selftest: circle"),
+    }
+
+    // ── The OS bindings ──
+    // Each of these fails in a different way if the syscall wrapper puts an
+    // argument in the wrong register, which is why there are several.
+    let pid = bas_getpid();
+    println!("bas-selftest: pid > 0: {}", pid > 0);
+
+    let secs = bas_time();
+    println!("bas-selftest: time > 0: {}", secs > 0);
+
+    // SYSCALL_ACCESS: 0 for a path that exists.  A wrapper that passed the path
+    // in the wrong register would test a garbage path and return non-zero.
+    println!("bas-selftest: access /bin/shell ok: {}", bas_access(SHELL_PATH) == 0);
+
+    // SYSCALL_STAT: the size of a known-present file.
+    let size = bas_stat_size(SHELL_PATH);
+    println!("bas-selftest: /bin/shell size > 0: {}", size > 0);
+
+    // SYSCALL_OPEN + CLOSE.
+    let fd = bas_open(SHELL_PATH, 0);
+    println!("bas-selftest: open /bin/shell >= 0: {}", fd >= 0);
+    if fd >= 0 {
+        println!("bas-selftest: close rc = {}", bas_close(fd));
+    }
+
+    // ── errno ──
+    // A path that cannot exist must FAIL, and is asserted as "negative" rather
+    // than as a specific -ENOENT: this kernel does not promise the -errno
+    // convention for a missing path (a bare -1 and -2 are both observed
+    // depending on whether the lookup reached the filesystem or the node
+    // table), and a test that hard-codes one of them would be asserting the
+    // kernel's error convention, not the SDK.  The returned value is printed so
+    // the convention stays visible.
+    let missing = bas_open("/no/such/file", 0);
+    println!("bas-selftest: missing open rc = {}", missing);
+    println!("bas-selftest: missing open is an error: {}", missing < 0);
+    let msz = bas_stat_size("/no/such/file");
+    println!("bas-selftest: missing stat rc = {}", msz);
+    println!("bas-selftest: missing stat is an error: {}", msz < 0);
+    let mac = bas_access("/no/such/file");
+    println!("bas-selftest: missing access rc = {}", mac);
+    println!("bas-selftest: missing access is an error: {}", mac < 0);
+
+    // ── File I/O round trip ──
+    // Write then read back through the whole-file helpers.  This covers the
+    // out-parameter marshalling of bas_read_file, the only signature in the
+    // SDK that is not a plain scalar, and the O_CREAT path of the kernel's
+    // sys_open.
+    //
+    // The file goes in / and NOT in a subdirectory.  This kernel's sys_open
+    // creates a missing file with fs_mkfile(), which writes to the in-memory
+    // node table -- and that table only has the directories the initramfs
+    // populated.  /root exists only on the mounted ext2 volume, so a create
+    // under it fails, and it is not the bas SDK's business to mkdir -p first.
+    let tmp = "/bas-selftest.txt";
+    let payload = "bas selftest round trip\n";
+    let wrote = bas_write_file(tmp, payload);
+    println!("bas-selftest: wrote bytes = {}", wrote);          // 24
+
+    let mut n: i64 = 0;
+    let got = bas_read_file(tmp, &n);
+    println!("bas-selftest: read len = {}", n);                 // 24
+    println!("bas-selftest: read matches: {}", got == payload);
+    bas_release(got);
+    bas_unlink(tmp);
+
+    // ── Directory listing ──
+    // SYSCALL_READDIR returns a packed NUL-separated list; bas_list_dir turns
+    // it into newline-separated text.  The byte count is printed rather than a
+    // name lookup: `contains("shell")` depends on which /bin the kernel
+    // resolves (initramfs or the mounted disk), so asserting a specific entry
+    // would be asserting that, not the SDK.  A non-empty listing already proves
+    // the packed NUL walk and the newline conversion both ran.
+    let mut dn: i64 = 0;
+    let dir = bas_list_dir("/bin", &dn);
+    println!("bas-selftest: /bin listing bytes = {}", dn);
+    println!("bas-selftest: /bin listing non-empty: {}", dn > 1);
+    bas_release(dir);
+
+    // ── Sleep returns and the program is still alive ──
+    bas_sleep_ms(5);
+    println!("bas-selftest: survived sleep");
+
+    // ── Integer math (no float ABI on this target) ──
+    println!("bas-selftest: isqrt(0) = {}", bas_isqrt32(0));      // 0
+    println!("bas-selftest: isqrt(1) = {}", bas_isqrt32(1));      // 1
+    println!("bas-selftest: isqrt(25) = {}", bas_isqrt32(25));    // 5
+    println!("bas-selftest: isqrt(99) = {}", bas_isqrt32(99));    // 9
+    println!("bas-selftest: isqrt(10000) = {}", bas_isqrt32(10000)); // 100
+    println!("bas-selftest: gcd(48,18) = {}", bas_gcd64(48, 18));  // 6
+
+    println!("bas-selftest: done");
+}
+
+// Point and Shape are here so the self-test covers the non-trivial lowering
+// (structs, enums, match) and not just printf.
+
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+impl Point {
+    fn dist2(&self) -> i64 {
+        self.x * self.x + self.y * self.y
+    }
+}
+
+enum Shape {
+    Rect(i64, i64),
+    Circle(i64),
+}

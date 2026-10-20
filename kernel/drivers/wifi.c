@@ -111,7 +111,9 @@ bool wifi_is_connected(void) {
 /* ─── Dummy driver for QEMU / virtio (uses existing net stack) ─── */
 
 static int virtio_wifi_probe(void) {
-    return virtio_net_init() == 0 ? 1 : 0;
+    /* The NIC subsystem (nic_init) runs before wifi_init, so just check
+     * if there's an active NIC. This works with e1000, virtio-net, etc. */
+    return nic_ready();
 }
 
 static int virtio_wifi_scan(wifi_scan_result_t *out) {
@@ -131,7 +133,8 @@ static int virtio_wifi_scan(wifi_scan_result_t *out) {
 
 static int virtio_wifi_connect(const char *ssid, const char *password, wifi_security_t sec) {
     (void)ssid; (void)password; (void)sec;
-    return net_init();
+    /* Network is already initialized by net_init() in main.c; just check if up */
+    return net_ready() ? 0 : -1;
 }
 
 static int virtio_wifi_disconnect(void) {

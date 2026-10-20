@@ -266,7 +266,7 @@ static const char *builtins[] = {
     "mem", "pci", "cpu", "fetch", "fastfetch", "sysfetch", "pacman",
     "uptime", "uname", "free", "whoami", "hostname", "which",
         "sleep", "repeat", "seq", "script", "yes", "true", "false",
-    "wc", "head", "hexdump", "calc",         "date", "rev", "run", "sort",
+    "wc", "head", "hexdump", "calc",         "date", "rev", "run", "bas", "sort",
     "cp", "mv", "shutdown", "df", "du", "id", "su", "sudo", "root", "container", "appvm", "kill", "ps",
     "waydroid", "ow", "login", "passwd", "useradd", "userdel", "users",
     "chmod", "chown", "tail", "grep", "find", "ln", "dd",
@@ -2166,6 +2166,69 @@ static void cmd_run(int argc, char **argv) {
         kprintf("run: %s: failed\n", argv[1]);
 }
 
+/* `bas` runs a bas program shipped in /bin as bas-<name>.
+ *
+ * There is no bas compiler in the image, so this is the runtime half of the
+ * integration: the programs are cross-compiled on the host and embedded in the
+ * initramfs, and this is how a user reaches them.  The load/enter sequence is
+ * deliberately cmd_exec_level(), not a second copy of it -- the ELF loader,
+ * stack setup, process level and syscall-stack juggling are the same for every
+ * userspace program, and a duplicate here would drift.
+ *
+ * `bas list` reads /bin through fs_dir_list(), which is the same NUL-separated
+ * contract SYSCALL_READDIR returns; parsing it here rather than calling the
+ * syscall keeps the command working in the kernel shell, which is not a
+ * userspace process. */
+static void cmd_bas(int argc, char **argv) {
+    if (argc < 2 || strcmp(argv[1], "list") == 0) {
+        char listing[4096];
+        int n = fs_dir_list("/bin", listing, (int)sizeof(listing));
+        int shown = 0;
+        kprintf("bas programs:\n");
+        for (int i = 0; i < n; ) {
+            const char *name = listing + i;
+            int len = (int)strlen(name);
+            if (strncmp(name, "bas-", 4) == 0 && name[4]) {
+                kprintf("  %-20s /bin/%s\n", name + 4, name);
+                shown++;
+            }
+            i += len + 1;
+        }
+        if (!shown) kprintf("  (none)\n");
+        kprintf("usage: bas <program> [args...]\n");
+        kprintf("       bas run <path>   (any bas-built ELF)\n");
+        return;
+    }
+
+    char path[FS_PATH_MAX];
+    int arg_start;
+    if (strcmp(argv[1], "run") == 0 && argc >= 3) {
+        strncpy_safe(path, argv[2], sizeof(path));
+        arg_start = 3;
+    } else {
+        snprintf(path, sizeof(path), "/bin/bas-%s", argv[1]);
+        arg_start = 2;
+    }
+
+    int is_dir;
+    if (fs_resolve(path, &is_dir) < 0 || is_dir) {
+        kprintf("bas: '%s': no such program\n", path);
+        kprintf("run `bas list` to see the installed programs\n");
+        return;
+    }
+
+    /* cmd_exec_level() expects the ELF at argv[1] and passes argv+1 to the
+     * process, so the constructed vector keeps that shape. */
+    char *eargv[MAX_ARGS];
+    int eargc = 0;
+    eargv[eargc++] = (char *)"bas";
+    eargv[eargc++] = path;
+    for (int i = arg_start; i < argc && eargc < MAX_ARGS - 1; i++)
+        eargv[eargc++] = argv[i];
+    eargv[eargc] = 0;
+    cmd_exec_level(eargc, eargv, LEVEL_USER);
+}
+
 /* ---------- csl games ---------- */
 
 #define GAME_DIR "/usr/share/games"
@@ -2461,6 +2524,9 @@ static void cmd_appvm(int argc, char **argv) {
         kprintf("       appvm inspect <container>\n");
         kprintf("       appvm stats <container>\n");
         kprintf("       appvm commit <container> <image>\n");
+        kprintf("\n");
+        kprintf("bas programs run in a container too, e.g.\n");
+        kprintf("       appvm run debian-minimal /bin/bas-hello\n");
         return;
     }
 
@@ -4257,6 +4323,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "rev") == 0) cmd_rev(argc, argv);
     else if (strcmp(cmd, "exec") == 0) cmd_exec(argc, argv);
     else if (strcmp(cmd, "run") == 0) cmd_run(argc, argv);
+    else if (strcmp(cmd, "bas") == 0) cmd_bas(argc, argv);
     else if (strcmp(cmd, "games") == 0) cmd_games(argc, argv);
     else if (strcmp(cmd, "gplay") == 0) cmd_gplay(argc, argv);
     else if (strcmp(cmd, "pong") == 0) cmd_lgame_game(argc, argv);

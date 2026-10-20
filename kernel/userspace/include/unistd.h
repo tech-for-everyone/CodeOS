@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <codeos/syscall_abi.h>
 
+/* Forward declaration for WiFi scan result (kernel-only type) */
+typedef struct { uint8_t _opaque[256]; } wifi_scan_result_t;
+
 #define KILL_SIGTERM 15
 #define KILL_SIGKILL  9
 #define KILL_SIGSTOP 19
@@ -264,6 +267,10 @@ static inline int sys_getppid(void) {
     return ret;
 }
 
+/* POSIX-compatible wrappers (for libc compatibility) */
+static inline int getpid(void) { return sys_getpid(); }
+static inline int getppid(void) { return sys_getppid(); }
+
 static inline int sys_close(int fd) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_CLOSE), "D"(fd));
@@ -363,6 +370,75 @@ static inline int sys_dup2(int oldfd, int newfd) {
 static inline int sys_wm_attach(void) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WM_ATTACH) : "memory");
+    return ret;
+}
+
+/* Settings syscalls */
+#define WIFI_CMD_ENABLE     0
+#define WIFI_CMD_DISABLE    1
+#define WIFI_CMD_SCAN       2
+#define WIFI_CMD_CONNECT    3
+
+static inline int sys_wifi_enable(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WIFI_CONTROL), "D"(WIFI_CMD_ENABLE) : "memory");
+    return ret;
+}
+
+static inline int sys_wifi_disable(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WIFI_CONTROL), "D"(WIFI_CMD_DISABLE) : "memory");
+    return ret;
+}
+
+static inline int sys_wifi_scan(wifi_scan_result_t *out) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WIFI_CONTROL), "D"(WIFI_CMD_SCAN), "S"(out) : "memory");
+    return ret;
+}
+
+static inline int sys_wifi_connect(const char *ssid, const char *password) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WIFI_CONTROL), "D"(WIFI_CMD_CONNECT), "S"(ssid), "d"(password) : "memory");
+    return ret;
+}
+
+#define BT_CMD_ENABLE   0
+#define BT_CMD_DISABLE  1
+
+static inline int sys_bt_enable(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_BT_CONTROL), "D"(BT_CMD_ENABLE) : "memory");
+    return ret;
+}
+
+static inline int sys_bt_disable(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_BT_CONTROL), "D"(BT_CMD_DISABLE) : "memory");
+    return ret;
+}
+
+static inline int sys_dnd_set(int enabled) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_DND_SET), "D"(enabled) : "memory");
+    return ret;
+}
+
+static inline int sys_dnd_get(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_DND_GET) : "memory");
+    return ret;
+}
+
+static inline int sys_airplane_set(int enabled) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AIRPLANE_SET), "D"(enabled) : "memory");
+    return ret;
+}
+
+static inline int sys_airplane_get(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AIRPLANE_GET) : "memory");
     return ret;
 }
 

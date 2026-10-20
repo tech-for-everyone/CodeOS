@@ -44,7 +44,7 @@ enum {
     WM_EV_CONN   = 0x84,
 };
 
-#define UW_CANVAS_MAX ((size_t)0x100000) /* 1 MiB software canvas cap */
+#define UW_CANVAS_MAX ((size_t)0x800000) /* 8 MiB software canvas cap */
 
 typedef struct {
     int used;
@@ -363,15 +363,15 @@ static void uw_raw_tick(void) {
     for (int i = 0; i < UW_MAX_CLIENTS; i++) {
         uw_client_t *c = &uw_clients[i];
         if (!c->used) continue;
-        if (proc_get(c->pid) == 0 && c->win == 0) {
+        process_t *pg = proc_get(c->pid);
+        if (!pg && c->win == 0) {
             uw_client_free(c);
             continue;
         }
-        if (proc_get(c->pid) == 0) {
+        if (!pg && c->win != 0) {
             for (int j = 0; j < UW_MAX_WINDOWS; j++)
                 if (uw_windows[j].used && uw_windows[j].pid == c->pid)
                     uw_windows[j].want_destroy = 1;
-            uw_client_free(c);
         }
     }
     uw_unlock();
@@ -423,17 +423,20 @@ void user_wm_tick(void) {
     for (int i = 0; i < UW_MAX_CLIENTS; i++) {
         uw_client_t *c = &uw_clients[i];
         if (!c->used) continue;
-        if (proc_get(c->pid) == 0 && c->win == 0) {
+        process_t *pg = proc_get(c->pid);
+        if (!pg && c->win == 0) {
             uw_client_free(c);
             continue;
         }
-        if (proc_get(c->pid) == 0) {
-            /* process exited: close its windows, then drop the client */
+        if (!pg && c->win != 0) {
+            /* process exited but window still exists: mark window for destruction
+             * but KEEP the client alive until the window is actually destroyed */
             for (int j = 0; j < UW_MAX_WINDOWS; j++)
                 if (uw_windows[j].used && uw_windows[j].pid == c->pid)
                     uw_windows[j].want_destroy = 1;
-            uw_client_free(c);
+            /* Don't free the client yet - wait for window destruction */
         }
+        /* If process is alive, do nothing */
     }
     uw_unlock();
 }
@@ -581,7 +584,6 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
 
     switch (m[0]) {
     case WM_CREATE_WIN: {
-        kprintf("user_wm: WM_CREATE_WIN pid=%d len=%d\n", pid, len);
         if (len < 6) { uw_unlock(); return -1; }
         int ww = m[1] | (m[2] << 8);
         int wh = m[3] | (m[4] << 8);
@@ -605,19 +607,34 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
         w->handle = slot + 1;
         w->w = ww;
         w->h = wh;
-        w->want_create = 1;
         if (tlen > 0) {
             if (tlen > UW_MAX_TITLE) tlen = UW_MAX_TITLE;
             for (int i = 0; i < tlen && 6 + i < len; i++)
                 w->title[i] = m[6 + i];
         }
-        kprintf("user_wm: window slot=%d handle=%d %dx%d want_create=1\n", slot, w->handle, ww, wh);
         if (uw_surface_alloc(w) < 0) {
             memset(w, 0, sizeof(*w));
             uw_unlock();
             return -1;
         }
         c->win = w->handle;
+
+        /* In raw mode, create the window and queue CONN event synchronously */
+        if (!lvgl_port_ready()) {
+            /* center the window on the framebuffer */
+            int fb_w = (int)fb_getwidth();
+            int fb_h = (int)fb_getheight();
+            w->x = (fb_w - w->w) / 2;
+            w->y = (fb_h - w->h) / 2;
+            if (w->x < 0) w->x = 0;
+            if (w->y < 0) w->y = 0;
+            w->have_canvas = 1;
+            w->dirty = 1;
+            uint8_t ev[2] = { WM_EV_CONN, (uint8_t)w->handle };
+            uw_queue_event(c, ev, 2);
+        } else {
+            w->want_create = 1;
+        }
         uw_unlock();
         return 0;
     }
@@ -687,8 +704,10 @@ int user_wm_events_out(int pid, void *buf, int max) {
     uw_lock();
     c = uw_client_find(pid);
     if (!c) { uw_unlock(); return 0; }
+    kprintf("user_wm_events_out: pid=%d head=%d tail=%d max=%d\n", pid, c->ev_head, c->ev_tail, max);
     while (c->ev_head != c->ev_tail && n < max) {
         int len = c->ev_len[c->ev_head];
+        kprintf("user_wm_events_out: event opcode=%d len=%d\n", c->ev[c->ev_head][0], len);
         if (len > max - n) break;
         memcpy(out + n, c->ev[c->ev_head], len);
         n += len;

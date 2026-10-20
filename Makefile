@@ -34,7 +34,7 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
-.PHONY: bas bas-check
+.PHONY: bas bas-check bas-target-check vsnprintf-check
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -44,12 +44,29 @@ check:
 	$(MAKE) -C kernel check
 	$(MAKE) jengine-check
 	$(MAKE) ncvm-check
+	$(MAKE) vsnprintf-check
 	$(MAKE) codec-check
 	$(MAKE) bas-check
+	$(MAKE) bas-target-check
 	$(MAKE) netbeam-check
 
+# kernel/userspace/lib/stdio.c is the freestanding libc every CodeOS
+# userspace program formats through, and its vsnprintf had to be fixed to
+# honour C99's "size == 0 measures and returns the required length" -- without
+# it the bas runtime's format! allocated a one-byte buffer and every format! on
+# CodeOS printed an empty string.  The host test compiles the REAL source
+# against a real libc and compares the measured length, the written length and
+# the rendered text with glibc's for the same format, which is the only way to
+# catch a wrong length: on CodeOS nothing formats a string and compares the
+# result to anything.
+vsnprintf-check:
+	@printf "$(CYAN)$(BOLD)==> Checking the userspace vsnprintf...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -Wno-format-zero-length -Wno-format-extra-args \
+	    -o /tmp/codeos-vsnprintf-test kernel/userspace/tests/vsnprintf_test.c
+	@/tmp/codeos-vsnprintf-test
+	@printf "$(GREEN)vsnprintf checks passed$(RESET)\n"
+
 jengine-check:
-	@printf "$(CYAN)$(BOLD)==> Checking Jengine...$(RESET)\n"
 	@cc -std=c11 -Wall -Wextra -Werror -Iinclude src/jengine.c tests/jengine_test.c \
 		-o /tmp/codeos-jengine-test
 	@/tmp/codeos-jengine-test
@@ -113,6 +130,45 @@ bas-check:
 	    printf "$(CYAN)$(BOLD)==> Checking bas language...$(RESET)\n"; \
 	    bash "$(BAS_DIR)/tests/run.sh"; \
 	fi
+
+# Cross-build check: every pkgs/core/bas/src/*.ba must compile into a real
+# CodeOS userland ELF for BOTH targets.  A target can break without the host
+# suite noticing -- the Zircon target was missing strstr from its libc and only
+# this build said so -- so both are built here rather than waiting for the next
+# image build.
+#
+# Skipped (not failed) with no bas checkout, matching bas-check.
+bas-target-check:
+	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_DIR)/compiler/target/debug/bas" ]; then \
+	    printf "$(DIM)bas-target-check: no bas compiler at '$(BAS_DIR)' (optional); skipping$(RESET)\n"; \
+	    exit 0; \
+	fi
+	@printf "$(CYAN)$(BOLD)==> Cross-building bas programs for CodeOS and Zircon...$(RESET)\n"
+	@set -e; for b in pkgs/core/bas/src/*.ba; do \
+	    stem=$$(basename $$b .ba); \
+	    "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
+	        --target codeos --target-dir pkgs/core/bas/sdk/targets \
+	        --sysroot . -o /tmp/codeos-bas-target-$$stem || exit 1; \
+	    "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
+	        --target zircon --target-dir pkgs/core/bas/sdk/targets \
+	        --sysroot . -o /tmp/zircon-bas-target-$$stem || exit 1; \
+	    file /tmp/codeos-bas-target-$$stem | grep -q "ELF 64-bit" || { \
+	        echo "codeos build of $$b is not a 64-bit ELF"; exit 1; }; \
+	    file /tmp/zircon-bas-target-$$stem | grep -q "ELF 64-bit" || { \
+	        echo "zircon build of $$b is not a 64-bit ELF"; exit 1; }; \
+	    echo "  OK  $$stem (codeos, zircon)"; \
+	    rm -f /tmp/codeos-bas-target-$$stem /tmp/zircon-bas-target-$$stem; \
+	done
+	@printf "$(GREEN)bas cross-target checks passed$(RESET)\n"
+
+# Runtime proof. `bas-target-check` only proves the ELF links; this boots the
+# ISO and asserts on what /bin/bas-selftest actually printed (see
+# kernel/scripts/bas_boot_check.py).  Separate and not part of `check` because it
+# needs QEMU and a full image.
+.PHONY: bas-boot-check
+bas-boot-check:
+	@printf "$(CYAN)$(BOLD)==> Booting CodeOS to run the bas programs...$(RESET)\n"
+	@cd kernel && python3 scripts/bas_boot_check.py
 
 # pkgs/extra/netbeam/src/netbeam.c is a CodeOS userspace ELF, so it issues
 # `int $0x80` with CodeOS syscall numbers and cannot run on Linux. The test

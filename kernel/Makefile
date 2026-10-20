@@ -104,10 +104,21 @@ else
     # both wrong and, for some headers, uncompilable.
     CLANG_RESOURCE_INCLUDE := $(shell $(CC) -print-file-name=include 2>/dev/null)
 
+    # -flto=thin is deliberately NOT set, having been tried here and failing the
+    # build twice over: CFLAGS is inherited by CXXFLAGS and cc1plus rejects
+    # "-flto=thin" ("unrecognized argument to '-flto=' option: 'thin'"), and the
+    # kernel links with x86_64-elf-ld rather than ld.lld -- GNU ld cannot consume
+    # clang's thin-LTO bitcode without the gold plugin, and it has to be GNU ld
+    # because ld.lld cannot relax the prebuilt Qt archives' local-dynamic TLS.
+    # The optimisation flags that DID survive a full build are the ones kept
+    # below: -O3, -ffunction-sections/-fdata-sections (with the link's
+    # --gc-sections), -fomit-frame-pointer, -fno-semantic-interposition and
+    # -fno-math-errno.
     CFLAGS = -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse \
              -mno-sse2 -nostdlib -nostartfiles -nodefaultlibs \
              -fno-stack-protector -fno-PIC \
- -Wall -Wextra -O2 -g -MMD -MP -ffunction-sections -fdata-sections \
+             -Wall -Wextra -O3 -g -MMD -MP -ffunction-sections -fdata-sections \
+             -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno \
               -nostdinc -I$(CLANG_RESOURCE_INCLUDE) \
               -I. -I./kernel -I./kernel/security -I./drivers -I../include -Iarch/x86_64 \
               -DLV_CONF_INCLUDE_SIMPLE -I./lvgl -isystem ./lvgl/shim \
@@ -116,11 +127,18 @@ else
     # defaults are older (gnu17 / gnu++17) and would otherwise build the same
     # sources with different semantics.  CFLAGS carries no -std; only CXXFLAGS
     # needs the C++ one.
-    CXXFLAGS = $(CFLAGS) -std=gnu++20 -fno-exceptions -fno-rtti -fno-use-cxa-atexit
+    # -fstrict-vtable-pointers is deliberately NOT here.  It is clang-only, and
+    # CXXFLAGS is used for the g++ compilations too (the Qt-facing translation
+    # units build with g++ to pick up its libstdc++ headers), so adding it here
+    # fails the whole build with "g++: error: unrecognized command-line option
+    # -fstrict-vtable-pointers".  -fstrict-enums is understood by both and
+    # stays.
+    CXXFLAGS = $(CFLAGS) -std=gnu++20 -fno-exceptions -fno-rtti -fno-use-cxa-atexit \
+               -fstrict-enums
     LDFLAGS = -nostdlib -z max-page-size=0x1000 -z noexecstack -no-pie --gc-sections
     USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
                   -nostdlib -nostartfiles -fno-stack-protector -fno-PIC \
-                  -Wall -Wextra -O2 -g -I./userspace/include
+                  -Wall -Wextra -O3 -g -I./userspace/include
     USER_LDFLAGS = -nostdlib -z max-page-size=0x1000 -z noexecstack
 
     # Kernel infrastructure (stays in kernel/)
@@ -169,6 +187,16 @@ endif
 # CodeOS components use the same evaluator as the calculator APIs.
 SRC_C += ../src/jengine.c
 
+# The bas boot probe (kernel/bas_probe.c) needs nothing here: the SRC_C `find`
+# already picks it up, like ncvm_probe.c and zircapp_probe.c.  It is called
+# unconditionally from main.c and prints one informational line when
+# /bin/bas-selftest is absent from the image, rather than being hidden behind a
+# -DHAVE_BAS_PROBE -- make cannot see a flag change (kernel/main.o depends on
+# kernel/main.c, not on this file), so a conditional define would leave the
+# probe compiled out on the first build after a bas checkout appears, silently
+# and with no error.  Do NOT `SRC_C +=` it as well: that links bas_probe.o
+# twice and fails with "multiple definition of bas_probe_run".
+
 # OpenWeb is an optional checkout.  Search the common sibling locations and
 # only add an include directory when it really exists; a stale absolute path
 # otherwise makes clean builds fail on every other machine.
@@ -204,8 +232,29 @@ endif
 ../pkgs/core/openssl/src/ossl_shim.o ../pkgs/core/openssl/src/ossl_https.o: \
         CFLAGS := -I../pkgs/core/openssl/freestd -I../pkgs/core/openssl/freestd/sys $(CFLAGS)
 
-USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher ace_ui
+# bas programs: one binary per pkgs/core/bas/src/*.ba, cross-compiled into
+# real CodeOS userland ELFs by userspace/Makefile's bas_progs.  The list is
+# computed here rather than written by a sub-make, because USER_ELF has to be
+# known at parse time for the disk.img population to copy the binaries -- a
+# generated makefile fragment would not exist yet on a clean tree, and the
+# programs would silently be left out of the image.
+#
+# The wildcard on BAS_DIR is what keeps this optional: with no sibling bas
+# checkout (as on a machine that has never run `make bas`) BAS_PROGS is empty
+# and the build is exactly what it was before.  Same treatment as the OpenWeb
+# tree, which pkg_repo_dev[] in kernel/kernel/pkg.c also gates on a checkout.
+# Paths are relative to THIS directory, which is one level below the tree root,
+# so the sibling checkout is at ../../bas -- `../bas` would be <root>/bas and
+# silently resolve to nothing, which is exactly how the bas programs go missing
+# from the image with no error anywhere.
+BAS_DIR ?= $(firstword $(wildcard ../../bas ../bas /usr/local/share/bas))
+BAS_SRC = ../pkgs/core/bas/src
+BAS_PROGS = $(if $(wildcard $(BAS_DIR)/compiler/Cargo.toml),\
+             $(addprefix bas-,$(notdir $(basename $(wildcard $(BAS_SRC)/*.ba)))))
+
+USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher ace_ui $(BAS_PROGS)
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
+BAS_ELF = $(addprefix userspace/,$(BAS_PROGS))
 
 # ── Rust backend (ow_http) ──
 RUST_DIR = kernel/rust_ow
@@ -379,8 +428,20 @@ arm64:
 # decides whether anything is actually out of date.  ELF mtimes still only
 # move on a real recompile, so the initramfs and the ISO are not churned
 # either.
-$(USER_ELF): FORCE
+# $(BAS_ELF) is filtered out: it has its own recipe below, and a second recipe
+# for the same target would silently win over this one.
+$(filter-out $(BAS_ELF),$(USER_ELF)): FORCE
 	$(MAKE) -C userspace $(notdir $@)
+
+# The bas programs are built as a set by one sub-make invocation rather than
+# one per program: each `bas build` compiles the SDK and the platform libc from
+# source, so building them individually would repeat that work N times.
+$(BAS_ELF): bas_progs
+.PHONY: bas_progs
+bas_progs:
+	$(MAKE) -C userspace bas_progs BAS_DIR=$(abspath $(BAS_DIR))
+	@for e in $(BAS_ELF); do test -f $$e || { \
+	    echo "error: $$e was not built (see above)"; exit 1; }; done
 
 # Never a real file, so it is always out of date and never satisfied by an
 # existing file of that name.

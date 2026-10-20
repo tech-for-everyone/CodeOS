@@ -384,15 +384,34 @@ void kernel_panic(const char *fmt, ...) {
 /* ═══════════════════════════════════════════════════════════════════════
  *                      MAIN ENTRY POINT
  * ═══════════════════════════════════════════════════════════════════════ */
-/* ─────────────────────────────────────────────────────────────────
- *  Zircon UI pump: drives user_wm_tick + input in Zircon mode
- *  (no LVGL compositor, so we do it from a kernel thread)
- * ───────────────────────────────────────────────────────────────── */
 static void zircon_ui_pump(void) {
+    /* Initialize and show mouse cursor */
+    extern void fb_cursor_init(void);
+    extern void fb_cursor_show(void);
+    fb_cursor_init();
+    fb_cursor_show();
+
     for (;;) {
         /* Poll PS/2 + USB input (keyboard + mouse) */
         extern void input_poll(void);
         input_poll();
+
+        /* Update cursor position from mouse */
+        extern int mouse_get_x(void);
+        extern int mouse_get_y(void);
+        extern void fb_cursor_move(int x, int y);
+        int mx = mouse_get_x();
+        int my = mouse_get_y();
+        fb_cursor_move(mx, my);
+
+        /* Route mouse events to compositor */
+        extern int mouse_get_buttons(void);
+        extern void user_wm_input_pointer(int x, int y, int pressed);
+        user_wm_input_pointer(mx, my, mouse_get_buttons() & 1);
+
+        /* Render cursor on top of framebuffer */
+        extern void fb_cursor_render(void);
+        fb_cursor_render();
 
         /* Drive user-window bridge (creates/blits/destroys windows) */
         extern void user_wm_tick(void);
@@ -643,8 +662,15 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     }
 
     extern int wifi_init(void);
-    if (wifi_init() == 0)
-        kprintf("  wifi: connected\n");
+    extern int wifi_connect(const char *ssid, const char *password);
+    if (wifi_init() == 0) {
+        kprintf("  wifi: driver ready\n");
+        /* Auto-connect to QEMU's virtual WiFi (no auth) */
+        if (wifi_connect("QEMU_VirtIO", NULL) == 0)
+            kprintf("  wifi: connected\n");
+        else
+            kprintf("  wifi: connect failed\n");
+    }
 
     /* net_selftest() disabled: it hammers the host test server (10.0.2.2:9001)
      * which has no listener in a normal boot, holding the single TCP socket
@@ -744,6 +770,34 @@ void kernel_main(uint32_t magic __attribute__((unused)),
                 sched_yield();
             if (!ncvm_probe_finished())
                 kprintf("NCVM: selftest timed out; continuing boot\n");
+        }
+    }
+
+    /* bas programs: boot-time smoke test.  Loads and runs /bin/bas-selftest,
+     * compiled from pkgs/core/bas/src/selftest.ba by the bas cross-toolchain.
+     * It is the only caller that proves the whole chain works at runtime --
+     * the cross build, the disk-image population, the freestanding libc and the
+     * SDK's syscall wrappers.  There is no shell path to the program, because
+     * every CodeOS shell command is a builtin.
+     *
+     * Deliberately NOT behind a -DHAVE_BAS_PROBE.  The probe is only
+     * meaningful with a bas checkout, but make cannot see a flag change:
+     * kernel/main.o depends on kernel/main.c, not on the Makefile.  A
+     * conditional define therefore leaves the probe compiled out on the first
+     * build after bas appears -- silently, with no error anywhere.  The probe
+     * reports the absent case itself instead: one informational line rather
+     * than a silent no-op. */
+    {
+        extern int bas_probe_run(void);
+        extern int bas_probe_finished(void);
+        bas_probe_run();
+        {
+            uint64_t bs_start = timer_get_milliseconds();
+            while (!bas_probe_finished() &&
+                   timer_get_milliseconds() - bs_start < 10000)
+                sched_yield();
+            if (!bas_probe_finished())
+                kprintf("BAS: selftest timed out; continuing boot\n");
         }
     }
 

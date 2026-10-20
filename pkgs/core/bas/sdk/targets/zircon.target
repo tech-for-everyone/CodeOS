@@ -1,0 +1,69 @@
+# bas target: Zircon x86_64 userland
+#
+# Zircon runs on the CodeOS kernel and shares its `int $0x80` syscall ABI, but
+# its usersland is its own package tree under Zircon/pkgs/core/base with a
+# richer freestanding libc (pkgs/core/base/libc/src/stubs.c: printf, vsnprintf,
+# malloc/free/realloc over a real free list, the syscalls).  So the include
+# paths differ from the codeos target even though the compiler flags do not.
+#
+# The spec lives in sdk/targets/, so $SELF is sdk/targets and the SDK root is
+# one level up; that is why the SDK paths below are written $SELF/../<dir>.
+
+triple    x86_64-unknown-none
+cc        clang
+
+# Mirrored from Zircon/kernel/userspace/Makefile's USER_CFLAGS.  Zircon also
+# builds packages through pkgs/pkgs.mk, but those do not carry
+# -mno-sse/-mno-sse2; the programs built through its userspace Makefile do, and
+# that is the userland a bas binary has to match.
+cflag     -ffreestanding
+cflag     -mno-red-zone
+cflag     -mno-mmx
+cflag     -mno-sse
+cflag     -mno-sse2
+cflag     -nostdlib
+cflag     -fno-stack-protector
+cflag     -fno-PIC
+cflag     -std=gnu11
+cflag     -Wall
+cflag     -Wextra
+cflag     -Wno-unused-variable
+cflag     -Wno-unused-but-set-variable
+cflag     -Wno-unused-function
+cflag     -O2
+
+# SDK headers FIRST -- assert.h and math.h exist only here.
+cinc      $SELF/../include
+
+# The shared freestd headers (stdio/stdlib/string/sys) in the order Zircon's
+# own pkgs.mk resolves them: the freestd copies have to beat the kernel's
+# string.h, which has strncpy_safe where these want strncpy.
+cinc      $SYSROOT/Zircon/pkgs/core/base/libc/include
+cinc      $SYSROOT/Zircon/pkgs/core/base/abi/include
+cinc      $SYSROOT/pkgs/core/openssl/freestd
+cinc      $SYSROOT/kernel/userspace/include
+cinc      $SYSROOT/Zircon/kernel/userspace/include
+
+cdef      BAS_OS_ZIRCON=1
+cdef      BAS_OS_NAME="Zircon"
+
+# Zircon's own libc, named as `.c` for the same reason the codeos target names
+# its sources rather than the prebuilt objects: a cross build must work in a
+# tree where nothing has been built yet.
+csrc      $SELF/../src/bas_os.c
+csrc      $SELF/../src/bas_libc.c
+csrc      $SELF/../src/bas_math.c
+csrc      $SYSROOT/Zircon/pkgs/core/base/libc/src/stubs.c
+
+crt0      $SYSROOT/Zircon/pkgs/core/base/libc/src/crt0.S
+
+# Zircon links its programs through the clang driver with the default linker
+# script rather than a checked-in one (see Zircon/Makefile's LDFLAGS), so there
+# is no `script` directive here -- and no ENTRY() for the driver to verify.
+linker    ld.lld
+
+ldflag    -nostdlib
+ldflag    -z
+ldflag    max-page-size=0x1000
+ldflag    -z
+ldflag    noexecstack

@@ -12,7 +12,8 @@ kernel/syscall.o: kernel/syscall.c kernel/syscall.h kernel/types.h \
   kernel/apphost.h kernel/user_wm.h kernel/systemm.h \
   ../pkgs/core/panels/src/ow_http.h ../pkgs/core/panels/src/openweb.h \
   kernel/socket.h kernel/../arch/x86_64/fb.h \
-  kernel/../drivers/keyboard.h kernel/../drivers/mouse.h
+  kernel/../drivers/keyboard.h kernel/../drivers/mouse.h \
+  kernel/../drivers/wifi.h kernel/../drivers/usb_bt.h
 kernel/syscall.h:
 kernel/types.h:
 ../include/codeos/syscall_abi.h:
@@ -54,3 +55,5 @@ kernel/socket.h:
 kernel/../arch/x86_64/fb.h:
 kernel/../drivers/keyboard.h:
 kernel/../drivers/mouse.h:
+kernel/../drivers/wifi.h:
+kernel/../drivers/usb_bt.h:

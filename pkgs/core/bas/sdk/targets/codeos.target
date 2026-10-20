@@ -1,0 +1,71 @@
+# bas target: CodeOS x86_64 userland
+#
+# CodeOS userspace is freestanding: clang targets `none` so it does not assume
+# a host Linux runtime (PIE, dynamic linker, start files), the programs carry
+# their own `_start` in crt0.S, and the link uses kernel/userspace/link.ld.
+# Those flags are mirrored from kernel/userspace/Makefile's USER_CFLAGS and
+# USER_LDFLAGS -- if one changes, this must change with it.
+#
+# The spec lives in sdk/targets/, so $SELF is sdk/targets and the SDK root is
+# one level up; that is why the SDK paths below are written $SELF/../<dir>.
+
+triple    x86_64-unknown-none
+cc        clang
+
+# Same set as USER_CFLAGS.  -mno-sse/-mno-sse2 are load-bearing: without them
+# clang would use the x86-64 float ABI that this userland has no support for.
+cflag     -ffreestanding
+cflag     -mno-red-zone
+cflag     -mno-mmx
+cflag     -mno-sse
+cflag     -mno-sse2
+cflag     -nostdlib
+cflag     -fno-stack-protector
+cflag     -fno-PIC
+cflag     -std=gnu11
+cflag     -Wall
+cflag     -Wextra
+cflag     -Wno-unused-variable
+cflag     -Wno-unused-but-set-variable
+cflag     -Wno-unused-function
+cflag     -O2
+
+# SDK headers FIRST.  assert.h and math.h exist only here, and they must also
+# win over the host's /usr/include/math.h, which -nostdinc would otherwise
+# leave as the only math.h and which then fails on __float128.
+cinc      $SELF/../include
+
+# CodeOS's freestanding libc headers and the syscall ABI.
+cinc      $SYSROOT/kernel/userspace/include
+cinc      $SYSROOT/include
+
+cdef      BAS_OS_CODEOS=1
+cdef      BAS_OS_NAME="CodeOS"
+
+# The SDK runtime sources, compiled with the program's own flags.  bas_os.c is
+# what a bas program's `extern fn os_*` binds to, bas_libc.c supplies the
+# size-aware realloc and the assert path, and bas_math.c the integer <math.h>.
+#
+# The sources after those are CodeOS's own freestanding libc (printf, exit,
+# malloc, memcpy -- everything the generated C calls).  They are named as `.c`
+# rather than as the `lib/*.o` the userspace Makefile builds, so a cross build
+# works in a tree where `make -C kernel/userspace` has never run; a missing
+# prebuilt object would otherwise be an opaque link error.
+csrc      $SELF/../src/bas_os.c
+csrc      $SELF/../src/bas_libc.c
+csrc      $SELF/../src/bas_math.c
+csrc      $SYSROOT/kernel/userspace/lib/string.c
+csrc      $SYSROOT/kernel/userspace/lib/stdio.c
+csrc      $SYSROOT/kernel/userspace/lib/stdlib.c
+
+crt0      $SYSROOT/kernel/userspace/crt0.S
+
+linker    ld.lld
+script    $SYSROOT/kernel/userspace/link.ld
+
+# Same as USER_LDFLAGS.
+ldflag    -nostdlib
+ldflag    -z
+ldflag    max-page-size=0x1000
+ldflag    -z
+ldflag    noexecstack

@@ -100,7 +100,13 @@
  * userspace program -- /bin/zircapp, /bin/terminal -- ask for it.
  * Returns 1 when armed, 0 when no compositor/bridge is available. */
 #define SYSCALL_WM_ATTACH          80 /* wm_attach()                     -> 1/0 */
+#define SYSCALL_WIFI_CONTROL       81 /* wifi_control(cmd, arg)          -> 0/-1 */
+#define SYSCALL_BT_CONTROL         82 /* bt_control(cmd, arg)            -> 0/-1 */
+#define SYSCALL_DND_SET            83 /* dnd_set(enabled)                -> 0/-1 */
+#define SYSCALL_DND_GET            84 /* dnd_get()                       -> 0/1 */
+#define SYSCALL_AIRPLANE_SET       85 /* airplane_set(enabled)           -> 0/-1 */
+#define SYSCALL_AIRPLANE_GET       86 /* airplane_get()                  -> 0/1 */
 
-#define CODEOS_SYSCALL_COUNT 81
+#define CODEOS_SYSCALL_COUNT 87
 
 #endif

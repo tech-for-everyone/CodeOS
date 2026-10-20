@@ -595,13 +595,27 @@ int container_exec(int id, const char *path, int argc, char **argv, char **envp)
 
     uint64_t entry = 0, stack = 0;
     elf_auxv_info_t auxv;
+    const char *exec_path = full_path;
     if (elf_load(full_path, &entry, &stack, &auxv) < 0) {
-        kprintf("appvm: exec '%s' failed (resolved to '%s')\n", path, full_path);
-        return -1;
+        /* bas programs are statically linked ELFs shipped in the host image
+         * as /bin/bas-*; container images do not carry their own copy.  A
+         * request for one therefore falls back to the host binary -- but only
+         * for that prefix, and the process is still created at
+         * LEVEL_CONTAINER below, so this is not a general host-exec escape.
+         * The alternative (copying every bas program into every image root)
+         * would make the image size depend on how many .ba sources happen to
+         * exist in an optional sibling checkout. */
+        if (strncmp(path, "/bin/bas-", 9) == 0 &&
+            elf_load(path, &entry, &stack, &auxv) == 0) {
+            exec_path = path;
+        } else {
+            kprintf("appvm: exec '%s' failed (resolved to '%s')\n", path, full_path);
+            return -1;
+        }
     }
-    kprintf("appvm: exec '%s' in container '%s' (ns_isolated)\n", path, c->name);
+    kprintf("appvm: exec '%s' in container '%s' (ns_isolated)\n", exec_path, c->name);
     char logmsg[96];
-    snprintf(logmsg, sizeof(logmsg), "exec: %s (ns_isolated)\n", path);
+    snprintf(logmsg, sizeof(logmsg), "exec: %s (ns_isolated)\n", exec_path);
     container_log_append(c, logmsg);
 
     process_t *cur = proc_current();
@@ -618,7 +632,7 @@ int container_exec(int id, const char *path, int argc, char **argv, char **envp)
          * Inheriting the caller's level here would let a level-2 user obtain a
          * level-2 process inside a container, and the containment would mean
          * nothing. */
-        proc_create(full_path, entry, stack, LEVEL_CONTAINER);
+        proc_create(exec_path, entry, stack, LEVEL_CONTAINER);
         cur = proc_current();
         if (!cur) return -1;
     } else {

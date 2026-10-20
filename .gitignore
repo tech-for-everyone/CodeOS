@@ -21,3 +21,6 @@ disk.img
 # pruned) result is what lives in pkgs/core/gtk6/, and nothing builds from here.
 /gtk4/
 
+
+# bas: the generated C for a .ba program (an intermediate of the cross build)
+kernel/userspace/*.ba.c

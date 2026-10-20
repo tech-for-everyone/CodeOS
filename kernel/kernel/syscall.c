@@ -35,9 +35,15 @@
 #include "../arch/x86_64/fb.h"
 #include "../drivers/keyboard.h"
 #include "../drivers/mouse.h"
+#include "../drivers/wifi.h"
+#include "../drivers/usb_bt.h"
 
 extern uint64_t syscall_kernel_rsp;
 extern void user_mode_force_return(void);
+
+/* Settings state */
+int dnd_enabled = 0;
+int airplane_mode = 0;
 
 #ifdef __aarch64__
 #define TASK_SIZE 0x0000FFFFFFFFFFFFULL
@@ -2696,6 +2702,47 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         int pid = current_process ? current_process->pid : 0;
         if (pid <= 0) return 0;
         return user_wm_setup(pid) == 0 ? 1 : 0;
+    }
+    case SYSCALL_WIFI_CONTROL: {
+        int cmd = (int)a1;
+        const char *arg = (const char *)a2;
+        switch (cmd) {
+        case 0: return wifi_init() == 0 ? 1 : 0;           /* enable */
+        case 1: return wifi_disconnect() == 0 ? 1 : 0;     /* disable */
+        case 2: if (arg) return wifi_scan((wifi_scan_result_t *)arg) == 0 ? 1 : 0; return -1; /* scan */
+        case 3: if (arg) return wifi_connect(arg, (const char *)a3) == 0 ? 1 : 0; return -1; /* connect */
+        default: return -1;
+        }
+    }
+    case SYSCALL_BT_CONTROL: {
+        int cmd = (int)a1;
+        switch (cmd) {
+        case 0: return usb_bt_available() ? 1 : 0; /* enable/check */
+        case 1: return 0; /* disable - stub */
+        default: return -1;
+        }
+    }
+    case SYSCALL_DND_SET: {
+        extern int dnd_enabled;
+        dnd_enabled = (int)a1;
+        return 0;
+    }
+    case SYSCALL_DND_GET: {
+        extern int dnd_enabled;
+        return dnd_enabled ? 1 : 0;
+    }
+    case SYSCALL_AIRPLANE_SET: {
+        extern int airplane_mode;
+        airplane_mode = (int)a1;
+        if (airplane_mode) {
+            wifi_disconnect();
+            /* bt disable stub */
+        }
+        return 0;
+    }
+    case SYSCALL_AIRPLANE_GET: {
+        extern int airplane_mode;
+        return airplane_mode ? 1 : 0;
     }
     case SYSCALL_KILL: {
         int pid = (int)a1;

@@ -1,0 +1,11 @@
+// hello.ba -- the smallest end-to-end check of the bas -> CodeOS toolchain.
+//
+// If this prints, then all of the following worked: the lowering, the
+// freestanding compile (-mno-sse and all), the link against CodeOS's own libc
+// and crt0, and the kernel loading and running a CodeOS-native ELF.  It is
+// deliberately free of SDK calls so that a failure points at the toolchain
+// rather than at the bindings.
+
+fn main() {
+    println!("bas: hello from CodeOS");
+}
