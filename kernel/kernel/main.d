@@ -24,20 +24,20 @@ kernel/main.o: kernel/main.c /usr/lib/clang/23/include/stddef.h \
   kernel/gdt.h kernel/sched.h kernel/process.h kernel/elf.h \
   kernel/syscall.h ../include/codeos/syscall_abi.h kernel/rng.h \
   kernel/kprintf.h kernel/string.h kernel/version.h kernel/bootsplash.h \
-  kernel/fs.h kernel/vfs.h kernel/ext2.h kernel/codefs.h kernel/part.h \
-  kernel/block.h kernel/umode.h kernel/script.h kernel/csl.h \
-  kernel/shell.h ../pkgs/core/panels/src/net.h kernel/netdev.h \
-  kernel/ethernet.h kernel/arp.h kernel/ip.h kernel/udp.h kernel/icmp.h \
-  kernel/tcp.h kernel/dns.h kernel/socket.h kernel/netstat.h \
-  kernel/security.h ../pkgs/core/panels/src/clamav.h kernel/ad_block.h \
-  kernel/desktop.h kernel/windows.h kernel/qt_desktop.h kernel/pkg.h \
-  kernel/android.h kernel/android_display.h kernel/display_bridge.h \
-  kernel/android_prop.h kernel/android_rc.h kernel/android_container.h \
-  kernel/container.h kernel/namespace.h kernel/vm_manager.h \
-  ../pkgs/core/panels/src/appvm.h kernel/adb.h \
-  ../pkgs/core/panels/src/updater.h kernel/ipc.h kernel/audit.h \
-  kernel/inotify.h kernel/rootfs.h kernel/zircon.h kernel/audio_mixer.h \
-  kernel/x11_server.h
+  kernel/device.h kernel/fs.h kernel/vfs.h kernel/ext2.h kernel/codefs.h \
+  kernel/part.h kernel/block.h kernel/umode.h kernel/script.h \
+  kernel/csl.h kernel/shell.h ../pkgs/core/panels/src/net.h \
+  kernel/netdev.h kernel/ethernet.h kernel/arp.h kernel/ip.h \
+  kernel/udp.h kernel/icmp.h kernel/tcp.h kernel/dns.h kernel/socket.h \
+  kernel/netstat.h kernel/security.h ../pkgs/core/panels/src/clamav.h \
+  kernel/ad_block.h kernel/desktop.h kernel/windows.h \
+  kernel/qt_desktop.h kernel/pkg.h kernel/android.h \
+  kernel/android_display.h kernel/display_bridge.h kernel/android_prop.h \
+  kernel/android_rc.h kernel/android_container.h kernel/container.h \
+  kernel/namespace.h kernel/vm_manager.h ../pkgs/core/panels/src/appvm.h \
+  kernel/adb.h ../pkgs/core/panels/src/updater.h kernel/ipc.h \
+  kernel/audit.h kernel/inotify.h kernel/rootfs.h kernel/zircon.h \
+  kernel/audio_mixer.h kernel/x11_server.h
 /usr/lib/clang/23/include/stddef.h:
 /usr/lib/clang/23/include/__stddef_header_macro.h:
 /usr/lib/clang/23/include/__stddef_ptrdiff_t.h:
@@ -87,6 +87,7 @@ kernel/kprintf.h:
 kernel/string.h:
 kernel/version.h:
 kernel/bootsplash.h:
+kernel/device.h:
 kernel/fs.h:
 kernel/vfs.h:
 kernel/ext2.h:

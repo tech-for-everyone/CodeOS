@@ -44,6 +44,7 @@
 #include "string.h"
 #include "version.h"
 #include "bootsplash.h"
+#include "device.h"
 #include "fs.h"
 #include "vfs.h"
 #include "ext2.h"
@@ -525,6 +526,11 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         phys_to_virt_base = limine_hhdm_offset();
         has_fb = limine_setup_fb() == 0;
     }
+
+    /* Which device is this?  The panel is only known once the framebuffer
+     * is, and the command line may name a device to emulate.  Userspace
+     * asks for the answer with SYSCALL_GET_INFO command 4. */
+    zircon_device_init(limine_get_cmdline(), fb_getwidth(), fb_getheight());
 
     if (!has_fb) {
         pci_init();

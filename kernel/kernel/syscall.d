@@ -9,7 +9,7 @@ kernel/syscall.o: kernel/syscall.c kernel/syscall.h kernel/types.h \
   kernel/../arch/x86_64/serial.h kernel/version.h kernel/shell.h \
   kernel/android.h kernel/container.h kernel/namespace.h \
   kernel/vm_manager.h kernel/mm.h kernel/rng.h kernel/ai.h \
-  kernel/apphost.h kernel/user_wm.h kernel/systemm.h \
+  kernel/apphost.h kernel/user_wm.h kernel/systemm.h kernel/device.h \
   ../pkgs/core/panels/src/ow_http.h ../pkgs/core/panels/src/openweb.h \
   kernel/socket.h kernel/../arch/x86_64/fb.h \
   kernel/../drivers/keyboard.h kernel/../drivers/mouse.h \
@@ -49,6 +49,7 @@ kernel/ai.h:
 kernel/apphost.h:
 kernel/user_wm.h:
 kernel/systemm.h:
+kernel/device.h:
 ../pkgs/core/panels/src/ow_http.h:
 ../pkgs/core/panels/src/openweb.h:
 kernel/socket.h:

@@ -34,7 +34,7 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
-.PHONY: bas bas-check bas-target-check vsnprintf-check
+.PHONY: bas bas-check bas-target-check vsnprintf-check device-check
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -45,10 +45,24 @@ check:
 	$(MAKE) jengine-check
 	$(MAKE) ncvm-check
 	$(MAKE) vsnprintf-check
+	$(MAKE) device-check
 	$(MAKE) codec-check
 	$(MAKE) bas-check
 	$(MAKE) bas-target-check
 	$(MAKE) netbeam-check
+
+# kernel/kernel/device.c is the device table: the phones and tablets the
+# Zircon kernel knows how to drive, and the rules for picking one (an
+# explicit "zircon.device=" on the command line, then a panel that matches
+# a profile, then a generic profile from the geometry).  The host test
+# compiles the REAL source and drives it, so the table and the selection
+# are covered without a device.
+device-check:
+	@printf "$(CYAN)$(BOLD)==> Checking the device table...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -I kernel/kernel -o /tmp/codeos-device-test \
+	    kernel/tests/device_test.c kernel/kernel/device.c
+	@/tmp/codeos-device-test
+	@printf "$(GREEN)device checks passed$(RESET)\n"
 
 # kernel/userspace/lib/stdio.c is the freestanding libc every CodeOS
 # userspace program formats through, and its vsnprintf had to be fixed to

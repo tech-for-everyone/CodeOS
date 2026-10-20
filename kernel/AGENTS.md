@@ -260,6 +260,47 @@ ncvm: selftest [ok  ] the listing is packed NUL-separated names, not fixed-strid
 - **The boot check now drives the shell too, not just the probe.** `bas_boot_check.py` types `bas list`, `bas hello`, `bas run /bin/bas-hello` and `appvm run debian-minimal /bin/bas-hello` into the guest over a *bidirectional* serial socket and asserts on the text that arrived **after each command** — a whole-log search would let the first command satisfy the second, since two of them print the same line. This needs `-serial unix:...,server,nowait`; the write-only `-serial file:` that the screenshot harness uses cannot type.
 - **Zircon runs the same probe, and its check is a separate script.** `Zircon/kernel/kernel/main.c` calls `bas_probe_run()` before the compositor, and `Zircon/scripts/zircon_boot_check.py` (`make -C Zircon boot-check`) boots the Zircon ISO and asserts the same `bas-selftest:` lines plus the compositor and the app store. The two are separate files on purpose: the Zircon image has a different userland (its own libc, its own compositor) and a different boot, so its expectations are its own — including one value that is timing-dependent on Zircon (the uptime, which is still under a second when the probe runs there) and therefore matched by a pattern rather than a literal.
 
+## Devices: the phones and tablets the kernel drives
+`kernel/kernel/device.{c,h}` is the device table, and it is the reason a
+Zircon phone and a Zircon tablet are the same OS.
+
+- **A device profile is a panel, a logical screen and a scale.** The panel is
+  what the device has (1080x2400); the logical screen is what the interface
+  is laid out for (360x800); the scale is the ratio (3).  A profile that is
+  only a resolution cannot describe a phone, because the phone's *interface*
+  is 360 wide whatever the panel is.
+- **The kernel picks the profile; userspace asks for it.** `zircon_device_init()`
+  runs at boot, and the answer is served by `SYSCALL_GET_INFO` command 4.
+  The compositor lays out for the device instead of assuming a phone.  The
+  userspace mirror of the struct is `zircon_device_info_t` in the Zircon ABI
+  header, and the two have to stay in step.
+- **Selection is: an explicit name, then a matching panel, then the
+  geometry.** "zircon.device=tablet-1024x768" on the kernel command line
+  always wins, so a device can be *emulated* and a layout can be tried
+  without the hardware.  The Zircon ISO ships boot entries for a tablet and
+  a phone that do exactly that.
+- **The scale has to fit the panel.** A 3x phone interface needs a
+  1080x2400 panel; on a smaller one the scale is clamped down and the
+  logical screen is cropped, which is the honest result of asking for a
+  device bigger than the display.  `device_clamp_to_panel()` does it, and
+  the host test (`make device-check`, `kernel/tests/device_test.c`) pins it.
+- **The bridge scales the client's surface.** A client draws in logical
+  pixels and says how many panel pixels they are worth with
+  `WM_SET_SCALE`; the presenter replicates each logical pixel into a
+  scale x scale block.  A client that says nothing (the desktop) stays
+  1:1, so the change costs the desktop nothing.  The pointer coordinates
+  are divided back down on the way to the client, so the client never sees
+  panel pixels.
+- **A client that owns the panel gets the backdrop cleared.** A letterboxed
+  phone interface on a bigger panel must not leave the rest of the panel as
+  whatever was in the framebuffer before, which is black.  `WM_SET_SCALE`
+  carries a fullscreen flag, and the presenter then fills the panel with
+  the backdrop colour itself -- `fb_fill()` cannot be used, because it goes
+  through the pixelman compositing, which is a no-op in the Zircon tree.
+- **The cursor follows the device.** A touch-only phone has no pointer, so
+  there is nothing to show a cursor for; the Zircon kernel only shows one
+  when the profile says the device has a pointer.
+
 ## Cursor theme (Bibata Modern Classic), and how it is verified
 - The pointer is **real Bibata Modern Classic art**, not a redrawn bitmap. `kernel/arch/cursor_theme.{h,cpp}` parses Xcursor files at boot from `/usr/share/icons/Bibata-Modern-Classic/cursors` on the pre-baked `disk.img`; `fb.cpp` blends the chosen ARGB surface over the framebuffer at the file's own hotspot. The old 8×16×16 1-bit bitmaps survive only as the fallback when a style fails to load — do not describe the cursor as those bitmaps.
 - The eight shipped files are **dereferenced symlinks** from the host theme: `text→xterm`, `size_hor→sb_h_double_arrow`, `size_ver→sb_v_double_arrow`, `size_fdiag→bd_double_arrow`, `size_bdiag→fd_double_arrow`, plus `left_ptr`, `hand2`, `crosshair`. Each file is ~173 KB and carries sizes `[16,20,22,24,28,32,40,48,56,64,72,80,88,96]`; the loader targets **24** and picks the nearest chunk (ties prefer the larger). At 24px the hotspots are `left_ptr (5,1)`, `hand2 (10,1)`, and `(12,12)` for the crosshair/text/resize styles.

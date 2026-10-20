@@ -33,6 +33,7 @@
 enum {
     WM_CREATE_WIN = 0x01,
     WM_CLOSE_WIN  = 0x02,
+    WM_SET_SCALE  = 0x07,   /* window handle, scale, flags */
     WM_FILL_RECT  = 0x10,
     WM_DRAW_STR   = 0x11,
     WM_CLEAR      = 0x12,
@@ -43,6 +44,9 @@ enum {
     WM_EV_CLOSED = 0x83,
     WM_EV_CONN   = 0x84,
 };
+
+/* Flags for WM_SET_SCALE. */
+#define WM_FLAG_FULLSCREEN 0x01   /* the client owns the whole panel */
 
 #define UW_CANVAS_MAX ((size_t)0x800000) /* 8 MiB software canvas cap */
 
@@ -60,8 +64,10 @@ typedef struct {
     int used;
     int pid;
     int handle;                    /* wire handle (slot + 1) */
-    int w, h;
-    int x, y;
+    int w, h;                      /* the client's logical size */
+    int x, y;                      /* the window's origin on the panel */
+    int scale;                     /* panel pixels per logical pixel (1 = 1:1) */
+    int fullscreen;                /* the client owns the whole panel */
     uint32_t *buf;                 /* software ARGB surface (virtual) */
     uint64_t buf_phys;             /* physical base of the surface pages */
     size_t buf_pages;
@@ -289,6 +295,44 @@ static void uw_console_to_serial(void) {
     kprintf_set_output(0, 0);
 }
 
+/* The window's size on the panel: its logical size times the scale. */
+static void uw_window_panel_size(const uw_win_t *w, int *pw, int *ph) {
+    int s = w->scale > 0 ? w->scale : 1;
+    *pw = w->w * s;
+    *ph = w->h * s;
+}
+
+/* Place the window in the middle of the panel, at its scaled size. */
+static void uw_window_center(uw_win_t *w, int fb_w, int fb_h) {
+    int pw, ph;
+    uw_window_panel_size(w, &pw, &ph);
+    w->x = (fb_w - pw) / 2;
+    w->y = (fb_h - ph) / 2;
+    if (w->x < 0) w->x = 0;
+    if (w->y < 0) w->y = 0;
+}
+
+/* The panel's backdrop.
+ *
+ * fb_fill() goes through the pixelman compositing, which is a no-op in the
+ * Zircon tree (there is no pixelman there), so the presenter fills the
+ * panel itself.  A client that owns the whole panel needs this: a
+ * letterboxed phone interface on a bigger panel must not leave the rest of
+ * the panel as whatever was in the framebuffer before, which is black.
+ */
+static void uw_fill_backdrop(void) {
+    uint32_t *dst = fb_get_active_buffer();
+    if (!dst) return;
+    int fb_w = (int)fb_getwidth();
+    int fb_h = (int)fb_getheight();
+    int stride = fb_get_pitch() / 4;
+    if (stride <= 0) stride = fb_w;
+    for (int y = 0; y < fb_h; y++) {
+        uint32_t *row = dst + (size_t)y * stride;
+        for (int x = 0; x < fb_w; x++) row[x] = UW_BACKDROP;
+    }
+}
+
 static void uw_raw_blit_window(uw_win_t *w) {
     if (!w->used || !w->have_canvas || !w->buf) return;
     uint32_t *dst = fb_get_active_buffer();
@@ -299,10 +343,11 @@ static void uw_raw_blit_window(uw_win_t *w) {
     int fb_stride = fb_get_pitch() / 4;
     if (fb_stride <= 0) fb_stride = fb_w;
 
+    int s = w->scale > 0 ? w->scale : 1;
     int wx = w->x;
     int wy = w->y;
-    int ww = w->w;
-    int wh = w->h;
+    int ww, wh;
+    uw_window_panel_size(w, &ww, &wh);
 
     /* clip to framebuffer */
     int sx = 0, sy = 0;
@@ -312,11 +357,32 @@ static void uw_raw_blit_window(uw_win_t *w) {
     if (wy + wh > fb_h) wh = fb_h - wy;
     if (ww <= 0 || wh <= 0) return;
 
-    uint32_t *src = w->buf + (size_t)sy * w->w + sx;
-    for (int row = 0; row < wh; row++) {
-        uint32_t *d = dst + (size_t)(wy + row) * fb_stride + wx;
-        uint32_t *s = src + (size_t)row * w->w;
-        for (int i = 0; i < ww; i++) d[i] = s[i];
+    /* The client's surface is in logical pixels; the panel is scale times
+     * bigger, so each logical pixel is replicated into a scale x scale
+     * block.  A phone whose panel is 1080 wide but whose interface is 360
+     * logical pixels wide is exactly this case. */
+    if (s == 1) {
+        uint32_t *src = w->buf + (size_t)sy * w->w + sx;
+        for (int row = 0; row < wh; row++) {
+            uint32_t *d = dst + (size_t)(wy + row) * fb_stride + wx;
+            uint32_t *src_row = src + (size_t)row * w->w;
+            for (int i = 0; i < ww; i++) d[i] = src_row[i];
+        }
+        return;
+    }
+
+    for (int srow = 0; srow < w->h; srow++) {
+        const uint32_t *sr = w->buf + (size_t)srow * w->w;
+        for (int dy = 0; dy < s; dy++) {
+            int py = wy + srow * s + dy - sy;
+            if (py < 0 || py >= fb_h) continue;
+            uint32_t *d = dst + (size_t)py * fb_stride + wx;
+            int col = 0;
+            for (int scol = 0; scol < w->w && col < ww; scol++) {
+                uint32_t v = sr[scol];
+                for (int k = 0; k < s && col < ww; k++) d[col++] = v;
+            }
+        }
     }
 }
 
@@ -337,11 +403,8 @@ static void uw_raw_tick(void) {
     for (int i = 0; i < UW_MAX_WINDOWS; i++) {
         uw_win_t *w = &uw_windows[i];
         if (w->used && w->want_create && !w->have_canvas) {
-            /* center the window on the framebuffer */
-            w->x = (fb_w - w->w) / 2;
-            w->y = (fb_h - w->h) / 2;
-            if (w->x < 0) w->x = 0;
-            if (w->y < 0) w->y = 0;
+            /* center the window on the framebuffer, at its scaled size */
+            uw_window_center(w, fb_w, fb_h);
             w->have_canvas = 1;
             w->dirty = 1;
             uw_client_t *c = uw_client_find(w->pid);
@@ -355,6 +418,10 @@ static void uw_raw_tick(void) {
     for (int i = 0; i < UW_MAX_WINDOWS; i++) {
         uw_win_t *w = &uw_windows[i];
         if (w->used && w->have_canvas && w->dirty) {
+            /* A client that owns the panel gets the backdrop cleared first,
+             * so the area around a letterboxed interface is the backdrop
+             * colour and not leftover framebuffer. */
+            if (w->fullscreen) uw_fill_backdrop();
             uw_raw_blit_window(w);
             w->dirty = 0;
             /* The cursor saves the pixels under it so it can put them back
@@ -375,7 +442,8 @@ static void uw_raw_tick(void) {
             uint32_t *dst = fb_get_active_buffer();
             int fb_stride = fb_get_pitch() / 4;
             if (dst && fb_stride > 0) {
-                int wx = w->x, wy = w->y, ww = w->w, wh = w->h;
+                int wx = w->x, wy = w->y, ww, wh;
+                uw_window_panel_size(w, &ww, &wh);
                 if (wx < 0) { ww += wx; wx = 0; }
                 if (wy < 0) { wh += wy; wy = 0; }
                 if (ww > 0 && wh > 0) {
@@ -511,13 +579,17 @@ void user_wm_input_pointer(int x, int y, int pressed) {
                 }
             }
         } else {
-            /* raw mode: find topmost window containing the point */
+            /* raw mode: find topmost window containing the point.  The
+             * window's place on the panel is its scaled size, so the hit
+             * test is in panel pixels. */
             hid = 0;
             for (int i = UW_MAX_WINDOWS - 1; i >= 0; i--) {
                 if (uw_windows[i].used && uw_windows[i].have_canvas) {
+                    int pw, ph;
+                    uw_window_panel_size(&uw_windows[i], &pw, &ph);
                     int wx = x - uw_windows[i].x;
                     int wy = y - uw_windows[i].y;
-                    if (wx >= 0 && wx < uw_windows[i].w && wy >= 0 && wy < uw_windows[i].h) {
+                    if (wx >= 0 && wx < pw && wy >= 0 && wy < ph) {
                         hid = uw_windows[i].handle;
                         break;
                     }
@@ -534,8 +606,12 @@ void user_wm_input_pointer(int x, int y, int pressed) {
             c = uw_client_find(w->pid);
             if (c) {
                 uint8_t ev[8];
-                int wx = x - w->x;
-                int wy = y - w->y;
+                /* The client works in logical pixels, so the panel
+                 * coordinates are divided by the window's scale before they
+                 * are handed over. */
+                int s = w->scale > 0 ? w->scale : 1;
+                int wx = (x - w->x) / s;
+                int wy = (y - w->y) / s;
                 ev[0] = WM_EV_MOUSE;
                 ev[1] = (uint8_t)hid;
                 ev[2] = wx & 0xFF; ev[3] = (wx >> 8) & 0xFF;
@@ -636,6 +712,7 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
         w->handle = slot + 1;
         w->w = ww;
         w->h = wh;
+        w->scale = 1;             /* 1:1 until the client says otherwise */
         if (tlen > 0) {
             if (tlen > UW_MAX_TITLE) tlen = UW_MAX_TITLE;
             for (int i = 0; i < tlen && 6 + i < len; i++)
@@ -650,13 +727,10 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
 
         /* In raw mode, create the window and queue CONN event synchronously */
         if (!lvgl_port_ready()) {
-            /* center the window on the framebuffer */
+            /* center the window on the framebuffer, at its scaled size */
             int fb_w = (int)fb_getwidth();
             int fb_h = (int)fb_getheight();
-            w->x = (fb_w - w->w) / 2;
-            w->y = (fb_h - w->h) / 2;
-            if (w->x < 0) w->x = 0;
-            if (w->y < 0) w->y = 0;
+            uw_window_center(w, fb_w, fb_h);
             w->have_canvas = 1;
             w->dirty = 1;
             /* A client is about to own the screen, so the kernel console
@@ -670,6 +744,31 @@ int user_wm_msg_in(int pid, const void *buf, int len) {
         } else {
             w->want_create = 1;
         }
+        uw_unlock();
+        return 0;
+    }
+    case WM_SET_SCALE: {
+        /* The client tells the kernel how many panel pixels one of its
+         * logical pixels is worth.  A phone whose panel is 1080 wide and
+         * whose interface is 360 logical pixels wide sends 3, and the
+         * presenter replicates each logical pixel into a 3x3 block.  A
+         * client that says nothing (the desktop) stays at 1:1.
+         *
+         * The fullscreen flag says the client owns the whole panel, so the
+         * presenter clears the backdrop around it -- a letterboxed phone
+         * interface on a bigger panel must not leave the rest of the panel
+         * as whatever was in the framebuffer before. */
+        if (len < 3) { uw_unlock(); return -1; }
+        w = uw_win_by_handle(m[1]);
+        if (!w || w->pid != pid) { uw_unlock(); return -1; }
+        int s = m[2];
+        if (s < 1) s = 1;
+        if (s > 8) s = 8;
+        w->scale = s;
+        w->fullscreen = (len >= 4 && (m[3] & WM_FLAG_FULLSCREEN)) ? 1 : 0;
+        /* The window's place on the panel depends on its scaled size. */
+        uw_window_center(w, (int)fb_getwidth(), (int)fb_getheight());
+        w->dirty = 1;
         uw_unlock();
         return 0;
     }

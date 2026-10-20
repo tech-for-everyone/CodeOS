@@ -30,6 +30,7 @@
 #include "apphost.h"
 #include "user_wm.h"
 #include "systemm.h"
+#include "device.h"
 #include "ow_http.h"
 #include "socket.h"
 #include "../arch/x86_64/fb.h"
@@ -1953,6 +1954,19 @@ typedef struct {
     int      mouse_buttons;
     uint64_t reserved1;
 } codeos_input_ev_t;
+/* The device profile the kernel is running as (kernel/device.h).  The
+ * userspace mirror of this struct lives in the Zircon ABI header; the two
+ * must stay in step -- same fields, same order, same sizes. */
+typedef struct {
+    uint32_t panel_w;   /* the panel, in pixels */
+    uint32_t panel_h;
+    uint32_t ui_w;      /* the logical screen the interface is laid out for */
+    uint32_t ui_h;
+    uint32_t scale;     /* panel pixels per logical pixel */
+    uint32_t form;      /* 0 = phone, 1 = tablet */
+    uint32_t caps;      /* bit 0 touch, bit 1 pointer, bit 2 keyboard */
+    char     name[24];
+} codeos_device_info_t;
 
 /* ── Linux personality syscall number translation ── */
 /* When a process has PERSONALITY_LINUX, route directly to linux_syscall_handler
@@ -2533,6 +2547,25 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
                     return -1;
             }
             return len;
+        }
+        case 4: { /* the device profile (kernel/device.h) */
+            const zircon_device_t *dev = zircon_device();
+            codeos_device_info_t info;
+            memset(&info, 0, sizeof(info));
+            info.panel_w = dev->panel_w;
+            info.panel_h = dev->panel_h;
+            info.ui_w    = dev->ui_w;
+            info.ui_h    = dev->ui_h;
+            info.scale   = dev->scale;
+            info.form    = dev->form;
+            info.caps    = dev->caps;
+            for (int i = 0; i < (int)sizeof(info.name) - 1 && dev->name[i]; i++)
+                info.name[i] = dev->name[i];
+            if (user_buf && max_len >= sizeof(info)) {
+                if (copy_to_user(user_buf, &info, sizeof(info)) < 0)
+                    return -1;
+            }
+            return (int)sizeof(info);
         }
         default:
             return -1;
