@@ -606,22 +606,27 @@ iso: codeos-1.0.iso
 
 # ─── QEMU run targets ───
 QEMU_BASE ?= -machine q35 -m 16G -smp 4 -serial stdio
+# The window the desktop is shown in.  SDL rather than QEMU's default (GTK)
+# because SDL is the one that is present everywhere and it does not need a
+# display server -- it draws into its own window.  Override it to run
+# headless: `make run QEMU_DISPLAY=-display none`.
+QEMU_DISPLAY ?= -display sdl
 QEMU_USB ?= -device usb-ehci,id=ehci -device usb-tablet -device usb-kbd
 
 run: $(TARGET) disk.img-legacy
-	$(QEMU) $(QEMU_BASE) -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
 
 run-nographic: $(TARGET) disk.img-legacy
 	$(QEMU) -machine q35 -m 512M -nographic -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(KVM)
 
 run-disk: $(TARGET) disk.img-legacy
-	$(QEMU) $(QEMU_BASE) -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
 
 run-wifi: $(TARGET)
-	$(QEMU) $(QEMU_BASE) -kernel $(TARGET) $(QEMU_WIFI) $(QEMU_USB) $(QEMU_DISK) $(KVM)
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -kernel $(TARGET) $(QEMU_WIFI) $(QEMU_USB) $(QEMU_DISK) $(KVM)
 
 run-qemu: $(TARGET)
-	$(QEMU) -machine q35 -m 1G -serial stdio -kernel $(TARGET) $(KVM)
+	$(QEMU) -machine q35 -m 1G -serial stdio $(QEMU_DISPLAY) -kernel $(TARGET) $(KVM)
 
 arm64-run: $(TARGET)
 	$(QEMU) -machine virt -cpu max -m 512M -serial stdio -kernel $(TARGET)
@@ -643,14 +648,14 @@ arm64-run-display-nogui: $(TARGET)
 		-qmp unix:/tmp/zircon-qmp.sock,server,nowait
 
 run-iso: codeos-1.0.iso $(LIVE_DISK_IMG)
-	$(QEMU) $(QEMU_BASE) -boot order=d -cdrom $< $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -boot order=d -cdrom $< $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
 
 run-vbox: codeos-1.0.iso
 	@echo "Running CodeOS in VirtualBox (provisions the 'CodeOS' VM, NAT net, IDE rootfs)..."
 	@$(CURDIR)/../vbox.sh --headless
 
 run-iso-grub: codeos-1-kernel-grub.iso $(LIVE_DISK_IMG)
-	$(QEMU) $(QEMU_BASE) -cdrom $< $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -cdrom $< $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
 
 run-iso-nographic: codeos-1.0.iso $(LIVE_DISK_IMG)
 	$(QEMU) -machine q35 -m 512M -nographic -cdrom $< $(QEMU_NET) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
@@ -659,7 +664,7 @@ run-iso-nographic: codeos-1.0.iso $(LIVE_DISK_IMG)
 # (QEMU_FULL_DISK is defined with the other QEMU defaults, above.)
 
 run-full: $(TARGET) disk.img-legacy
-	$(QEMU) -machine q35 -m 512M -serial stdio \
+	$(QEMU) -machine q35 -m 512M -serial stdio $(QEMU_DISPLAY) \
 		-kernel $(TARGET) \
 		$(QEMU_NET) \
 		$(QEMU_FULL_DISK) \
@@ -667,7 +672,7 @@ run-full: $(TARGET) disk.img-legacy
 		$(KVM)
 
 run-iso-full: codeos-1.0.iso $(LIVE_DISK_IMG)
-	$(QEMU) -machine q35 -m 512M -serial stdio \
+	$(QEMU) -machine q35 -m 512M -serial stdio $(QEMU_DISPLAY) \
 		-cdrom codeos-1.0.iso \
 		$(QEMU_NET) \
 		-drive file=$(LIVE_DISK_IMG),format=raw,if=ide \

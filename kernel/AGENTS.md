@@ -158,7 +158,7 @@ Makefiles detect this with `command -v`, so `make LD=...` still overrides.
 - **How to localise a silent reset.** Instrument `proc_fork()` and read the *last* trace, not the fault message — there is no fault message. Per-`i`/`j` granularity is the useful level; per-page-`k` produced 8703 lines and told you nothing. The evidence that pinned it: it completed `PML4[0..255]` and died entering `i=256 j=1`, with 209941 pages still free (ruling out PMM exhaustion), and the huge-page traces started at `pd[256][0][1]` — so `k=0`, the kernel image, had gone through the 4KB path untraced.
 - **Two hypotheses that testing killed, do not reintroduce.** (1) *PMM exhaustion* — `free=209941` at the crash. (2) *The physical/virtual confusion in `proc_fork`* is real but **accidentally harmless**: `process_t::pml4` is a physical address (`vmm_current_pml4()` is `read_page_table_base()`, and `vmm_switch_pml4()` writes its argument straight into CR3), and so is `pmm_alloc_page()` (`page_to_addr()` is `page << PAGE_SHIFT`), yet the code dereferences both directly *and* wraps them in `phys_to_virt()`. That works only because the low ~1GB is identity-mapped (`phys_to_virt_base = 0xFFFF800000000000`, so `phys_to_virt(0x374000) = 0xFFFF8000400374000`). It read as a crash cause and was not one. It is still wrong to rely on: `proc_wait()` also derefs `child->pml4[pt]` raw and calls `virt_to_phys()` on a CR3 value.
 - **Booting Zircon to test any of this needs a framebuffer.** `main.c` gates the launch on `if (boot_zircon_init[0] && has_fb)`, so `-vga none` silently skips Zircon init entirely and drops you into the CodeOS shell at `root#` — which looks like a Zircon failure and is not one. Use `-vga std -display none -serial stdio`. Also note `PML4_SHIFT` is private to `vmm.c`; there is no shared header constant for it.
-- **After the fix, `fork()` returns and nothing more.** `zircon: compositor launched (PID 4)` prints and the machine then sits idle: the child exists but no `process_t` scheduler exists to run it. Syscalls are the LSTAR `syscall` instruction, not `int 0x80`, and `syscall_entry` switches to a single **global** `syscall_kernel_rsp`, so all processes share one syscall stack — a switch has to swap that global, which is why `process_t` now carries `kstack_top`.
+- **This is history: `fork()` does run its child now.** When this was written the child was created and never ran, because no `process_t` scheduler existed. There is one now — the *thread* is the scheduler (`sched_create_thread_proc()` gives the child a thread of its own and `proc_resume_child()` resumes it in the child's context) — so a forked child runs, execs and exits, and the parent can wait for it. The userspace shell was written against the old world and still claimed it could not run external commands; it can, and it does now (see "Running external programs" below). Syscalls are the LSTAR `syscall` instruction, not `int 0x80`, and `syscall_entry` switches to a single **global** `syscall_kernel_rsp`, so all processes share one syscall stack — a switch has to swap that global, which is why `process_t` now carries `kstack_top`.
 
 ## ncvm: host test harness (`pkgs/core/ncvm/tests/`)
 - `make ncvm-check` (also wired into `make check`) builds a host test binary by compiling the **real** `ncvm.c` with `main` renamed (`#define main ncvm_main`), including it from `ncvm_test.c`, and shadowing `kernel/userspace/include/unistd.h` with `codeos_shim.h` which maps every syscall onto POSIX.
@@ -259,6 +259,37 @@ ncvm: selftest [ok  ] the listing is packed NUL-separated names, not fixed-strid
 - Three levels of check, and only the third is runtime: `make bas-check` (the language suite, host), `make bas-target-check` (both cross targets link to a 64-bit ELF — part of `make check`), `make bas-boot-check` (`kernel/scripts/bas_boot_check.py`: boots the ISO, asserts on the exact `bas-selftest:` lines). **The `bas_boot_check.py` expectation list is the machine-checkable copy of the comments in `selftest.ba`** — change one and you must change the other, or the check asserts values the program no longer prints. It rejects `BAS: FAIL`, a probe timeout and any `!!! PF at RIP` anywhere in the log, so a fault *after* the program finished still fails.
 - **The boot check now drives the shell too, not just the probe.** `bas_boot_check.py` types `bas list`, `bas hello`, `bas run /bin/bas-hello` and `appvm run debian-minimal /bin/bas-hello` into the guest over a *bidirectional* serial socket and asserts on the text that arrived **after each command** — a whole-log search would let the first command satisfy the second, since two of them print the same line. This needs `-serial unix:...,server,nowait`; the write-only `-serial file:` that the screenshot harness uses cannot type.
 - **Zircon runs the same probe, and its check is a separate script.** `Zircon/kernel/kernel/main.c` calls `bas_probe_run()` before the compositor, and `Zircon/scripts/zircon_boot_check.py` (`make -C Zircon boot-check`) boots the Zircon ISO and asserts the same `bas-selftest:` lines plus the compositor and the app store. The two are separate files on purpose: the Zircon image has a different userland (its own libc, its own compositor) and a different boot, so its expectations are its own — including one value that is timing-dependent on Zircon (the uptime, which is still under a second when the probe runs there) and therefore matched by a pattern rather than a literal.
+
+## Running external programs (the shell can do it after all)
+- **The userspace shell used to say it could not run external commands**
+  ("sys_fork returns a pid but the child never runs"), because that was true
+  when it was written.  The kernel grew a process scheduler since
+  (`proc_fork()` gives the child a thread of its own, `proc_exec()`
+  replaces the program), so the shell now runs what it does not implement
+  itself: fork, execve, wait.  That is what makes the bas programs -- and
+  every other program in the image -- reachable from the desktop's terminal
+  (`bas hello`, or `bas-hello` directly).
+- **Reaping a child that exec'd used to free the parent's program text.**
+  The fork marks the *writable* pages COW, so the read-only ones -- the
+  text -- were inherited as the very same physical page.  `proc_wait()`'s
+  teardown freed every non-COW leaf, including that shared text page, and the
+  parent's code came back zeroed: the parent died executing zeros, one
+  command later.  The reap now frees only the pages the *parent* does not
+  map as well.
+  - This is why it went unnoticed for so long: the Zircon init forks the
+    compositor and never waits for it, so the reap never runs there.  Any
+    shell that waits for its children hits it.
+  - The symptom is worth remembering: the fault was a *read* at a tiny
+    address (the zeroed code read as an instruction), and the code bytes at
+    the faulting RIP were all zeros.  A fault whose faulting instruction
+    does not match the binary is a memory-corruption symptom, not a code
+    bug.
+- **A redirect does not reach an external program.** The kernel's console
+  write ignores the file descriptor, and its file descriptor table is one
+  table for the whole machine rather than one per process, so a `cmd > file`
+  cannot be handed to a child.  A builtin's redirect works (the shell
+  captures the output and writes the file itself); an external program's
+  output goes to the terminal.
 
 ## Devices: the phones and tablets the kernel drives
 `kernel/kernel/device.{c,h}` is the device table, and it is the reason a

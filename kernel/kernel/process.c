@@ -492,6 +492,32 @@ int proc_wait(int pid, int *status) {
                                         /* Skip COW pages — sibling may still reference them */
                                         if (pt_t[l] & PAGE_COW) continue;
                                         uint64_t leaf_phys = pt_t[l] & ~0xFFF;
+                                        /* Free only the pages the child
+                                         * owns.  The fork marked the
+                                         * *writable* pages COW, so the
+                                         * read-only ones — the program
+                                         * text — were inherited as the
+                                         * very same physical page.  Those
+                                         * are still mapped by the parent,
+                                         * and freeing one pulls the
+                                         * parent's code out from under
+                                         * the running kernel: the parent's
+                                         * text page came back zeroed and
+                                         * the parent died executing it.
+                                         * The child's exec() had already
+                                         * replaced its mapping for the
+                                         * text, so the page it still
+                                         * shares with the parent is
+                                         * exactly the one the parent
+                                         * needs. */
+                                        uint64_t vaddr = ((uint64_t)pt << 39) |
+                                                        ((uint64_t)pd << 30) |
+                                                        ((uint64_t)pt2 << 21) |
+                                                        ((uint64_t)l << 12);
+                                        uint64_t parent_phys = 0;
+                                        if (vmm_get_mapping(vaddr, &parent_phys, 0) == 0 &&
+                                            parent_phys == leaf_phys)
+                                            continue;
                                         pmm_free_page(leaf_phys);
                                     }
                                 }

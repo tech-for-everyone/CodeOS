@@ -893,6 +893,7 @@ static void bi_help(void) {
 "    hostname             print the host          sleep MS       pause\n"
 "    true / false         exit status 0 / 1      clear          clear the screen\n"
 "    ai <question>        ask FreeCode            vm ...         virtual machine control\n"
+"    bas <program> [a..]  run a bas program (/bin/bas-<program>)\n"
 "\n"
 "  syntax\n"
 "    'literal'  \"expand $VAR\"  \\escape\n"
@@ -907,17 +908,26 @@ static void bi_help(void) {
 "    Ctrl-A/E start/end   Ctrl-K kill to end   Ctrl-U clear line\n"
 "    Ctrl-W delete word   Ctrl-L clear screen Ctrl-C abandon line\n"
 "\n"
+"  external programs\n"
+"    A command that is not a built-in is run as a program: the shell\n"
+"    forks, execs /bin/<name> (then /usr/bin/<name>) and waits for it.\n"
+"    The program writes to the terminal.  `cmd > file` does NOT redirect\n"
+"    it: the kernel's console write ignores the file descriptor, and its\n"
+"    file descriptor table is one table for the whole machine rather than\n"
+"    one per process, so a redirect cannot be handed to a child.\n"
+"    A pipeline cannot capture an external program's output either: the\n"
+"    kernel's pipe does not return what was written, so the bytes would be\n"
+"    lost.  An external program in a pipeline writes to the terminal.\n"
+"\n"
 "  limits (measured, not assumed)\n"
-"    No external commands: sys_fork returns a pid but the child never\n"
-"    runs, so every command is a builtin in this process.\n"
-"    Pipes are in-process. The kernel's pipe read does not return what was\n"
-"    written, so a real pipe would lose data.\n"
+"    Pipes between built-ins are in-process. The kernel's pipe read does\n"
+"    not return what was written, so a real pipe would lose data.\n"
 "    History is kept in memory and saved to /.sh_history on exit, then\n"
 "    reloaded at startup. A reset or a killed shell loses the session.\n");
 }
 
 static const char *const builtin_names[] = {
-    "alias", "cat", "cd", "clear", "date", "echo", "env", "exit", "export",
+    "alias", "bas", "cat", "cd", "clear", "date", "echo", "env", "exit", "export",
     "false", "help", "history", "hostname", "ls", "mkdir", "printf", "pwd",
     "rm", "set", "sleep", "test", "true", "type", "unalias", "unset", "which",
     "whoami", "[", "ai", "vm", NULL
@@ -952,6 +962,82 @@ static int do_assignment(const char *word) {
     var_set(name, eq + 1, 0);
     last_status = 0;
     return 1;
+}
+
+/* ── External programs ────────────────────────────────────────────────
+ *
+ * The kernel can fork and exec: proc_fork() gives the child a thread of
+ * its own and proc_exec() replaces the program (kernel/kernel/process.c).
+ * This shell used to say it could not, because that was true when it was
+ * written -- "sys_fork returns a pid but the child never runs" -- and it
+ * was never revisited.  It can now, so the shell runs what it does not
+ * implement itself.
+ *
+ * The shape is the usual one: fork, exec in the child, wait in the
+ * parent.  The child inherits the shell's console, so a program's output
+ * lands in the terminal the shell is printing to, and a redirect (`cmd >
+ * file`) is applied by dup2-ing the file onto the child's stdout.
+ *
+ * One limit remains: a pipeline stage cannot capture an external
+ * program's output.  The kernel's pipe does not return what was written to
+ * it, so the bytes would be lost; an external program in a pipeline
+ * writes to the terminal.
+ */
+static int program_exists(const char *path) {
+    int fd = sys_open(path, 0);
+    if (fd < 0) return 0;
+    sys_close(fd);
+    return 1;
+}
+
+/* A bare name is looked for in /bin and then /usr/bin; a name with a slash
+ * is used as given. */
+static int resolve_program(const char *name, char *out, size_t outlen) {
+    if (strchr(name, '/')) {
+        snprintf(out, outlen, "%s", name);
+        return 1;
+    }
+    snprintf(out, outlen, "/bin/%s", name);
+    if (program_exists(out)) return 1;
+    snprintf(out, outlen, "/usr/bin/%s", name);
+    if (program_exists(out)) return 1;
+    out[0] = 0;
+    return 0;
+}
+
+/* Run an external program and return its exit status. */
+static int run_external(const char *name, char **argv, int argc, int out_fd) {
+    char path[256];
+    if (!resolve_program(name, path, sizeof(path))) {
+        sh_outf("%s: command not found\n", name);
+        return 127;
+    }
+    int pid = sys_fork();
+    if (pid < 0) {
+        sh_outf("%s: cannot fork\n", name);
+        return 127;
+    }
+    if (pid == 0) {
+        /* Child.  The redirect becomes the program's stdout before the
+         * exec, so the program writes to the file rather than to the
+         * terminal.  The error message goes straight to the console: the
+         * shell's output sink is a buffer in this process's address space,
+         * and the child is about to replace it. */
+        if (out_fd >= 0) {
+            sys_dup2(out_fd, 1);
+            sys_close(out_fd);
+        }
+        sys_execve(path, argv, argc);
+        const char *msg = "bas: cannot execute\n";
+        sys_write(msg, (int)strlen(msg));
+        sys_exit(127);
+    }
+    int status = 0;
+    if (sys_wait(pid, &status) < 0) {
+        sh_outf("%s: wait failed\n", name);
+        return 127;
+    }
+    return status;
 }
 
 static int run_builtin(cmd_t *c) {
@@ -1053,12 +1139,14 @@ static int run_builtin(cmd_t *c) {
             if (found)      sh_outf("%s: shell built-in\n", c->argv[i]);
             else if (a)     sh_outf("%s: aliased to '%s'\n", c->argv[i], a->val);
             else {
-                /* No PATH search is attempted: this kernel cannot exec, so
-                 * claiming a program "is not found" would be misleading when
-                 * the real reason is that exec is unavailable. */
-                sh_outf("%s: not a built-in (external programs cannot run on this kernel)\n",
-                        c->argv[i]);
-                rc = 1;
+                /* Not a built-in: it may still be a program in the image. */
+                char path[256];
+                if (resolve_program(c->argv[i], path, sizeof(path)))
+                    sh_outf("%s: %s\n", c->argv[i], path);
+                else {
+                    sh_outf("%s: not found\n", c->argv[i]);
+                    rc = 1;
+                }
             }
         }
         last_status = rc;
@@ -1107,6 +1195,50 @@ static int run_builtin(cmd_t *c) {
         last_status = 0;
     }
     else if (strcmp(cmd, "whoami") == 0)   { sh_puts("root\n"); last_status = 0; }
+    else if (strcmp(cmd, "bas") == 0) {
+        /* Run a bas program.  The image carries them as /bin/bas-<name>
+         * (the .ba sources in pkgs/core/bas, cross-compiled on the host),
+         * and the kernel shell has the same command; this is the one the
+         * desktop's terminal reaches. */
+        if (c->argc < 2) {
+            sh_outf("usage: bas <program> [args...]\n");
+            sh_outf("       bas list\n");
+            rc = 1;
+        } else if (strcmp(c->argv[1], "list") == 0) {
+            /* The bas programs in the image: /bin/bas-<name>. */
+            char names[4096];
+            int n = sys_readdir("/bin", names, sizeof(names));
+            int shown = 0;
+            for (int i = 0; i < n; ) {
+                const char *nm = names + i;
+                int len = (int)strlen(nm);
+                if (strncmp(nm, "bas-", 4) == 0 && nm[4]) {
+                    sh_outf("  %s\n", nm + 4);
+                    shown++;
+                }
+                i += len + 1;
+            }
+            if (!shown) sh_outf("  (no bas programs in this image)\n");
+            rc = 0;
+        } else {
+            char path[256];
+            snprintf(path, sizeof(path), "/bin/bas-%s", c->argv[1]);
+            if (!program_exists(path)) {
+                sh_outf("bas: %s: no such program\n", c->argv[1]);
+                rc = 127;
+            } else {
+                /* argv[0] is the program; the rest are its arguments. */
+                char *nargv[MAX_ARGS];
+                int nargc = 0;
+                nargv[nargc++] = path;
+                for (int i = 2; i < c->argc && nargc < MAX_ARGS - 1; i++)
+                    nargv[nargc++] = c->argv[i];
+                nargv[nargc] = 0;
+                rc = run_external(path, nargv, nargc, c->out_fd);
+            }
+        }
+        last_status = rc;
+    }
     else if (strcmp(cmd, "hostname") == 0) {
         char host[128];
         if (slurp("/etc/hostname", host, sizeof(host)) > 0) {
@@ -1277,10 +1409,11 @@ static int run_builtin(cmd_t *c) {
         }
     }
     else {
-        sh_outf("%s: command not found (this shell runs builtins only; external\n"
-                "       programs cannot run because sys_fork's child never runs)\n", cmd);
-        last_status = 127;
-        rc = 127;
+        /* Not a built-in: run it as an external program.  This is what
+         * makes the bas programs -- and every other program in the image --
+         * reachable from the desktop's terminal. */
+        rc = run_external(cmd, c->argv, c->argc, c->out_fd);
+        last_status = rc;
     }
 
     /* Flush a captured stdout to the redirect target, if any. */
