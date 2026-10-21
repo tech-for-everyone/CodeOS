@@ -29,11 +29,13 @@ static inline void invlpg_va(uint64_t virt) {
 
 static void setup_fds(process_t *p) {
     for (int i = 0; i < PROC_FD_MAX; i++) {
-        p->fds[i].type = 0;
+        p->fds[i].used = 0;
+        p->fds[i].type = PROC_FD_NONE;
         p->fds[i].inode = 0;
         p->fds[i].pos = 0;
         p->fds[i].flags = 0;
         p->fds[i].pipe = 0;
+        p->fds[i].file = -1;
     }
 }
 
@@ -252,20 +254,28 @@ int proc_fork(void) {
 
     child->pml4 = (uint64_t *)new_pml4_phys;
 
-    /* Share pipe endpoints with the child -- never copy the buffer.
+    /* The child inherits the parent's descriptors.
      *
-     * fork() duplicates each descriptor, so parent and child must reach the
-     * *same* pipe or a byte written in one is invisible to the other.  The
-     * old deep copy also gave every descriptor a private pipe, which made
-     * the readers/writers counts meaningless and let either side's close
-     * tear down a buffer the other still held.  Bump the endpoint refcount
-     * exactly as proc_fd_dup2() does; pipe_close() is refcounted on
-     * readers/writers and only frees at zero. */
+     * A descriptor is a small per-process number; what it points at is
+     * shared, and that is what the refcounts are for.  Two kinds:
+     *
+     *   - a file: the same open-file description, so the file offset is
+     *     shared too, exactly as POSIX says.  The description is refcounted.
+     *   - a pipe endpoint: the same buffer, never a copy -- a byte written
+     *     in one has to be visible in the other.  The old deep copy gave
+     *     every descriptor a private pipe, which made the readers/writers
+     *     counts meaningless and let either side's close tear down a
+     *     buffer the other still held.
+     */
     for (int i = 0; i < PROC_FD_MAX; i++) {
-        pipe_t *pp = child->fds[i].pipe;
-        if (!pp) continue;
-        if (child->fds[i].type == 1) pp->readers++;
-        else if (child->fds[i].type == 2) pp->writers++;
+        if (!parent->fds[i].used) continue;
+        child->fds[i] = parent->fds[i];
+        if (child->fds[i].type == PROC_FD_FILE) {
+            file_table_ref(child->fds[i].file);
+        } else if (child->fds[i].pipe) {
+            if (child->fds[i].type == PROC_FD_PIPE_R) child->fds[i].pipe->readers++;
+            else if (child->fds[i].type == PROC_FD_PIPE_W) child->fds[i].pipe->writers++;
+        }
     }
 
     /* Add as child of parent */
@@ -573,8 +583,10 @@ int proc_fd_alloc(void) {
      * measured exactly that as "sys_pipe read returns 1 garbage byte" --
      * so allocation starts at 3, the way POSIX reserves 0-2. */
     for (int i = 3; i < PROC_FD_MAX; i++) {
-        if (p->fds[i].type == 0 && p->fds[i].pipe == 0 && p->fds[i].inode == 0) {
-            p->fds[i].type = 1;
+        if (!p->fds[i].used) {
+            p->fds[i].used = 1;
+            p->fds[i].type = PROC_FD_NONE;
+            p->fds[i].file = -1;
             return i;
         }
     }
@@ -584,26 +596,33 @@ int proc_fd_alloc(void) {
 int proc_fd_close(int fd) {
     process_t *p = current_process;
     if (!p || fd < 0 || fd >= PROC_FD_MAX) return -1;
-    if (p->fds[fd].pipe) {
+    if (!p->fds[fd].used) return 0;
+    if (p->fds[fd].type == PROC_FD_FILE) {
+        /* A file descriptor holds a reference to the open-file description;
+         * the description goes away with the last one. */
+        file_table_unref(p->fds[fd].file);
+    } else if (p->fds[fd].pipe) {
         /* Only real pipe endpoints (types 1/2) go through pipe_close.  shm
          * descriptors (type 3) hold a shm_segment_t in the same field; a
          * pipe_close() there decrements "readers" 0x1000 bytes past the
          * 16-byte header -- inside the mapped data -- and can free a page
          * another process is still using. */
-        if (p->fds[fd].type == 1 || p->fds[fd].type == 2)
-            pipe_close(p->fds[fd].pipe, p->fds[fd].type == 2);
+        if (p->fds[fd].type == PROC_FD_PIPE_R || p->fds[fd].type == PROC_FD_PIPE_W)
+            pipe_close(p->fds[fd].pipe, p->fds[fd].type == PROC_FD_PIPE_W);
         p->fds[fd].pipe = 0;
     }
-    p->fds[fd].type = 0;
+    p->fds[fd].used = 0;
+    p->fds[fd].type = PROC_FD_NONE;
     p->fds[fd].inode = 0;
     p->fds[fd].pos = 0;
+    p->fds[fd].file = -1;
     return 0;
 }
 
 proc_fd_t *proc_fd_get(int fd) {
     process_t *p = current_process;
     if (!p || fd < 0 || fd >= PROC_FD_MAX) return 0;
-    if (p->fds[fd].type == 0 && !p->fds[fd].pipe && p->fds[fd].inode == 0) return 0;
+    if (!p->fds[fd].used) return 0;
     return &p->fds[fd];
 }
 
@@ -611,10 +630,13 @@ int proc_fd_dup(int oldfd) {
     int newfd = proc_fd_alloc();
     if (newfd < 0) return -1;
     current_process->fds[newfd] = current_process->fds[oldfd];
+    current_process->fds[newfd].used = 1;
+    if (current_process->fds[newfd].type == PROC_FD_FILE)
+        file_table_ref(current_process->fds[newfd].file);
     pipe_t *p = current_process->fds[newfd].pipe;
     if (p) {
-        if (current_process->fds[newfd].type == 1) p->readers++;
-        if (current_process->fds[newfd].type == 2) p->writers++;
+        if (current_process->fds[newfd].type == PROC_FD_PIPE_R) p->readers++;
+        if (current_process->fds[newfd].type == PROC_FD_PIPE_W) p->writers++;
     }
     return newfd;
 }
@@ -625,10 +647,13 @@ int proc_fd_dup2(int oldfd, int newfd) {
     /* Close the target fd first if open */
     proc_fd_close(newfd);
     current_process->fds[newfd] = current_process->fds[oldfd];
+    current_process->fds[newfd].used = 1;
+    if (current_process->fds[newfd].type == PROC_FD_FILE)
+        file_table_ref(current_process->fds[newfd].file);
     pipe_t *p = current_process->fds[newfd].pipe;
     if (p) {
-        if (current_process->fds[newfd].type == 1) p->readers++;
-        if (current_process->fds[newfd].type == 2) p->writers++;
+        if (current_process->fds[newfd].type == PROC_FD_PIPE_R) p->readers++;
+        if (current_process->fds[newfd].type == PROC_FD_PIPE_W) p->writers++;
     }
     return newfd;
 }

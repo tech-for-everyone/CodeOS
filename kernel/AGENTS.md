@@ -284,12 +284,27 @@ ncvm: selftest [ok  ] the listing is packed NUL-separated names, not fixed-strid
     the faulting RIP were all zeros.  A fault whose faulting instruction
     does not match the binary is a memory-corruption symptom, not a code
     bug.
-- **A redirect does not reach an external program.** The kernel's console
-  write ignores the file descriptor, and its file descriptor table is one
-  table for the whole machine rather than one per process, so a `cmd > file`
-  cannot be handed to a child.  A builtin's redirect works (the shell
-  captures the output and writes the file itself); an external program's
-  output goes to the terminal.
+- **A redirect now reaches an external program, and it took fixing the
+  descriptor table to do it.** The table was indexed by the descriptor
+  itself, with an `owner_pid` to tell the processes apart, which cannot
+  work: a descriptor is per process, so the parent and the child both
+  wanting fd 3 collided, and a dup2() in the child changed the parent's
+  fd.  The pipes lived in a *second* table, in process.c, which the
+  syscall layer never consulted -- that is why a pipe read returned
+  nothing.
+  - The descriptor is now per process (`process_t::fds`, with a `used`
+    flag and a `file` index) and maps to an open-file description in the
+    global table, which is refcounted: dup and fork share a description
+    and therefore share the file offset, as POSIX says.
+  - The console write follows stdout.  Every program's printf goes through
+    the console syscall, which has no descriptor in it at all, so the
+    redirect is honoured there: if the process has a file or a pipe on fd
+    1, the console write goes there instead.  A redirect in a child
+    therefore does not touch the parent, whose output still reaches the
+    console.
+  - A pipeline still cannot capture an external program's output: the
+    shell's pipelines are in-process, and the kernel's pipe read is now
+    correct but the shell does not wire external stages into one.
 
 ## Devices: the phones and tablets the kernel drives
 `kernel/kernel/device.{c,h}` is the device table, and it is the reason a

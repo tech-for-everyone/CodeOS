@@ -73,12 +73,21 @@ typedef struct pipe {
     int open;
 } pipe_t;
 
+/* What a descriptor points at. */
+#define PROC_FD_NONE   0
+#define PROC_FD_PIPE_R 1
+#define PROC_FD_PIPE_W 2
+#define PROC_FD_SHM    3
+#define PROC_FD_FILE   4
+
 typedef struct proc_fd {
-    int type;
+    int used;                    /* the slot is in use */
+    int type;                    /* PROC_FD_* */
     int inode;
     int pos;
     int flags;
-    pipe_t *pipe;
+    pipe_t *pipe;                /* pipes and shm segments */
+    int file;                    /* the open-file description, for a file */
 } proc_fd_t;
 
 /**

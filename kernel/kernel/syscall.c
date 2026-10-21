@@ -255,33 +255,80 @@ static void mmap_region_remove(int idx) {
         mmap_regions[idx].used = 0;
 }
 
-static struct {
+/* The open-file descriptions.
+ *
+ * A *descriptor* is the small integer a program sees, and it is per
+ * process: process_t::fds maps it to one of these.  Two descriptors can
+ * share one description -- dup() and fork() both do -- which is what the
+ * refcount is for, and it is why the file offset is shared as well.
+ *
+ * The table used to be indexed by the descriptor itself, with an owner_pid
+ * to tell the processes apart.  That cannot work: a descriptor is per
+ * process, so the parent and the child both wanting fd 3 would collide, and
+ * a dup2() in the child changed the parent's fd.  It is the reason a
+ * redirect could not be handed to a child, and the reason a pipe read
+ * returned nothing: the syscall layer looked in this table while the pipe
+ * lived in the other one. */
+typedef struct {
     char path[FS_PATH_MAX];
     char data[FS_CONTENT_MAX];
     int len;
     int pos;
     int flags;
     int used;
-    int owner_pid;
-} fd_table[MAX_FDS];
+    int refcount;
+} fd_desc_t;
+
+static fd_desc_t fd_table[MAX_FDS];
+
+/* Take and drop a reference to an open-file description. */
+void file_table_ref(int g) {
+    if (g < 0 || g >= MAX_FDS) return;
+    if (fd_table[g].used) fd_table[g].refcount++;
+}
+
+void file_table_unref(int g) {
+    if (g < 0 || g >= MAX_FDS) return;
+    if (!fd_table[g].used) return;
+    if (--fd_table[g].refcount > 0) return;
+    fd_table[g].used = 0;
+    fd_table[g].len = 0;
+    fd_table[g].pos = 0;
+}
+
+/* The description behind a descriptor, or 0 if the descriptor is not a file. */
+static fd_desc_t *fd_desc(int fd) {
+    process_t *p = current_process;
+    if (!p || fd < 0 || fd >= PROC_FD_MAX) return 0;
+    if (!p->fds[fd].used || p->fds[fd].type != PROC_FD_FILE) return 0;
+    int g = p->fds[fd].file;
+    if (g < 0 || g >= MAX_FDS || !fd_table[g].used) return 0;
+    return &fd_table[g];
+}
 
 static int fd_alloc(void) {
-    int pid = proc_getpid();
-    for (int i = 3; i < MAX_FDS; i++)
-        if (!fd_table[i].used) {
-            fd_table[i].used = 1;
-            fd_table[i].pos = 0;
-            fd_table[i].data[0] = 0;
-            fd_table[i].len = 0;
-            fd_table[i].owner_pid = pid;
-            return i;
-        }
-    return -1;
+    process_t *p = current_process;
+    if (!p) return -1;
+    int g = -1;
+    for (int i = 0; i < MAX_FDS; i++)
+        if (!fd_table[i].used) { g = i; break; }
+    if (g < 0) return -1;
+    int fd = proc_fd_alloc();
+    if (fd < 0) return -1;
+    fd_table[g].used = 1;
+    fd_table[g].pos = 0;
+    fd_table[g].data[0] = 0;
+    fd_table[g].len = 0;
+    fd_table[g].refcount = 1;
+    p->fds[fd].type = PROC_FD_FILE;
+    p->fds[fd].file = g;
+    p->fds[fd].pos = 0;
+    p->fds[fd].flags = 0;
+    return fd;
 }
 
 static int fd_verify(int fd) {
-    return (fd >= 0 && fd < MAX_FDS && fd_table[fd].used &&
-            fd_table[fd].owner_pid == proc_getpid());
+    return fd_desc(fd) != 0;
 }
 
 #define FD_CHECK(fd) do { if (!fd_verify(fd)) return -LINUX_EINVAL; } while(0)
@@ -455,72 +502,88 @@ static int sys_open(const char *user_path, int flags) {
     path[FS_PATH_MAX - 1] = 0;
     int fd = fd_alloc();
     if (fd < 0) return -1;
-    fd_table[fd].flags = flags;
-    strcpy(fd_table[fd].path, path);
-    int n = fs_read(path, fd_table[fd].data, FS_CONTENT_MAX);
+    fd_desc_t *d = fd_desc(fd);
+    if (!d) return -1;
+    d->flags = flags;
+    strcpy(d->path, path);
+    int n = fs_read(path, d->data, FS_CONTENT_MAX);
     if (n < 0) {
-        n = ext2_read_file_path(path, fd_table[fd].data, FS_CONTENT_MAX);
+        n = ext2_read_file_path(path, d->data, FS_CONTENT_MAX);
         if (n <= 0) {
             if ((flags & O_CREAT) && fs_mkfile(path) == 0) {
                 n = 0;
             } else {
-                fd_table[fd].used = 0;
+                file_table_unref(d - fd_table);
                 return -1;
             }
         }
     }
-    fd_table[fd].len = n;
-    fd_table[fd].pos = (flags & O_APPEND) ? n : 0;
+    d->len = n;
+    d->pos = (flags & O_APPEND) ? n : 0;
     return fd;
 }
 
 static int64_t sys_write_file(int fd, uint64_t user_buf, int count) {
-    if (!fd_verify(fd)) return -1;
-    if (!(fd_table[fd].flags & (O_WRONLY | O_RDWR))) return -1;
+    fd_desc_t *d = fd_desc(fd);
+    if (!d) return -1;
+    if (!(d->flags & (O_WRONLY | O_RDWR))) return -1;
     if (count <= 0) return 0;
     if (count > FS_CONTENT_MAX) count = FS_CONTENT_MAX;
-    int wpos = (fd_table[fd].flags & O_APPEND) ? fd_table[fd].len : fd_table[fd].pos;
+    int wpos = (d->flags & O_APPEND) ? d->len : d->pos;
     if (wpos < 0) wpos = 0;
     int room = FS_CONTENT_MAX - wpos;
     if (room <= 0) return 0;
     if (count > room) count = room;
-    if (copy_from_user(fd_table[fd].data + wpos, user_buf, count) < 0)
+    if (copy_from_user(d->data + wpos, user_buf, count) < 0)
         return -1;
-    if (wpos + count > fd_table[fd].len) fd_table[fd].len = wpos + count;
-    fd_table[fd].pos = wpos + count;
-    fs_write(fd_table[fd].path, fd_table[fd].data, fd_table[fd].len);
+    if (wpos + count > d->len) d->len = wpos + count;
+    d->pos = wpos + count;
+    fs_write(d->path, d->data, d->len);
     return count;
 }
 
 static int64_t sys_lseek(int fd, int64_t off, int whence) {
-    if (!fd_verify(fd)) return -1;
+    fd_desc_t *d = fd_desc(fd);
+    if (!d) return -1;
     int64_t new_pos;
     switch (whence) {
     case 0: new_pos = off; break;
-    case 1: new_pos = fd_table[fd].pos + off; break;
-    case 2: new_pos = fd_table[fd].len + off; break;
+    case 1: new_pos = d->pos + off; break;
+    case 2: new_pos = d->len + off; break;
     default: return -1;
     }
     if (new_pos < 0) new_pos = 0;
     if (new_pos > FS_CONTENT_MAX) new_pos = FS_CONTENT_MAX;
-    fd_table[fd].pos = (int)new_pos;
+    d->pos = (int)new_pos;
     return new_pos;
 }
 
 static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
-    /* A pipe read end explicitly installed on fd 0 -- via dup2, the way a
-     * shell redirects stdin -- must win over the console fast-path below,
-     * or the read comes from the serial port instead of the pipe.  Only a
-     * type-1 endpoint triggers this, so an untouched fd 0 (fds[0].pipe ==
-     * 0) still reaches the console. */
-    if (fd == 0) {
+    /* A descriptor that names a file or a pipe wins over the console.  A
+     * pipe read end explicitly installed on fd 0 -- via dup2, the way a
+     * shell redirects stdin -- must beat the console fast-path below, or the
+     * read comes from the serial port instead of the pipe. */
+    {
         process_t *p0 = current_process;
-        if (p0 && p0->fds[0].pipe && p0->fds[0].type == 1) {
-            uint8_t kbuf[PROC_PIPE_BUF];
-            int n = pipe_read(p0->fds[0].pipe, kbuf, (int)count);
-            if (n > 0 && copy_to_user(user_buf, kbuf, n) < 0)
-                return -1;
-            return n;
+        if (p0 && fd >= 0 && fd < PROC_FD_MAX && p0->fds[fd].used) {
+            if (p0->fds[fd].type == PROC_FD_PIPE_R) {
+                uint8_t kbuf[PROC_PIPE_BUF];
+                int n = pipe_read(p0->fds[fd].pipe, kbuf, (int)count);
+                if (n > 0 && copy_to_user(user_buf, kbuf, n) < 0)
+                    return -1;
+                return n;
+            }
+            if (p0->fds[fd].type == PROC_FD_FILE) {
+                fd_desc_t *d = fd_desc(fd);
+                if (!d) return -1;
+                int available = d->len - d->pos;
+                if (available <= 0) return 0;
+                if ((int64_t)count > available) count = (uint64_t)available;
+                if (copy_to_user(user_buf, d->data + d->pos, count) < 0)
+                    return -1;
+                d->pos += (int)count;
+                return (int64_t)count;
+            }
         }
     }
     if (fd == 0) {
@@ -572,14 +635,17 @@ static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
             return -1;
         return i;
     }
-    if (fd_verify(fd)) {
-        int available = fd_table[fd].len - fd_table[fd].pos;
-        if (available <= 0) return 0;
-        if ((int64_t)count > available) count = (uint64_t)available;
-        if (copy_to_user(user_buf, fd_table[fd].data + fd_table[fd].pos, count) < 0)
-            return -1;
-        fd_table[fd].pos += (int)count;
-        return (int64_t)count;
+    {
+        fd_desc_t *d = fd_desc(fd);
+        if (d) {
+            int available = d->len - d->pos;
+            if (available <= 0) return 0;
+            if ((int64_t)count > available) count = (uint64_t)available;
+            if (copy_to_user(user_buf, d->data + d->pos, count) < 0)
+                return -1;
+            d->pos += (int)count;
+            return (int64_t)count;
+        }
     }
     process_t *p = current_process;
     if (p && fd >= 0 && fd < PROC_FD_MAX && p->fds[fd].pipe) {
@@ -630,13 +696,16 @@ int64_t kernel_read(int fd, void *buf, int count) {
         if (n > 0) memcpy(buf, kbuf, n);
         return n;
     }
-    if (fd >= 0 && fd < MAX_FDS && fd_table[fd].used) {
-        int available = fd_table[fd].len - fd_table[fd].pos;
-        if (available <= 0) return 0;
-        if (count > available) count = available;
-        memcpy(buf, fd_table[fd].data + fd_table[fd].pos, count);
-        fd_table[fd].pos += count;
-        return count;
+    {
+        fd_desc_t *d = fd_desc(fd);
+        if (d) {
+            int available = d->len - d->pos;
+            if (available <= 0) return 0;
+            if (count > available) count = available;
+            memcpy(buf, d->data + d->pos, count);
+            d->pos += count;
+            return count;
+        }
     }
     return -1;
 }
@@ -872,20 +941,22 @@ done:
 static int linux_sys_open_path(const char *path, int flags) {
     int fd = fd_alloc();
     if (fd < 0) return -LINUX_ENOMEM;
-    fd_table[fd].flags = flags;
-    strcpy(fd_table[fd].path, path);
+    fd_desc_t *d = fd_desc(fd);
+    if (!d) return -LINUX_ENOMEM;
+    d->flags = flags;
+    strcpy(d->path, path);
 
     /* Try as regular file (initramfs) */
-    int n = fs_read(path, fd_table[fd].data, FS_CONTENT_MAX);
+    int n = fs_read(path, d->data, FS_CONTENT_MAX);
     if (n >= 0) {
-        fd_table[fd].len = n;
+        d->len = n;
         return fd;
     }
 
     /* Try as regular file (ext2) */
-    n = ext2_read_file_path(path, fd_table[fd].data, FS_CONTENT_MAX);
+    n = ext2_read_file_path(path, d->data, FS_CONTENT_MAX);
     if (n >= 0) {
-        fd_table[fd].len = n;
+        d->len = n;
         return fd;
     }
 
@@ -893,25 +964,25 @@ static int linux_sys_open_path(const char *path, int flags) {
     if (ext2_mounted()) {
         ext2_dirent_t ent;
         if (ext2_find(path, &ent) >= 0 && ent.valid && ent.is_dir) {
-            int sz = populate_dirents(path, (uint8_t*)fd_table[fd].data, FS_CONTENT_MAX);
+            int sz = populate_dirents(path, (uint8_t*)d->data, FS_CONTENT_MAX);
             if (sz > 0) {
-                fd_table[fd].len = sz;
+                d->len = sz;
                 return fd;
             }
         }
     }
     {
-        int sz, d;
-        if (fs_get_info(path, &sz, &d) == 0 && d) {
-            int sz2 = populate_dirents(path, (uint8_t*)fd_table[fd].data, FS_CONTENT_MAX);
+        int sz, dd;
+        if (fs_get_info(path, &sz, &dd) == 0 && dd) {
+            int sz2 = populate_dirents(path, (uint8_t*)d->data, FS_CONTENT_MAX);
             if (sz2 > 0) {
-                fd_table[fd].len = sz2;
+                d->len = sz2;
                 return fd;
             }
         }
     }
 
-    fd_table[fd].used = 0;
+    file_table_unref(fd_desc(fd) - fd_table);
     return -LINUX_ENOENT;
 }
 
@@ -1142,7 +1213,9 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         int fd = (int)a1;
         uint8_t stbuf[LINUX_STAT_SZ];
         FD_CHECK(fd);
-        if (do_stat_fill(fd_table[fd].path, stbuf) < 0) return -LINUX_ENOENT;
+        fd_desc_t *fd_desc_l = fd_desc(fd);
+        if (!fd_desc_l) return -LINUX_EBADF;
+        if (do_stat_fill(fd_desc_l->path, stbuf) < 0) return -LINUX_ENOENT;
         if (copy_to_user(a2, stbuf, LINUX_STAT_SZ) < 0) return -LINUX_ENOMEM;
         return 0;
     }
@@ -1151,15 +1224,17 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         int64_t off = (int64_t)a2;
         int whence = (int)a3;
         FD_CHECK(fd);
+        fd_desc_t *fd_desc_l = fd_desc(fd);
+        if (!fd_desc_l) return -LINUX_EBADF;
         int new_pos;
         switch (whence) {
         case 0: new_pos = (int)off; break;                /* SEEK_SET */
-        case 1: new_pos = fd_table[fd].pos + (int)off; break; /* SEEK_CUR */
-        case 2: new_pos = fd_table[fd].len + (int)off; break; /* SEEK_END */
+        case 1: new_pos = fd_desc_l->pos + (int)off; break; /* SEEK_CUR */
+        case 2: new_pos = fd_desc_l->len + (int)off; break; /* SEEK_END */
         default: return -LINUX_EINVAL;
         }
         if (new_pos < 0) new_pos = 0;
-        fd_table[fd].pos = new_pos;
+        fd_desc_l->pos = new_pos;
         return (uint64_t)new_pos;
     }
     case LINUX_IOCTL: {
@@ -1324,12 +1399,14 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         uint64_t user_buf = a2;
         unsigned int count = (unsigned int)a3;
         FD_CHECK(fd);
-        int avail = fd_table[fd].len - fd_table[fd].pos;
+        fd_desc_t *fd_desc_l = fd_desc(fd);
+        if (!fd_desc_l) return -LINUX_EBADF;
+        int avail = fd_desc_l->len - fd_desc_l->pos;
         if (avail <= 0) return 0;
         if (count > (unsigned int)avail) count = (unsigned int)avail;
-        if (copy_to_user(user_buf, fd_table[fd].data + fd_table[fd].pos, count) < 0)
+        if (copy_to_user(user_buf, fd_desc_l->data + fd_desc_l->pos, count) < 0)
             return -LINUX_ENOMEM;
-        fd_table[fd].pos += (int)count;
+        fd_desc_l->pos += (int)count;
         return (uint64_t)count;
     }
     case LINUX_GETDENTS: {
@@ -1338,12 +1415,14 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         uint64_t user_buf = a2;
         unsigned int count = (unsigned int)a3;
         FD_CHECK(fd);
-        int avail = fd_table[fd].len - fd_table[fd].pos;
+        fd_desc_t *fd_desc_l = fd_desc(fd);
+        if (!fd_desc_l) return -LINUX_EBADF;
+        int avail = fd_desc_l->len - fd_desc_l->pos;
         if (avail <= 0) return 0;
         if (count > (unsigned int)avail) count = (unsigned int)avail;
-        if (copy_to_user(user_buf, fd_table[fd].data + fd_table[fd].pos, count) < 0)
+        if (copy_to_user(user_buf, fd_desc_l->data + fd_desc_l->pos, count) < 0)
             return -LINUX_ENOMEM;
-        fd_table[fd].pos += (int)count;
+        fd_desc_l->pos += (int)count;
         return (uint64_t)count;
     }
     /* ── OPENAT ── */
@@ -1517,12 +1596,14 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         size_t count = (size_t)a3;
         uint64_t offset = a4;
         FD_CHECK(fd);
+        fd_desc_t *fd_desc_l = fd_desc(fd);
+        if (!fd_desc_l) return -LINUX_EBADF;
         if (offset > 0x7FFFFFFF) return -LINUX_EINVAL;
-        fd_table[fd].pos = (int)offset;
-        int avail = fd_table[fd].len - fd_table[fd].pos;
+        fd_desc_l->pos = (int)offset;
+        int avail = fd_desc_l->len - fd_desc_l->pos;
         if (avail <= 0) return 0;
         if ((int)count > avail) count = (size_t)avail;
-        if (copy_to_user(buf, fd_table[fd].data + fd_table[fd].pos, count) < 0)
+        if (copy_to_user(buf, fd_desc_l->data + fd_desc_l->pos, count) < 0)
             return -LINUX_ENOMEM;
         return (int64_t)count;
     }
@@ -1772,18 +1853,17 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     }
 }
 
-/* ── Fork support: copy parent's linux fds to child ── */
+/* ── Fork support: the child inherits the parent's descriptors ──
+ *
+ * The descriptors are per process now, and the fork copies the table (see
+ * proc_fork), so the child has the parent's descriptors already: the same
+ * open-file descriptions, the same pipe endpoints.  The old code duplicated
+ * the *global* file table entries by owner_pid, which could not work -- the
+ * entry index is not the descriptor, and the parent and the child would
+ * collide on it. */
 void linux_fd_fork_update(int parent_pid, int child_pid) {
-    for (int i = 0; i < MAX_FDS; i++) {
-        if (fd_table[i].used && fd_table[i].owner_pid == parent_pid) {
-            /* Duplicate the entry for the child */
-            int child_fd = fd_alloc();
-            if (child_fd < 0) break;
-            memcpy(&fd_table[child_fd], &fd_table[i], sizeof(fd_table[0]));
-            fd_table[child_fd].owner_pid = child_pid;
-            fd_table[child_fd].pos = 0; /* child starts reading from beginning */
-        }
-    }
+    (void)parent_pid;
+    (void)child_pid;
 }
 
 /* ── Filesystem syscalls ── */
@@ -1999,6 +2079,31 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         char tmp[256];
         uint64_t rem = a2;
         uint64_t off = a1;
+        /* The console write is stdout, and stdout can be redirected: a
+         * dup2() onto fd 1 puts a file or a pipe there, and from then on
+         * the program's output goes there instead of to the console.  This
+         * is the path every program's printf takes -- the userspace libc
+         * writes to the console with no descriptor at all -- so it is the
+         * only place a redirect can be honoured.
+         *
+         * The descriptor is per process, so a redirect in a child does not
+         * touch the parent, and the parent's own output still goes to the
+         * console. */
+        {
+            process_t *pw = current_process;
+            if (pw && pw->fds[1].used) {
+                if (pw->fds[1].type == PROC_FD_FILE)
+                    return sys_write_file(1, a1, (int)a2);
+                if (pw->fds[1].type == PROC_FD_PIPE_W) {
+                    uint8_t pbuf[PROC_PIPE_BUF];
+                    int n = (int)a2;
+                    if (n > (int)sizeof(pbuf)) n = (int)sizeof(pbuf);
+                    if (n <= 0) return 0;
+                    if (copy_from_user(pbuf, a1, (uint64_t)n) < 0) return -1;
+                    return pipe_write(pw->fds[1].pipe, pbuf, n);
+                }
+            }
+        }
         if (apphost_active()) {
             int total = 0;
             while (rem > 0) {

@@ -101,6 +101,11 @@ typedef struct {
 #define PERSONALITY_LINUX  1  /* translate Linux x86_64 syscall numbers */
 
 void syscall_init(void);
+
+/* Take and drop a reference to an open-file description (the file table
+ * lives in syscall.c; the descriptor table is per process, in process.c). */
+void file_table_ref(int g);
+void file_table_unref(int g);
 int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
                         uint64_t a4, uint64_t a5, uint64_t a6);
 void linux_fd_fork_update(int parent_pid, int child_pid);
