@@ -73,6 +73,11 @@ typedef struct pipe {
     int open;
 } pipe_t;
 
+/* How many pages a pipe_t needs.  It is a little over one page (4 KiB of
+ * buffer and five counters), and allocating a single page for it put the
+ * counters in the *next* page -- see pipe_create(). */
+#define PIPE_PAGES ((sizeof(pipe_t) + 0xFFF) / 0x1000)
+
 /* What a descriptor points at. */
 #define PROC_FD_NONE   0
 #define PROC_FD_PIPE_R 1

@@ -58,6 +58,7 @@ int  ext2_list_root(void);
 int  ext2_find(const char *path, ext2_dirent_t *ent);
 int  ext2_mounted(void);
 int  ext2_list_dir(const char *path);
+int  ext2_list_entries(const char *path, char *out, int max);
 int  ext2_read_file_path(const char *path, void *buf, int max);
 /* Like ext2_read_file_path(), but reads starting `offset` bytes into the file.
  * Needed by the ELF loader, which maps a file far larger than one read. */

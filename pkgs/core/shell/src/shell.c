@@ -85,6 +85,11 @@
 #define HIST_MAX        128
 #define HIST_LINE_MAX   256
 #define PIPE_BUF_MAX    8192
+/* How much of a pipeline stage's output the shell holds in memory when
+ * the next stage is a built-in.  A pipe itself is 4 KiB; this is the
+ * ceiling for the collected copy, and a stage that writes more than this
+ * is truncated (and says so) rather than eating the shell's memory. */
+#define PIPE_DRAIN_MAX  65536
 #define GLOB_MAX        64
 #define PATH_MAX_LOCAL  256
 
@@ -170,8 +175,41 @@ static void sh_outf(const char *fmt, ...) {
     free(heap);
 }
 
-/* Read all of the builtin "stdin" (a pipe stage or `<` redirect) at once. */
+/* Read all of the builtin "stdin" (a pipe stage or `<` redirect) at once.
+ *
+ * The stdin can be a buffer (the output of a previous built-in) or a pipe
+ * (the output of a previous *external* stage).  A pipe is drained into
+ * memory here, once: the builtins read their input whole, and a pipe
+ * cannot be read twice. */
+static char *pipe_buf;        /* the drained pipe */
+static int   pipe_buf_len;
+static int   pipe_fd = -1;    /* the pipe to drain, or -1 */
+static int   pipe_drained;    /* the pipe has been drained already */
+
 static const char *sh_stdin_all(int *len) {
+    if (pipe_fd >= 0 && !pipe_drained) {
+        /* Drain the pipe.  The kernel's pipe read blocks while there is
+         * nothing to read and reports the end of the file when the last
+         * writer is gone, so this is a plain read loop. */
+        int fd = pipe_fd;
+        pipe_drained = 1;
+        int cap = PIPE_DRAIN_MAX;
+        char *buf = malloc((size_t)cap);
+        if (!buf) { *len = 0; return NULL; }
+        int n = 0;
+        while (n < cap - 1) {
+            int got = sys_read(fd, buf + n, cap - 1 - n);
+            if (got <= 0) break;
+            n += got;
+        }
+        buf[n] = 0;
+        pipe_buf = buf;
+        pipe_buf_len = n;
+    }
+    if (pipe_buf) {
+        *len = pipe_buf_len;
+        return pipe_buf;
+    }
     if (!in_buf) { *len = 0; return NULL; }
     *len = in_len - in_pos;
     return in_buf + in_pos;
@@ -363,6 +401,12 @@ typedef struct {
     char   in_path[PATH_MAX_LOCAL];
     int    has_in;
 } cmd_t;
+
+/* The callback run_builtin() hands a command it does not implement to.
+ * NULL means "run it the ordinary way", which is what a lone command
+ * does; a pipeline sets it, because an external stage has to run in a
+ * child with the pipes wired up. */
+static int (*external_runner)(cmd_t *c) = 0;
 
 static int expand_word(const char *src, char *dst, int dst_sz) {
     int at = 0;
@@ -898,7 +942,7 @@ static void bi_help(void) {
 "  syntax\n"
 "    'literal'  \"expand $VAR\"  \\escape\n"
 "    N=value    $VAR  ${VAR}  $?  $$\n"
-"    cmd | cmd  in-process pipeline\n"
+"    cmd | cmd  pipeline (built-ins in-process, programs through a pipe)\n"
 "    cmd > F    cmd >> F    cmd < F\n"
 "    a && b     a || b     a ; b\n"
 "    * and ?    glob, matched against the real filesystem\n"
@@ -913,13 +957,15 @@ static void bi_help(void) {
 "    forks, execs /bin/<name> (then /usr/bin/<name>) and waits for it.\n"
 "    The program's stdout can be redirected: `cmd > file` gives the child\n"
 "    the file as its stdout, and the program writes to the file.\n"
-"    A pipeline cannot capture an external program's output either: the\n"
-"    kernel's pipe does not return what was written, so the bytes would be\n"
-"    lost.  An external program in a pipeline writes to the terminal.\n"
+"    A pipeline captures an external program's output: the stages are\n"
+"    wired together with real pipes, so `cmd | cmd` works with programs\n"
+"    as well as with built-ins.  Two program stages run at the same time.\n"
 "\n"
 "  limits (measured, not assumed)\n"
-"    Pipes between built-ins are in-process. The kernel's pipe read does\n"
-"    not return what was written, so a real pipe would lose data.\n"
+"    A stage that does not read its input leaves the pipe undrained; the\n"
+"    shell drains and throws the rest away so the writer is not left\n"
+"    blocked for ever.  A stage's output is held in memory when the next\n"
+"    stage is a built-in, up to 64 KiB.\n"
 "    History is kept in memory and saved to /.sh_history on exit, then\n"
 "    reloaded at startup. A reset or a killed shell loses the session.\n");
 }
@@ -1038,10 +1084,16 @@ static int run_external(const char *name, char **argv, int argc, int out_fd) {
     return status;
 }
 
+/* Run a command the shell implements itself.
+ *
+ * Returns 1 when the command was handled and 0 when it is not one of the
+ * shell's -- in which case the caller runs it as an external program.  The
+ * distinction is what lets a pipeline stage decide whether it has to fork:
+ * a built-in runs here, an external program runs in a child. */
 static int run_builtin(cmd_t *c) {
     const char *cmd = c->argv[0];
 
-    if (c->argc == 1 && do_assignment(cmd)) return 0;
+    if (c->argc == 1 && do_assignment(cmd)) return 1;
 
     /* Feed `<` or a pipe stage in as stdin. */
     if (c->has_in) {
@@ -1407,11 +1459,14 @@ static int run_builtin(cmd_t *c) {
         }
     }
     else {
-        /* Not a built-in: run it as an external program.  This is what
-         * makes the bas programs -- and every other program in the image --
+        /* Not a built-in.  A pipeline runs it itself, because an external
+         * stage has to run in a child with the pipes wired up; a lone
+         * command is run by the caller.  Either way this is what makes the
+         * bas programs -- and every other program in the image --
          * reachable from the desktop's terminal. */
-        rc = run_external(cmd, c->argv, c->argc, c->out_fd);
-        last_status = rc;
+        if (external_runner) return external_runner(c);
+        if (have_capture) sink_free(&fsink);
+        return 0;
     }
 
     /* Flush a captured stdout to the redirect target, if any. */
@@ -1424,10 +1479,160 @@ static int run_builtin(cmd_t *c) {
         sys_close(c->out_fd);
         sink_free(&fsink);
     }
-    return rc;
+    return 1;
 }
 
 /* ─────────────────────────── line execution ─────────────────────────────── */
+
+/* Run one already-split pipeline stage.
+ *
+ *   text        the stage's command text (no top-level '|')
+ *   stage_stdin data to present as the stage's stdin, or NULL
+ *   stage_in    length of stage_stdin
+ *   capture     when non-NULL the stage's stdout goes here instead of the
+ *               terminal; this is how every stage but the last of a pipeline
+ *               is run
+ *
+ * Each stage gets its own stdin/out globals, set and restored here, so a
+ * pipeline cannot leak one stage's captured output into the next command.
+ */
+/* ─────────────────────────── pipelines ────────────────────────────────────
+ *
+ * A pipeline is a list of stages separated by '|'.  A stage is either a
+ * command the shell implements itself (a *built-in*) or an external
+ * program.
+ *
+ * A built-in runs in this process and its output is collected in a
+ * buffer, which is how `ls | grep` has always worked here.
+ *
+ * An external program runs in a child, and its output goes down a *real*
+ * pipe -- the kernel's.  The shell used to run an external stage with its
+ * output going to the terminal whatever the pipeline said, so
+ * `bas hello | cat` printed the line twice and `bas list | grep hello`
+ * printed the whole listing and nothing else.  The kernel's pipe now
+ * blocks while there is nothing to read and reports the end of the file
+ * when the last writer is gone, so a stage can be read to the end.
+ *
+ * The two kinds mix, and they hand their output over differently: a
+ * built-in hands over a buffer, an external program hands over the pipe
+ * itself, and the next stage takes whichever it was given.
+ *
+ * The external runner is a callback rather than a direct call, because
+ * run_builtin() is the only thing that knows whether a command is one of
+ * the shell's -- and the pipeline has to know too, before the stage runs,
+ * because an external stage has to run in a child with the pipes wired up.
+ */
+
+static int  pl_last;          /* the stage being run is the last one */
+static int  pl_out_pipe[2];   /* the pipe this stage's stdout goes down */
+static int  pl_in_pipe[2];    /* the pipe this stage's stdin comes from */
+static char *pl_prev_buf;     /* the previous built-in's output */
+static int  pl_prev_len;
+static int  pl_prev_pipe;     /* the previous external stage's stdout pipe */
+static int  pl_prev_pid;      /* ... and the process writing into it */
+
+/* Run an external program as a stage of a pipeline.
+ *
+ * The child gets the stage's stdin and stdout from the pipes; the parent
+ * keeps the read end of the stdout pipe for the next stage, and writes
+ * the previous built-in's output into the stdin pipe (if the previous
+ * stage was a built-in; if it was an external program, the child inherits
+ * the pipe directly and the two run at the same time). */
+static int pipeline_run_external(cmd_t *c) {
+    char path[PATH_MAX_LOCAL];
+    if (!resolve_program(c->argv[0], path, sizeof(path))) {
+        sh_outf("%s: command not found\n", c->argv[0]);
+        last_status = 127;
+        return 1;
+    }
+
+    pl_out_pipe[0] = pl_out_pipe[1] = -1;
+    pl_in_pipe[0] = pl_in_pipe[1] = -1;
+
+    /* The stage's stdout: a pipe when another stage follows, the terminal
+     * (or the `>` target) when it is the last one. */
+    if (!pl_last && c->out_fd < 0) {
+        if (sys_pipe(pl_out_pipe) < 0) {
+            sh_outf("shell: cannot create a pipe\n");
+            last_status = 1;
+            return 1;
+        }
+    }
+
+    /* The stage's stdin. */
+    if (pl_prev_pipe >= 0) {
+        /* The previous stage was an external program: the child reads its
+         * pipe directly, and the two run at the same time. */
+        pl_in_pipe[0] = pl_prev_pipe;
+        pl_in_pipe[1] = -1;
+        pl_prev_pipe = -1;
+    } else if (pl_prev_buf) {
+        /* The previous stage was a built-in: its output is a buffer, so it
+         * goes into a pipe of its own for the child to read. */
+        if (sys_pipe(pl_in_pipe) < 0) {
+            sh_outf("shell: cannot create a pipe\n");
+            last_status = 1;
+            return 1;
+        }
+    }
+
+    int pid = sys_fork();
+    if (pid < 0) {
+        sh_outf("%s: cannot fork\n", c->argv[0]);
+        last_status = 127;
+        return 1;
+    }
+    if (pid == 0) {
+        /* The child. */
+        if (pl_in_pipe[0] >= 0) {
+            sys_dup2(pl_in_pipe[0], 0);
+            sys_close(pl_in_pipe[0]);
+        }
+        if (pl_in_pipe[1] >= 0) sys_close(pl_in_pipe[1]);
+        if (pl_out_pipe[1] >= 0) {
+            sys_close(pl_out_pipe[0]);
+            sys_dup2(pl_out_pipe[1], 1);
+            sys_close(pl_out_pipe[1]);
+        } else if (c->out_fd >= 0) {
+            sys_dup2(c->out_fd, 1);
+            sys_close(c->out_fd);
+        }
+        if (c->has_in) {
+            /* A `<` redirect outranks the pipeline's input, as it does in
+             * every shell. */
+            int fd = sys_open(c->in_path, 0);
+            if (fd >= 0) { sys_dup2(fd, 0); sys_close(fd); }
+        }
+        sys_execve(path, c->argv, c->argc);
+        sys_write("shell: cannot execute\n", 21);
+        sys_exit(127);
+    }
+
+    /* The parent. */
+    if (pl_in_pipe[1] >= 0) {
+        /* The built-in's output becomes the child's stdin.  It is written
+         * after the fork, because the pipe holds only a little and the
+         * child is the one who has to be reading for the write to finish. */
+        if (pl_prev_buf && pl_prev_len > 0)
+            sys_pwrite(pl_in_pipe[1], pl_prev_buf, pl_prev_len);
+        sys_close(pl_in_pipe[1]);
+        pl_in_pipe[1] = -1;
+    }
+    if (pl_out_pipe[1] >= 0) {
+        sys_close(pl_out_pipe[1]);
+        pl_out_pipe[1] = -1;
+        pl_prev_pipe = pl_out_pipe[0];
+        pl_out_pipe[0] = -1;
+        pl_prev_pid = pid;
+    } else {
+        /* The last stage: nothing else is waiting for it. */
+        int status = 0;
+        if (sys_wait(pid, &status) < 0) status = 127;
+        last_status = status;
+        pl_prev_pid = 0;
+    }
+    return 1;
+}
 
 /* Run one already-split pipeline stage.
  *
@@ -1455,7 +1660,13 @@ static void run_stage(const char *text, const char *stage_stdin, int stage_in,
     in_pos = 0;
     out_sink = capture;
 
-    run_builtin(&c);
+    if (!run_builtin(&c) && external_runner == 0) {
+        /* Not a built-in, and not a pipeline: run it as an external
+         * program.  This is what makes the bas programs -- and every other
+         * program in the image -- reachable from the desktop's terminal. */
+        int rc = run_external(c.argv[0], c.argv, c.argc, c.out_fd);
+        last_status = rc;
+    }
 
     out_sink = saved_out;
     in_buf = saved_in;
@@ -1465,6 +1676,117 @@ static void run_stage(const char *text, const char *stage_stdin, int stage_in,
     /* run_builtin() closes a redirect fd itself; this only covers the case
      * where parse_segment() opened one and the command was `exit`. */
     if (c.out_fd >= 0) sys_close(c.out_fd);
+}
+
+/* Run a pipeline: the stages, in order, each handing its output to the
+ * next one.
+ *
+ * A built-in hands over a buffer (its captured output); an external
+ * program hands over the pipe it writes into, and the next stage reads
+ * that pipe directly -- so two external stages run at the same time, the
+ * way a pipeline is supposed to.
+ *
+ * A stage that does not read its input (a `ls` at the end of a pipe,
+ * say) leaves the pipe undrained, and the program still writing into it
+ * would block for ever.  So whatever is left in the pipe is drained and
+ * thrown away once the stage is done. */
+static void run_pipeline(char **stage, int nstage) {
+    pl_prev_buf = NULL;
+    pl_prev_len = 0;
+    pl_prev_pipe = -1;
+    pl_prev_pid = 0;
+    pipe_fd = -1;
+    pipe_drained = 0;
+    pipe_buf = NULL;
+    pipe_buf_len = 0;
+
+    external_runner = pipeline_run_external;
+
+    for (int i = 0; i < nstage; i++) {
+        pl_last = (i == nstage - 1);
+
+        cmd_t c;
+        if (parse_segment(stage[i], &c) != 0) break;
+
+        /* The stage's input: the previous stage's output. */
+        const char *stage_in = NULL;
+        int stage_in_len = 0;
+        if (i > 0) {
+            if (pl_prev_pipe >= 0) {
+                /* The previous stage was an external program: a built-in
+                 * reads its pipe, and an external program inherits it. */
+                pipe_fd = pl_prev_pipe;
+                pl_prev_pipe = -1;
+                pipe_drained = 0;
+            } else {
+                stage_in = pl_prev_buf;
+                stage_in_len = pl_prev_len;
+            }
+        }
+
+        sink_t cap;
+        sink_init(&cap);
+        char   *saved_in = in_buf;
+        int     saved_in_len = in_len, saved_in_pos = in_pos;
+        sink_t *saved_out = out_sink;
+
+        in_buf = (char *)stage_in;
+        in_len = stage_in_len;
+        in_pos = 0;
+        out_sink = (pl_last && c.out_fd < 0) ? NULL : &cap;
+
+        int handled = run_builtin(&c);
+
+        out_sink = saved_out;
+        in_buf = saved_in;
+        in_len = saved_in_len;
+        in_pos = saved_in_pos;
+
+        if (handled) {
+            /* A built-in: its output is the next stage's input. */
+            if (pl_prev_buf) free(pl_prev_buf);
+            pl_prev_buf = cap.buf;
+            pl_prev_len = cap.len;
+            cap.buf = NULL;      /* the buffer belongs to the pipeline now */
+            cap.cap = 0;
+        } else {
+            /* An external program: the runner has forked it, and the pipe
+             * it writes into is pl_prev_pipe now. */
+            sink_free(&cap);
+        }
+
+        if (c.out_fd >= 0) sys_close(c.out_fd);
+
+        /* Drain whatever is left of the pipe this stage did not read, so
+         * the program writing into it is not left blocked for ever. */
+        if (pipe_fd >= 0) {
+            if (!pipe_drained) {
+                char buf[512];
+                while (sys_read(pipe_fd, buf, sizeof(buf)) > 0) { }
+            }
+            sys_close(pipe_fd);
+            pipe_fd = -1;
+        }
+        if (pipe_buf) { free(pipe_buf); pipe_buf = NULL; pipe_buf_len = 0; }
+
+        /* The previous external stage: reap it.  Its pipe has been
+         * drained by now, so it has run out. */
+        if (pl_prev_pid > 0) {
+            int st = 0;
+            if (sys_wait(pl_prev_pid, &st) >= 0) last_status = st;
+            pl_prev_pid = 0;
+        }
+    }
+
+    external_runner = 0;
+
+    if (pl_prev_pid > 0) {
+        int st = 0;
+        if (sys_wait(pl_prev_pid, &st) >= 0) last_status = st;
+        pl_prev_pid = 0;
+    }
+    if (pl_prev_pipe >= 0) { sys_close(pl_prev_pipe); pl_prev_pipe = -1; }
+    if (pl_prev_buf) { free(pl_prev_buf); pl_prev_buf = NULL; pl_prev_len = 0; }
 }
 
 /* Split `text` on top-level '|' into up to MAX_ARGS stages. Returns the
@@ -1537,25 +1859,7 @@ static void execute_line(char *line) {
             if (nstage == 1) {
                 run_stage(stage[0], NULL, 0, NULL);
             } else if (nstage > 1) {
-                /* Every stage but the last is captured; the last writes to
-                 * the terminal (or to its own `>` target). Intermediate
-                 * output is therefore never interleaved with the final
-                 * result, which is what a pipeline is for. */
-                sink_t caps[MAX_ARGS];
-                for (int i = 0; i < nstage - 1; i++) sink_init(&caps[i]);
-
-                for (int i = 0; i < nstage; i++) {
-                    const char *sin = (i == 0) ? NULL : caps[i - 1].buf;
-                    int         slen = (i == 0) ? 0 : caps[i - 1].len;
-                    sink_t     *cap = (i == nstage - 1) ? NULL : &caps[i];
-                    run_stage(stage[i], sin, slen, cap);
-                }
-                for (int i = 0; i < nstage - 1; i++) {
-                    if (caps[i].truncated)
-                        sh_outf("shell: pipeline stage %d output exceeded %d bytes and was truncated\n",
-                                i + 1, PIPE_BUF_MAX);
-                    sink_free(&caps[i]);
-                }
+                run_pipeline(stage, nstage);
             }
         }
 

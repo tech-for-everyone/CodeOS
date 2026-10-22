@@ -184,6 +184,22 @@ bas-boot-check:
 	@printf "$(CYAN)$(BOLD)==> Booting CodeOS to run the bas programs...$(RESET)\n"
 	@cd kernel && python3 scripts/bas_boot_check.py
 
+# The writable filesystem: the disk the kernel mounts is the writable layer,
+# so a file the shell writes has to be *on the disk* afterwards and still be
+# there after the next boot.  The check writes in the guest, reads the image
+# back on the host with debugfs, and boots again.
+.PHONY: wfs-check
+wfs-check:
+	@printf "$(CYAN)$(BOLD)==> Booting CodeOS to check the writable filesystem...$(RESET)\n"
+	@cd kernel && python3 scripts/wfs_check.py
+
+# The shell's pipelines: a program's output has to travel down a real pipe,
+# so the file a redirected pipeline writes has to hold it -- exactly once.
+.PHONY: shell-check
+shell-check:
+	@printf "$(CYAN)$(BOLD)==> Booting CodeOS to check the shell's pipelines...$(RESET)\n"
+	@cd kernel && python3 scripts/shell_check.py
+
 # pkgs/extra/netbeam/src/netbeam.c is a CodeOS userspace ELF, so it issues
 # `int $0x80` with CodeOS syscall numbers and cannot run on Linux. The test
 # includes the real source (with main renamed) against a POSIX model of

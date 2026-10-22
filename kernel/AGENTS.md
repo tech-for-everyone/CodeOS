@@ -302,9 +302,101 @@ ncvm: selftest [ok  ] the listing is packed NUL-separated names, not fixed-strid
     1, the console write goes there instead.  A redirect in a child
     therefore does not touch the parent, whose output still reaches the
     console.
-  - A pipeline still cannot capture an external program's output: the
-    shell's pipelines are in-process, and the kernel's pipe read is now
-    correct but the shell does not wire external stages into one.
+  - A pipeline captures an external program's output now too, and it took
+    a kernel bug to get there (see "Pipelines" and "The pipe struct is
+    bigger than a page" below).
+
+## The writable filesystem: the disk is the writable layer
+The kernel has two filesystems and a program sees one.
+
+- **The in-memory node table (`fs.c`) is the *base*.** It is the initramfs
+  the image ships plus whatever the kernel seeds at boot (the container
+  images, the package directories).  **It is never written to at
+  runtime** -- a write to it is lost at the next boot, so a "writable
+  filesystem" built on it would not be one.
+- **The mounted ext2 volume is the writable layer.** A path is looked for
+  in the volume first and in the base second: a file the user wrote
+  shadows the image's copy of the same name, and a directory that exists
+  in both shows the entries of both (`fs_dir_list()` merges them).  The
+  volume's root is the filesystem root, so one path means the same thing
+  in both layers, which is what lets a single string be handed to either.
+- **The writes go to the volume, and that is what makes them survive.**
+  `fs_path_write()` creates the file on the volume if it is not there and
+  writes it; `fs_path_create()`, `fs_path_mkdir()`, `fs_path_remove()`
+  and `fs_path_rmdir()` are the same for the other operations.  A write
+  is **not** quietly dropped into the base when the volume refuses it: a
+  file that is written and then lost at the next boot is worse than an
+  error.
+- **The syscall layer is the one that sees the merged view**
+  (`sys_open()`, `sys_write_file()`, `sys_mkdir()`, `sys_unlink()`,
+  `sys_stat()`, `sys_readdir()`); the kernel's own seeding calls the
+  base's `fs_write()`/`fs_mkfile()` directly, so the initramfs does not
+  end up on the disk.
+- **The current directory is a path, not an index into the table.** It
+  used to be a node index, which cannot express a directory that lives on
+  the volume: `cd /scripts` (a directory only the disk has) failed.
+  `abs_path()` now resolves "." and ".." textually, so the same string
+  means the same thing to both layers.
+- **`O_TRUNC` truncates at the open, not at the first write.** A program
+  that opens a file to truncate it and then writes nothing must leave an
+  empty file behind; the old code read the file in and left the tail.
+- **The disk image is a build artefact, and a rebuild replaces it.**
+  `kernel/disk.img` is gitignored and `make` recreates it from
+  `kernel/disk/` plus the userspace programs, so files written to the
+  volume are lost when the image is rebuilt -- the same thing that
+  happens to a container image.  The write survives a *reboot* (the
+  image is attached again), which is what `scripts/wfs_check.py` checks:
+  it writes a file in the guest, reads the image back with `debugfs` on
+  the host, and boots again to see the file still there.
+- **The negative control is "no disk at all".** A read-only drive is not
+  an option: QEMU refuses to start with one ("Block node is read-only")
+  because the boot writes to it.  Attaching no disk leaves the volume
+  unmounted, and every assertion of the check has to fail.
+
+## Pipelines: the stages are wired together with real pipes
+- **A built-in runs in the shell's process; a program runs in a child.**
+  The shell's dispatch (`run_builtin()`) is the only thing that knows
+  which is which, so it hands a command it does not implement to a
+  *callback* the pipeline sets (`external_runner`).  The callback forks,
+  wires the pipes and execs; that is why an external stage can have its
+  stdout on a pipe at all.
+- **The two kinds hand their output over differently.** A built-in hands
+  over a buffer (its captured output); a program hands over the pipe it
+  writes into, and the next stage reads that pipe directly -- so two
+  program stages run *at the same time*, which is what a pipeline is for.
+- **The kernel's pipe now blocks and knows its end.** `pipe_read()`
+  waits while there is nothing to read and reports the end of the file
+  when the last writer is gone.  Both halves are needed: a reader that
+  returned early would see a truncated stream, and one that never
+  returned would hang on a program that has already exited.  The end of
+  the file is the *writer count* reaching zero, which is why a process
+  that dies has to close its descriptors (`close_process_fds()`): a
+  process that exits without closing them leaves the reader waiting for
+  a writer that no longer exists, and the pipeline never finishes.
+- **A stage that does not read its input must not leave the writer
+  blocked.** The shell drains whatever is left in the pipe and throws it
+  away once the stage is done, so `bas-hello | ls` does not deadlock.
+
+## The pipe struct is bigger than a page, and its counters were in the next one
+- **`pipe_t` is 4116 bytes** -- a 4 KiB buffer and five counters -- and it
+  was allocated with a **single page**.  The counters therefore lived in
+  the *next* page, which is whatever the allocator handed out next.  When
+  that page was a process's page table, a pipe's writer count sat inside
+  a PML4 entry: the reaper walked the corrupted page table and took a
+  general protection fault (`!!! GP (vec 13)`), and the fault looked like
+  a scheduler bug (the faulting thread was the idle one) rather than
+  like a pipe.
+- **This is the same mistake as the one in `xs_screen_create()`** (see
+  above): allocate the pages the struct actually needs.
+  `PIPE_PAGES` in `process.h` is the count, and both the allocation and
+  the free use it.
+- **How it was found:** the symptom was a general protection fault in
+  `proc_wait()`'s teardown, and the bisect that mattered was "what does
+  the pipe's page look like" -- printing the pipe's virtual address and
+  the child's PML4 side by side showed the counters landing in the page
+  table.  The detail that pointed at it: the corrupted entry was the
+  *high half* of a PML4 entry, and `p->writers--` writes four bytes --
+  a decrement of zero is 0xffffffff.
 
 ## Devices: the phones and tablets the kernel drives
 `kernel/kernel/device.{c,h}` is the device table, and it is the reason a

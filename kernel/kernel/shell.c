@@ -954,20 +954,20 @@ static void cmd_pwd(void) {
 
 static void cmd_mkdir(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: mkdir <path>\n"); return; }
-    if (fs_mkdir(argv[1]) < 0)
+    if (fs_path_mkdir(argv[1]) < 0)
         kprintf("mkdir: %s: failed\n", argv[1]);
 }
 
 static void cmd_rmdir(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: rmdir <path>\n"); return; }
-    if (fs_rmdir(argv[1]) < 0)
+    if (fs_path_rmdir(argv[1]) < 0)
         kprintf("rmdir: %s: failed (not empty?)\n", argv[1]);
 }
 
 static void cmd_cat(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: cat <path>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0)
         kprintf("cat: %s: no such file\n", argv[1]);
     else {
@@ -978,13 +978,13 @@ static void cmd_cat(int argc, char **argv) {
 
 static void cmd_rm(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: rm <path>\n"); return; }
-    if (fs_rm(argv[1]) < 0)
+    if (fs_path_remove(argv[1]) < 0)
         kprintf("rm: %s: failed\n", argv[1]);
 }
 
 static void cmd_touch(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: touch <path>\n"); return; }
-    if (fs_mkfile(argv[1]) < 0)
+    if (fs_path_create(argv[1]) < 0)
         kprintf("touch: %s: failed\n", argv[1]);
 }
 
@@ -1145,7 +1145,7 @@ static void cmd_fetch(int argc, char **argv) {
         if (strcmp(first, "-If") == 0 || strcmp(first, "-if") == 0) {
             if (argc < 3) { kprintf("usage: fetch -If <file>\n"); return; }
             char buf[FS_CONTENT_MAX];
-            int n = fs_read(argv[2], buf, FS_CONTENT_MAX);
+            int n = fs_path_read(argv[2], buf, FS_CONTENT_MAX);
             if (n <= 0) { kprintf("fetch: cannot read \'%s\'\n", argv[2]); return; }
             buf[n] = 0;
             char pkg_name[64] = {0}, pkg_ver[64] = {0}, pkg_desc[128] = {0};
@@ -1170,7 +1170,7 @@ static void cmd_fetch(int argc, char **argv) {
                         char *fcontent = sep + 1;
                         int flen = strlen(fcontent);
                         if (flen > 0) {
-                            if (fs_mkfile(fpath) == 0 && fs_write(fpath, fcontent, flen) >= 0) {
+                            if (fs_path_create(fpath) == 0 && fs_path_write(fpath, fcontent, flen) >= 0) {
                                 file_count++;
                                 kprintf("  wrote %s (%d bytes)\n", fpath, flen);
                             } else {
@@ -1416,7 +1416,7 @@ static void cmd_tlsinsecure(int argc, char **argv) {
 static void cmd_catrust(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: catrust <pemfile>\n"); return; }
     char pem[8192];
-    int n = fs_read(argv[1], pem, sizeof(pem) - 1);
+    int n = fs_path_read(argv[1], pem, sizeof(pem) - 1);
     if (n <= 0) { kprintf("catrust: cannot read %s\n", argv[1]); return; }
     if (https_trust_ca_pem(pem, (size_t)n) != 0) {
         kprintf("catrust: parse FAILED\n");
@@ -1948,7 +1948,7 @@ static void cmd_false(void) { kprintf("(returning failure conceptually)\n"); }
 static void cmd_wc(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: wc <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("wc: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     int lines = 0, words = 0, bytes = n;
@@ -1970,7 +1970,7 @@ static void cmd_head(int argc, char **argv) {
     if (argc > 2 && strcmp(argv[1], "-n") == 0) { n = str_to_int(argv[2]); ai = 3; }
     path = argv[ai];
     char buf[FS_CONTENT_MAX + 1];
-    int total = fs_read(path, buf, FS_CONTENT_MAX);
+    int total = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (total < 0) { kprintf("head: %s: no such file\n", path); return; }
     buf[total] = 0;
     int lines = 0;
@@ -1983,7 +1983,7 @@ static void cmd_head(int argc, char **argv) {
 static void cmd_hexdump(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: hexdump <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("hexdump: %s: no such file\n", argv[1]); return; }
     for (int i = 0; i < n; i += 16) {
         kprintf("%04x: ", i);
@@ -2093,7 +2093,7 @@ static void cmd_date(void) {
 static void cmd_rev(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: rev <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("rev: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     int line_start = 0;
@@ -2333,7 +2333,7 @@ static void cmd_lgame_selftest(void) {
 static void cmd_sort(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: sort <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("sort: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     char *lines[256];
@@ -2358,20 +2358,20 @@ static void cmd_sort(int argc, char **argv) {
 static void cmd_cp(int argc, char **argv) {
     if (argc < 3) { kprintf("usage: cp <src> <dst>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("cp: %s: no such file\n", argv[1]); return; }
-    if (fs_mkfile(argv[2]) < 0) { kprintf("cp: %s: could not create\n", argv[2]); return; }
-    fs_write(argv[2], buf, n);
+    if (fs_path_create(argv[2]) < 0) { kprintf("cp: %s: could not create\n", argv[2]); return; }
+    fs_path_write(argv[2], buf, n);
 }
 
 static void cmd_mv(int argc, char **argv) {
     if (argc < 3) { kprintf("usage: mv <src> <dst>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("mv: %s: no such file\n", argv[1]); return; }
-    if (fs_mkfile(argv[2]) < 0) { kprintf("mv: %s: could not create\n", argv[2]); return; }
-    fs_write(argv[2], buf, n);
-    fs_rm(argv[1]);
+    if (fs_path_create(argv[2]) < 0) { kprintf("mv: %s: could not create\n", argv[2]); return; }
+    fs_path_write(argv[2], buf, n);
+    fs_path_remove(argv[1]);
 }
 
 static void cmd_shutdown(void) {
@@ -2391,7 +2391,7 @@ static void cmd_du(int argc, char **argv) {
     if (idx < 0) { kprintf("du: %s: no such file\n", path); return; }
     if (!is_dir) {
         char buf[FS_CONTENT_MAX + 1];
-        int n = fs_read(path, buf, FS_CONTENT_MAX);
+        int n = fs_path_read(path, buf, FS_CONTENT_MAX);
         kprintf("%d\t%s\n", n < 0 ? 0 : n, path);
     } else {
         kprintf("4\t%s/\n", path);
@@ -2783,15 +2783,15 @@ static void cmd_wine(int argc, char **argv) {
     if (strcmp(argv[1], "--create-prefix") == 0) {
         if (argc < 3) { kprintf("Usage: wine --create-prefix <name>\n"); return; }
         kprintf("wine: creating prefix '%s'...\n", argv[2]);
-        fs_mkdir("/wines");
+        fs_path_mkdir("/wines");
         char buf[256];
         strcpy(buf, "/wines/");
         strcat(buf, argv[2]);
-        fs_mkdir(buf);
+        fs_path_mkdir(buf);
         char dc[256];
         strcpy(dc, buf);
         strcat(dc, "/drive_c");
-        fs_mkdir(dc);
+        fs_path_mkdir(dc);
         kprintf("wine: prefix '%s' created\n", argv[2]);
         return;
     }
@@ -2915,7 +2915,7 @@ static void cmd_tail(int argc, char **argv) {
     if (argc > 2 && strcmp(argv[1], "-n") == 0) { n = str_to_int(argv[2]); ai = 3; }
     path = argv[ai];
     char buf[FS_CONTENT_MAX + 1];
-    int total = fs_read(path, buf, FS_CONTENT_MAX);
+    int total = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (total < 0) { kprintf("tail: %s: no such file\n", path); return; }
     buf[total] = 0;
     int lines = 0;
@@ -2933,7 +2933,7 @@ static void cmd_grep(int argc, char **argv) {
     const char *pattern = argv[1];
     const char *path = argv[2];
     char buf[FS_CONTENT_MAX + 1];
-    int total = fs_read(path, buf, FS_CONTENT_MAX);
+    int total = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (total < 0) { kprintf("grep: %s: no such file\n", path); return; }
     buf[total] = 0;
     int plen = strlen(pattern);
@@ -3049,14 +3049,14 @@ static void cmd_dd(int argc, char **argv) {
     if (!ifile) { kprintf("dd: missing if=\n"); return; }
     if (!ofile) { kprintf("dd: missing of=\n"); return; }
     char buf[4096];
-    int in = fs_read(ifile, buf, sizeof(buf));
+    int in = fs_path_read(ifile, buf, sizeof(buf));
     if (in < 0) { kprintf("dd: %s: no such file\n", ifile); return; }
-    if (fs_mkfile(ofile) < 0) { kprintf("dd: %s: could not create\n", ofile); return; }
+    if (fs_path_create(ofile) < 0) { kprintf("dd: %s: could not create\n", ofile); return; }
     long to_write = (long)count * (long)bs;
     if (to_write > INT_MAX) to_write = INT_MAX;
     if (to_write < 0) { kprintf("dd: overflow\n"); return; }
     if ((int)to_write > in) to_write = in;
-    if (fs_write(ofile, buf, (int)to_write) < 0) { kprintf("dd: write failed\n"); return; }
+    if (fs_path_write(ofile, buf, (int)to_write) < 0) { kprintf("dd: write failed\n"); return; }
     kprintf("%d+0 records in\n%d+0 records out\n%d bytes copied\n",
             (int)(to_write / bs), (int)(to_write / bs), (int)to_write);
 }
@@ -3093,7 +3093,7 @@ static void cmd_type(int argc, char **argv) {
 static void cmd_less(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: less <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("less: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     int pos = 0, lines_out = 0;
@@ -3144,19 +3144,19 @@ static void cmd_tee(int argc, char **argv) {
     kprintf("%s", cap);
     if (append) {
         char old[FS_CONTENT_MAX + 1];
-        int olen = fs_read(path, old, FS_CONTENT_MAX);
+        int olen = fs_path_read(path, old, FS_CONTENT_MAX);
         if (olen >= 0) {
             int total = olen + len;
             if (total > FS_CONTENT_MAX) total = FS_CONTENT_MAX;
             for (int i = 0; i < len && olen + i < total; i++) old[olen + i] = cap[i];
-            fs_write(path, old, total);
+            fs_path_write(path, old, total);
         } else {
-            if (fs_mkfile(path) == 0)
-                fs_write(path, cap, len);
+            if (fs_path_create(path) == 0)
+                fs_path_write(path, cap, len);
         }
     } else {
-        if (fs_mkfile(path) == 0)
-            fs_write(path, cap, len);
+        if (fs_path_create(path) == 0)
+            fs_path_write(path, cap, len);
     }
 }
 
@@ -3164,7 +3164,7 @@ static void cmd_tr(int argc, char **argv) {
     if (argc < 3) { kprintf("usage: tr <set1> <set2> <file>\n"); return; }
     const char *set1 = argv[1], *set2 = argv[2], *path = argv[3];
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(path, buf, FS_CONTENT_MAX);
+    int n = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("tr: %s: no such file\n", path); return; }
     buf[n] = 0;
     for (int i = 0; i < n; i++) {
@@ -3178,7 +3178,7 @@ static void cmd_tr(int argc, char **argv) {
 static void cmd_nl(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: nl <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("nl: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     int line = 1;
@@ -3198,7 +3198,7 @@ static void cmd_fold(int argc, char **argv) {
     if (strcmp(argv[1], "-w") == 0) { if (argc > 2) width = str_to_int(argv[2]); ai = 3; }
     path = argv[ai];
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(path, buf, FS_CONTENT_MAX);
+    int n = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("fold: %s: no such file\n", path); return; }
     buf[n] = 0;
     int col = 0;
@@ -3263,14 +3263,14 @@ static void cmd_mktemp(void) {
             name[pi++] = 'a' + (r % 26);
         }
         name[pi] = 0;
-        int is_dir; if (fs_resolve(name, &is_dir) < 0 && fs_mkfile(name) == 0) { kprintf("%s\n", name); return; }
+        int is_dir; if (fs_resolve(name, &is_dir) < 0 && fs_path_create(name) == 0) { kprintf("%s\n", name); return; }
     }
 }
 
 static void cmd_expand(int argc, char **argv) {
     if (argc < 2) { kprintf("usage: expand <file>\n"); return; }
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(argv[1], buf, FS_CONTENT_MAX);
+    int n = fs_path_read(argv[1], buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("expand: %s: no such file\n", argv[1]); return; }
     buf[n] = 0;
     for (int i = 0; i < n; i++) {
@@ -3995,7 +3995,7 @@ static void cmd_cut(int argc, char **argv) {
     }
     const char *path = argv[ai];
     char buf[FS_CONTENT_MAX + 1];
-    int n = fs_read(path, buf, FS_CONTENT_MAX);
+    int n = fs_path_read(path, buf, FS_CONTENT_MAX);
     if (n < 0) { kprintf("cut: %s: no such file\n", path); return; }
     buf[n] = 0;
     int col = 1;
@@ -4008,8 +4008,8 @@ static void cmd_cut(int argc, char **argv) {
 static void cmd_comm(int argc, char **argv) {
     if (argc < 3) { kprintf("usage: comm <file1> <file2>\n"); return; }
     char b1[FS_CONTENT_MAX + 1], b2[FS_CONTENT_MAX + 1];
-    int n1 = fs_read(argv[1], b1, FS_CONTENT_MAX);
-    int n2 = fs_read(argv[2], b2, FS_CONTENT_MAX);
+    int n1 = fs_path_read(argv[1], b1, FS_CONTENT_MAX);
+    int n2 = fs_path_read(argv[2], b2, FS_CONTENT_MAX);
     if (n1 < 0 || n2 < 0) { kprintf("comm: file not found\n"); return; }
     b1[n1] = 0; b2[n2] = 0;
     char *lines1[128], *lines2[128];
@@ -4247,19 +4247,19 @@ static void redirect_run(int argc, char **argv) {
         const char *cap = kprintf_capture_get();
         if (redirect_out == 2) {
             char old[FS_CONTENT_MAX + 1];
-            int olen = fs_read(redirect_file, old, FS_CONTENT_MAX);
+            int olen = fs_path_read(redirect_file, old, FS_CONTENT_MAX);
             if (olen > 0) {
                 int total = olen + len;
                 if (total > FS_CONTENT_MAX) total = FS_CONTENT_MAX;
                 for (int i = 0; i < len && olen + i < total; i++) old[olen + i] = cap[i];
-                fs_write(redirect_file, old, total);
+                fs_path_write(redirect_file, old, total);
             } else {
-                fs_mkfile(redirect_file);
-                fs_write(redirect_file, cap, len);
+                fs_path_create(redirect_file);
+                fs_path_write(redirect_file, cap, len);
             }
         } else {
-            fs_mkfile(redirect_file);
-            fs_write(redirect_file, cap, len);
+            fs_path_create(redirect_file);
+            fs_path_write(redirect_file, cap, len);
         }
     } else {
         run_builtin(new_argc, new_argv);
@@ -4452,7 +4452,7 @@ int shell_execute(const char *line) {
 
 void shell_source_file(const char *path) {
     char script[FS_CONTENT_MAX + 1];
-    int n = fs_read(path, script, FS_CONTENT_MAX);
+    int n = fs_path_read(path, script, FS_CONTENT_MAX);
     if (n < 0) {
         kprintf("source: %s: no such file\n", path);
         return;

@@ -506,17 +506,27 @@ static int sys_open(const char *user_path, int flags) {
     if (!d) return -1;
     d->flags = flags;
     strcpy(d->path, path);
-    int n = fs_read(path, d->data, FS_CONTENT_MAX);
+    /* The merged view: the mounted volume first, the in-memory base
+     * second.  The volume is the writable layer, so a file the user wrote
+     * shadows the image's copy of the same name. */
+    int n = fs_path_read(path, d->data, FS_CONTENT_MAX);
     if (n < 0) {
-        n = ext2_read_file_path(path, d->data, FS_CONTENT_MAX);
-        if (n <= 0) {
-            if ((flags & O_CREAT) && fs_mkfile(path) == 0) {
-                n = 0;
-            } else {
-                file_table_unref(d - fd_table);
-                return -1;
-            }
+        if ((flags & O_CREAT) && fs_path_create(path) == 0) {
+            n = 0;
+        } else {
+            file_table_unref(d - fd_table);
+            return -1;
         }
+    }
+    /* O_TRUNC empties the file at the open, not at the first write: a
+     * program that opens a file to truncate it and then writes nothing
+     * must leave an empty file behind. */
+    if ((flags & O_TRUNC) && (flags & (O_WRONLY | O_RDWR))) {
+        if (fs_path_write(path, "", 0) < 0) {
+            file_table_unref(d - fd_table);
+            return -1;
+        }
+        n = 0;
     }
     d->len = n;
     d->pos = (flags & O_APPEND) ? n : 0;
@@ -538,7 +548,7 @@ static int64_t sys_write_file(int fd, uint64_t user_buf, int count) {
         return -1;
     if (wpos + count > d->len) d->len = wpos + count;
     d->pos = wpos + count;
-    fs_write(d->path, d->data, d->len);
+    fs_path_write(d->path, d->data, d->len);
     return count;
 }
 
@@ -1875,7 +1885,7 @@ static int64_t sys_stat(const char *user_path, uint64_t user_statbuf) {
 
     int size = 0;
     int is_dir = 0;
-    if (fs_get_info(path, &size, &is_dir) < 0)
+    if (fs_path_info(path, &size, &is_dir) < 0)
         return -1;
 
     struct {
@@ -1916,7 +1926,7 @@ static int64_t sys_mkdir(const char *user_path) {
         return -1;
     path[FS_PATH_MAX - 1] = 0;
 
-    if (fs_mkdir(path) < 0)
+    if (fs_path_mkdir(path) < 0)
         return -1;
     return 0;
 }
@@ -1927,7 +1937,7 @@ static int64_t sys_rmdir(const char *user_path) {
         return -1;
     path[FS_PATH_MAX - 1] = 0;
 
-    if (fs_rmdir(path) < 0)
+    if (fs_path_rmdir(path) < 0)
         return -1;
     return 0;
 }
@@ -1938,7 +1948,7 @@ static int64_t sys_unlink(const char *user_path) {
         return -1;
     path[FS_PATH_MAX - 1] = 0;
 
-    if (fs_rm(path) < 0)
+    if (fs_path_remove(path) < 0)
         return -1;
     return 0;
 }
@@ -2010,7 +2020,7 @@ static int64_t sys_access(const char *user_path, int mode) {
     path[FS_PATH_MAX - 1] = 0;
 
     int size = 0, is_dir = 0;
-    if (fs_get_info(path, &size, &is_dir) < 0)
+    if (fs_path_info(path, &size, &is_dir) < 0)
         return -1;
     (void)mode; /* existence check only */
     return 0;

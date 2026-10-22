@@ -42,4 +42,20 @@ int  fs_listdir(const char *path, char names[][FS_NAME_MAX], int max);
 int  fs_get_info(const char *path, int *size, int *is_dir);
 int  fs_rename(const char *oldpath, const char *newpath);
 
+/* The mounted volume (the disk) and the merged view of the two layers.
+ *
+ * The in-memory table is the base layer -- the initramfs the image ships,
+ * plus what the kernel seeds at boot -- and it is never written to at
+ * runtime.  The volume is the writable layer, and a program sees the two
+ * as one filesystem: the volume first, the base second. */
+int  fs_vol_exists(const char *path);
+int  fs_path_exists(const char *path);
+int  fs_path_info(const char *path, int *size, int *is_dir);
+int  fs_path_read(const char *path, char *buf, int max);
+int  fs_path_write(const char *path, const char *data, int len);
+int  fs_path_create(const char *path);
+int  fs_path_mkdir(const char *path);
+int  fs_path_remove(const char *path);
+int  fs_path_rmdir(const char *path);
+
 #endif

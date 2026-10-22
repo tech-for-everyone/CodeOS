@@ -350,10 +350,40 @@ uint64_t proc_exec(uint64_t entry, uint64_t stack_top, int argc, char **argv, ch
     return rsp;
 }
 
+/* Close a process's descriptors.
+ *
+ * A process that dies still holds its files and its pipe ends, and the
+ * counts those keep are what tells a reader that nobody is going to write
+ * any more: the end of a pipe is its writer count reaching zero.  A
+ * process that exits without closing them leaves the reader waiting for a
+ * writer that no longer exists, so a pipeline never finishes.
+ *
+ * The descriptors are released by hand rather than through proc_fd_close(),
+ * which works on the *current* process -- and this runs for a process that
+ * is on its way out. */
+static void close_process_fds(process_t *p) {
+    for (int i = 0; i < PROC_FD_MAX; i++) {
+        if (!p->fds[i].used) continue;
+        proc_fd_t fd = p->fds[i];
+        p->fds[i].used = 0;
+        p->fds[i].type = PROC_FD_NONE;
+        p->fds[i].pipe = 0;
+        p->fds[i].file = -1;
+        if (fd.type == PROC_FD_FILE) {
+            file_table_unref(fd.file);
+        } else if (fd.pipe && (fd.type == PROC_FD_PIPE_R || fd.type == PROC_FD_PIPE_W)) {
+            pipe_close(fd.pipe, fd.type == PROC_FD_PIPE_W);
+        }
+        /* A shared-memory descriptor (PROC_FD_SHM) keeps its segment: the
+         * segment's lifetime is the mapper's business, not the fd's. */
+    }
+}
+
 int proc_exit(int status) {
     process_t *p = current_process;
     if (!p) return -1;
 
+    close_process_fds(p);
     p->state = PROC_ZOMBIE;
     p->exit_status = status;
 
@@ -389,6 +419,7 @@ void proc_thread_exit_leaf(void) {
     current_process = 0;
 
     if (p) {
+        close_process_fds(p);
         p->state = PROC_ZOMBIE;
         p->exit_status = user_mode_last_exit_status();
         if (p->parent && p->parent->state == PROC_SLEEPING)
@@ -723,8 +754,17 @@ void *shm_map(int fd) {
 /* ── Pipe implementation ── */
 
 int pipe_create(int fd[2]) {
-    pipe_t *p = (pipe_t *)pmm_alloc_page();
-    if (!p) return -1;
+    /* The pipe is 4 KiB of buffer plus five counters, so it does NOT fit in
+     * a page: allocating one page for it put the counters in the *next*
+     * page.  That page is whatever the allocator handed out next -- a
+     * process's page table, once -- and a pipe's writer count inside a
+     * PML4 entry is how the reaper ended up walking a corrupted page
+     * table and taking a general protection fault.  The same mistake as
+     * the one in xs_screen_create() (see AGENTS.md): allocate the pages
+     * the struct actually needs. */
+    uint64_t p_phys = pmm_alloc_pages(PIPE_PAGES);
+    if (!p_phys) return -1;
+    pipe_t *p = (pipe_t *)p_phys;
     /* Reach the page through the HHDM: p is a *physical* address and the low
      * half of the address space is the caller's program (see proc_fork's
      * note). Writing p->field directly faults on the user image at 0x400000+
@@ -739,7 +779,7 @@ int pipe_create(int fd[2]) {
     int r = proc_fd_alloc();
     int w = proc_fd_alloc();
     if (r < 0 || w < 0) {
-        pmm_free_page((uint64_t)p);
+        pmm_free_pages(p_phys, PIPE_PAGES);
         return -1;
     }
 
@@ -753,12 +793,29 @@ int pipe_create(int fd[2]) {
     return 0;
 }
 
+/* Read from a pipe.
+ *
+ * A pipe read blocks while there is nothing to read and the pipe still has
+ * a writer, and reports the end of the file when the last writer is gone.
+ * Both halves matter to a shell: a reader that returned early would see
+ * a truncated stream, and a reader that never returned would hang on a
+ * program that has already exited.  The end of the file is therefore the
+ * writer count reaching zero -- which is why a process has to close its
+ * descriptors when it dies (see close_process_fds()). */
 int pipe_read(pipe_t *p, uint8_t *buf, int len) {
     if (!p || !p->open) return 0;
     int total = 0;
-    while (total < len && p->rpos != p->wpos) {
-        buf[total++] = p->buf[p->rpos];
-        p->rpos = (p->rpos + 1) % PROC_PIPE_BUF;
+    while (total < len) {
+        if (p->rpos != p->wpos) {
+            buf[total++] = p->buf[p->rpos];
+            p->rpos = (p->rpos + 1) % PROC_PIPE_BUF;
+            continue;
+        }
+        /* Empty.  The last writer gone means the end of the file;
+         * otherwise wait for one, the way a pipe is supposed to. */
+        if (p->writers <= 0) break;
+        sched_yield();
+        if (!p->open) break;
     }
     return total;
 }
@@ -786,7 +843,7 @@ void pipe_close(pipe_t *p, int writer) {
     else p->readers--;
     if (p->readers == 0 && p->writers == 0) {
         p->open = 0;
-        pmm_free_page(virt_to_phys((uint64_t)p));
+        pmm_free_pages(virt_to_phys((uint64_t)p), PIPE_PAGES);
     }
 }
 

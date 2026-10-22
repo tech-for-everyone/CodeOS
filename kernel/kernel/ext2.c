@@ -486,6 +486,53 @@ int ext2_list_dir(const char *path) {
     return 0;
 }
 
+/* The entries of a directory, NUL-separated, in exactly the shape
+ * fs_dir_list() produces: the caller walks the buffer with strlen() and
+ * takes the byte count from the return value.  ext2_list_dir() above
+ * prints to the console, which is no use to a caller that wants the names
+ * (the shell's `ls`, the merged directory listing).  Returns the number of
+ * bytes written, or -1 if the path is not a directory on this volume. */
+int ext2_list_entries(const char *path, char *out, int max) {
+    if (!out || max <= 0) return -1;
+
+    ext2_dirent_t self;
+    if (ext2_find(path, &self) < 0 || !self.valid) return -1;
+    if (!self.is_dir) return -1;
+
+    struct ext2_inode inode;
+    if (ext2_read_inode(self.inode, &inode) < 0) return -1;
+    int dir_size = inode.size;
+    if (dir_size <= 0) return 0;
+
+    uint8_t *dir_buf = (uint8_t *)malloc(dir_size);
+    if (!dir_buf) return -1;
+    if (ext2_read_file(self.inode, dir_buf, dir_size, 0) < 0) {
+        free(dir_buf);
+        return -1;
+    }
+
+    int pos = 0;
+    int off = 0;
+    while (off < dir_size) {
+        struct ext2_dirent *de = (struct ext2_dirent *)(dir_buf + off);
+        if (de->inode == 0 || de->rec_len == 0) { off += de->rec_len ? de->rec_len : 1; continue; }
+        char name[EXT2_NAME_MAX];
+        int nl = de->name_len < EXT2_NAME_MAX - 1 ? de->name_len : EXT2_NAME_MAX - 1;
+        memcpy(name, de->name, nl);
+        name[nl] = 0;
+        off += de->rec_len;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
+        int len = (int)strlen(name);
+        if (pos + len + 1 >= max) break;
+        memcpy(out + pos, name, len);
+        pos += len;
+        out[pos++] = 0;
+    }
+    free(dir_buf);
+    if (pos < max) out[pos] = 0;
+    return pos;
+}
+
 int ext2_read_file_path(const char *path, void *buf, int max) {
     ext2_dirent_t ent;
     if (ext2_find(path, &ent) < 0 || !ent.valid) return -1;
