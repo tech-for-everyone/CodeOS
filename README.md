@@ -22,6 +22,9 @@ works — not a bajillion distros, one approachable system.
 ## Roadmap
 1. Make NetBeam for every OS
 2. Make it as usable as Linux
+3. Make DevStore more usable
+4. Improve Zircon
+5. Make NCVM based on QEMU's latest release
 ### Dependencies (host)
 
 ```sh
