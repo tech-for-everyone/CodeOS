@@ -1041,7 +1041,9 @@ extern "C" int __snprintf_chk(char *, unsigned long, int, unsigned long, const c
 extern "C" int __vsnprintf_chk(char *, unsigned long, int, unsigned long, const char *, void *) { return 0; }
 extern "C" int __fprintf_chk(void *, int, const char *, ...) { return 0; }
 
-/* C++ exception personality / unwind (never actually unwound) */
+/* C++ ABI support surface: keep one canonical unwind symbol definition per TU.
+   newer compiler stacks may emit both the no-arg and void* forms, but the kernel
+   only needs one stable implementation for the Qt shim layer. */
 extern "C" void __gxx_personality_v0(void) {}
 extern "C" void _Unwind_Resume(void *) { while (1) __builtin_trap(); }
 
