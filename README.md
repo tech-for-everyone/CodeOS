@@ -22,6 +22,7 @@ works — not a bajillion distros, one approachable system.
 ## Roadmap
 1. Make NetBeam for every OS
 2. Make it as usable as Linux
+3. Add optional AI inside the OS (not paid)
 ### Dependencies (host)
 
 ```sh
@@ -99,7 +100,7 @@ driver environment.
 
 ### Package management
 
-`fetch` follows a Moss-style repository workflow with cached `stone.index`
+`fetch` follows a Moss-style repository workflow with cached `pkg.index`
 metadata and persistent installed-package state:
 
 ```sh

@@ -48,7 +48,7 @@ USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 USER_LDFLAGS = -nostdlib -z max-page-size=0x1000 -z noexecstack
 
 PROGRAMS = init shell csl zircapp zircon-notify zircon-clock zircon-info ace_ui \
-           apk-parser android-container android-apps code-music \
+           apk-parser android-container android-apps code-music audio-demo \
            linux-runner ld-codeos terminal syscall_test openweb \
            wineserver wine-runner linux-probe run-as dnslookup \
            crosvm-launcher ncvm chromium-launcher \
@@ -79,7 +79,10 @@ lib/android_ui.o: lib/android_ui.c include/android_ui.h include/wm_protocol.h in
 lib/errno.o: lib/errno.c include/unistd.h include/errno.h include/string.h
 	$(CC) $(USER_CFLAGS) -c -o $@ $<
 
-LIB_OBJ = lib/string.o lib/stdio.o lib/stdlib.o lib/errno.o
+lib/audio.o: lib/audio.c include/audio.h include/unistd.h
+	$(CC) $(USER_CFLAGS) -c -o $@ $<
+
+LIB_OBJ = lib/string.o lib/stdio.o lib/stdlib.o lib/errno.o lib/audio.o
 LIB_ANDROID = lib/android.o lib/android_ui.o
 
 # ── bas programs ────────────────────────────────────────────────────────
@@ -126,7 +129,7 @@ bas_progs:
 
 # Programs that only need core libs
 CORE_PROGS = init shell csl zircon-notify zircon-clock zircon-info \
-             code-music linux-runner syscall_test crosvm-launcher ncvm android-apps \
+             code-music audio-demo linux-runner syscall_test crosvm-launcher ncvm android-apps \
              wineserver wine-runner run-as dnslookup leveltest netbeam chromium-launcher
 # Programs that also need android lib
 ANDROID_PROGS = apk-parser android-container android-launcher \

@@ -1741,3 +1741,12 @@ extern "C" void qsort(void *base, unsigned long nmemb, unsigned long size,
         }
 }
 extern "C" int fputs(const char *, void *) { return 0; }
+
+/* Additional ABI support for newer compilers */
+extern "C" void __cxa_thread_atexit_impl(void (*dtor)(void*), void *obj, void *dso) {
+    (void)dtor; (void)obj; (void)dso;
+}
+
+/* GCC/Clang unwinding stubs */
+extern "C" void _Unwind_DeleteException(void) {}
+extern "C" int _Unwind_RaiseException(void *) { while (1) __builtin_trap(); return 0; }

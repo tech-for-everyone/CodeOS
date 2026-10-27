@@ -1,31 +1,37 @@
 #!/usr/bin/env bash
-# ncvm — CodeOS VM runner.
+# ncvm — CodeOS VM runner (multi-OS capable).
 #
-# ncvm is CodeOS's own QEMU frontend: a stripped-down system emulator
-# (see build-codeos.sh) with a launcher that knows how CodeOS likes to
-# be booted — q35, std VGA with EDID, USB tablet/kbd, e1000 user-net
-# with the usual port forwards, KVM when available.
+# ncvm is a minimal QEMU frontend for booting CodeOS and other operating systems
+# with sensible defaults for the stripped ncvm QEMU fork.
 #
 # Usage:
-#   ncvm                     boot CodeOS (x86_64 / q35, boots the ISO)
+#   ncvm                     boot CodeOS (x86_64 / q35) if found, else try generic
+#   ncvm --os codeos         explicitly boot CodeOS
+#   ncvm --os linux          boot a generic Linux distribution
+#   ncvm --os alpine         boot Alpine Linux with optimized settings
+#   ncvm --os debian         boot Debian/Ubuntu
+#   ncvm --os arch           boot Arch Linux
+#   ncvm --os fedora         boot Fedora/RHEL
+#   ncvm --os freebsd        boot FreeBSD
+#   ncvm --os openbsd        boot OpenBSD
+#   ncvm --os netbsd         boot NetBSD
+#   ncvm --os windows        boot Windows (if supported by your build)
+#   ncvm --os generic        generic safe defaults for any OS
 #   ncvm -m 6G -c 6          memory / cpu cores (defaults 2G / 2)
-#   ncvm -n                  headless (serial on stdio — CI-style boot)
+#   ncvm -n                  headless (serial on stdio)
 #   ncvm --iso path.iso      boot a specific ISO
-#   ncvm --disk disk.img     attach this disk (default: disk.img next to
-#                            the ISO, if it exists)
-#   ncvm -a                  boot CodeOS arm64 (virt, ramfb; the arm64 kernel
-#                            ELF is auto-detected like the ISO on x86_64)
-#   ncvm -a -- <args>        ...with extra args straight to QEMU
-#   ncvm -- <args>           anything after -- goes straight to QEMU
+#   ncvm --disk disk.img     attach this disk
+#   ncvm --uefi              use UEFI firmware if available
+#   ncvm -a                  boot aarch64 (virt machine)
+#   ncvm -a --os codeos      boot CodeOS/Zircon arm64
+#   ncvm -- <args>           pass extra args straight to QEMU
 #   ncvm --help
 #
 # Env:
-#   NCVM_BIN_DIR   where the ncvm-<arch> binaries live (auto-detected:
-#                  ./bin, ../bin, next to this script, /usr/local/bin)
-#   NCVM_ISO       default ISO path (else searched in $PWD, ../CodeOS,
-#                  ~/CodeOS, ~/Projects/CodeOS kernel dirs, and the kernel
-#                  dir of this checkout when ported in-tree, e.g. ncvm/../kernel)
-#   NCVM_DISK      default disk image (else <iso dir>/disk.img)
+#   NCVM_BIN_DIR   where the ncvm-<arch> binaries live
+#   NCVM_ISO       default ISO path
+#   NCVM_DISK      default disk image
+#   NCVM_OS        default OS/profile
 set -euo pipefail
 
 # ── resolve our own location (repo checkout or /usr/local install) ──────
@@ -39,10 +45,46 @@ CPUS="2"
 HEADLESS=0
 ISO=""
 DISK=""
+OS="${NCVM_OS:-auto}"
+UEFI=0
+KERNEL=""
+INITRD=""
 EXTRA=()
 
 usage() {
-    sed -n '2,30p' "$SELF"
+    cat << 'EOF'
+ncvm — multi-OS VM launcher for the ncvm QEMU fork
+
+Usage:
+  ncvm [options] [-- qemu-args]
+
+Options:
+  --os <name>        OS/profile: auto, codeos, linux, alpine, debian, ubuntu,
+                     arch, fedora, rhel, centos, freebsd, openbsd, netbsd,
+                     windows, haiku, generic (default: auto)
+  --iso <path>       Boot from ISO image
+  --disk <path>      Attach disk image (qcow2/raw)
+  -m <size>          Memory (default: 2G)
+  -c <cores>         CPU cores (default: 2)
+  -n                 Headless mode (serial on stdio)
+  -a                 Use aarch64/ARM64 (virt machine)
+  --uefi             Use UEFI firmware (OVMF/edk2) if available
+  --kernel <path>    Boot kernel directly (aarch64 or custom)
+  --initrd <path>    Initrd for direct kernel boot
+  -h, --help         Show this help
+
+Examples:
+  ncvm                                    # Auto-detect CodeOS or generic
+  ncvm --os alpine --iso alpine.iso       # Boot Alpine Linux
+  ncvm --os linux --iso debian.iso -m 4G  # Boot Debian with more RAM
+  ncvm --disk ubuntu.qcow2                # Boot from disk
+  ncvm -a --os codeos                     # Boot CodeOS ARM64
+
+Environment:
+  NCVM_OS            Default OS profile
+  NCVM_ISO           Default ISO path
+  NCVM_BIN_DIR       Binary search path
+EOF
     exit 0
 }
 
@@ -54,10 +96,17 @@ while [ $# -gt 0 ]; do
               CPUS="$2"; shift 2 ;;
         -n)   HEADLESS=1; shift ;;
         -a)   ARCH="aarch64"; shift ;;
+        --os) [ $# -ge 2 ] || { echo "ncvm: --os needs a value" >&2; exit 1; }
+              OS="$2"; shift 2 ;;
         --iso) [ $# -ge 2 ] || { echo "ncvm: --iso needs a path" >&2; exit 1; }
               ISO="$2"; shift 2 ;;
         --disk) [ $# -ge 2 ] || { echo "ncvm: --disk needs a path" >&2; exit 1; }
               DISK="$2"; shift 2 ;;
+        --uefi) UEFI=1; shift ;;
+        --kernel) [ $# -ge 2 ] || { echo "ncvm: --kernel needs a path" >&2; exit 1; }
+              KERNEL="$2"; shift 2 ;;
+        --initrd) [ $# -ge 2 ] || { echo "ncvm: --initrd needs a path" >&2; exit 1; }
+              INITRD="$2"; shift 2 ;;
         --)   shift; EXTRA=("$@"); break ;;
         -h|--help) usage ;;
         *)    EXTRA+=("$1"); shift ;;
@@ -115,44 +164,295 @@ find_arm64_kernel() {
 
 QEMU_ARGS=()
 
+# Auto-detect OS if not specified
+if [ "$OS" = "auto" ]; then
+    if [ -n "$ISO" ]; then
+        basename_lower=$(basename "$ISO" | tr '[:upper:]' '[:lower:]')
+        case "$basename_lower" in
+            *alpine*) OS="alpine" ;;
+            *debian*|*ubuntu*) OS="debian" ;;
+            *arch*) OS="arch" ;;
+            *fedora*|*rhel*|*centos*|*rocky*|*alma*) OS="fedora" ;;
+            *freebsd*) OS="freebsd" ;;
+            *openbsd*) OS="openbsd" ;;
+            *netbsd*) OS="netbsd" ;;
+            *windows*|*win*) OS="windows" ;;
+            *codeos*) OS="codeos" ;;
+            *haiku*) OS="haiku" ;;
+            *) OS="linux" ;;
+        esac
+    elif [ -n "$DISK" ]; then
+        basename_lower=$(basename "$DISK" | tr '[:upper:]' '[:lower:]')
+        case "$basename_lower" in
+            *alpine*) OS="alpine" ;;
+            *debian*|*ubuntu*) OS="debian" ;;
+            *arch*) OS="arch" ;;
+            *fedora*) OS="fedora" ;;
+            *freebsd*) OS="freebsd" ;;
+            *openbsd*) OS="openbsd" ;;
+            *netbsd*) OS="netbsd" ;;
+            *windows*) OS="windows" ;;
+            *codeos*) OS="codeos" ;;
+            *) OS="linux" ;;
+        esac
+    else
+        # Try to find CodeOS ISO
+        if find_iso >/dev/null 2>&1; then
+            OS="codeos"
+        else
+            OS="linux"
+        fi
+    fi
+fi
+
 if [ "$ARCH" = "x86_64" ]; then
-    ISO="$(find_iso || true)"
-    if [ -z "$ISO" ]; then
-        echo "ncvm: no CodeOS ISO found (set NCVM_ISO or pass --iso)" >&2
-        exit 1
-    fi
-    QEMU_ARGS+=(
-        -machine q35
-        -vga std
-        -global VGA.edid=on
-        -m "$MEM"
-        -smp "$CPUS"
-        -serial stdio
-        -device usb-ehci,id=ehci
-        -device usb-tablet
-        -device usb-kbd
-        -netdev user,id=net0,hostfwd=tcp::7070-:80,hostfwd=tcp::2222-:22
-        -device e1000,netdev=net0
-    )
-    if [ -z "$DISK" ]; then
-        DISK="${NCVM_DISK:-$(dirname "$ISO")/disk.img}"
-        [ -f "$DISK" ] || DISK=""
-    fi
-    [ -z "$DISK" ] || QEMU_ARGS+=(-hda "$DISK")
-    QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+    case "$OS" in
+        codeos)
+            if [ -z "$ISO" ]; then
+                ISO="$(find_iso || true)"
+            fi
+            if [ -z "$ISO" ]; then
+                echo "ncvm: no CodeOS ISO found (set NCVM_ISO or pass --iso)" >&2
+                exit 1
+            fi
+            QEMU_ARGS+=(
+                -machine q35
+                -vga std
+                -global VGA.edid=on
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -device usb-ehci,id=ehci
+                -device usb-tablet
+                -device usb-kbd
+                -netdev user,id=net0,hostfwd=tcp::7070-:80,hostfwd=tcp::2222-:22
+                -device e1000,netdev=net0
+            )
+            if [ -z "$DISK" ]; then
+                DISK="${NCVM_DISK:-$(dirname "$ISO")/disk.img}"
+                [ -f "$DISK" ] || DISK=""
+            fi
+            [ -z "$DISK" ] || QEMU_ARGS+=(-drive file="$DISK",format=raw,if=virtio)
+            QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        alpine|arch|linux)
+            if [ -z "$ISO" ] && [ -z "$DISK" ]; then
+                echo "ncvm: --iso or --disk required for $OS" >&2
+                exit 1
+            fi
+            if [ "$UEFI" -eq 1 ]; then
+                find_ovmf() {
+                    for d in /usr/share/OVMF /usr/share/qemu /usr/share/edk2-ovmf*; do
+                        for f in "$d/OVMF_CODE.fd" "$d/OVMF_CODE_4M.fd" "$d/OVMF.fd"; do
+                            [ -f "$f" ] && echo "$f" && return 0
+                        done
+                    done
+                    return 1
+                }
+                OVMF_CODE="$(find_ovmf || true)"
+                if [ -n "$OVMF_CODE" ]; then
+                    OVMF_VARS="/tmp/ncvm-ovmf-vars-$$.fd"
+                    for v in /usr/share/OVMF/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/qemu/OVMF_VARS.fd; do
+                        [ -f "$v" ] && { cp "$v" "$OVMF_VARS" 2>/dev/null || true; break; }
+                    done
+                    [ -f "$OVMF_VARS" ] || OVMF_VARS=""
+                    QEMU_ARGS+=(-machine q35,smm=on -global driver=cfi.pflash01,property=secure,value=off)
+                    [ -n "$OVMF_VARS" ] && QEMU_ARGS+=(-drive if=pflash,format=raw,unit=0,file="$OVMF_CODE",readonly=on -drive if=pflash,format=raw,unit=1,file="$OVMF_VARS")
+                else
+                    QEMU_ARGS+=(-machine q35)
+                fi
+            else
+                QEMU_ARGS+=(-machine q35)
+            fi
+            QEMU_ARGS+=(
+                -vga std
+                -global VGA.edid=on
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -device virtio-net-pci,netdev=net0
+                -netdev user,id=net0,hostfwd=tcp::2222-:22
+                -device virtio-rng-pci
+                -device virtio-balloon-pci
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=virtio)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        debian|ubuntu|fedora|rhel|centos)
+            if [ -z "$ISO" ] && [ -z "$DISK" ]; then
+                echo "ncvm: --iso or --disk required for $OS" >&2
+                exit 1
+            fi
+            if [ "$UEFI" -eq 1 ]; then
+                find_ovmf() {
+                    for d in /usr/share/OVMF /usr/share/qemu /usr/share/edk2-ovmf*; do
+                        for f in "$d/OVMF_CODE.fd" "$d/OVMF_CODE_4M.fd"; do
+                            [ -f "$f" ] && echo "$f" && return 0
+                        done
+                    done
+                    return 1
+                }
+                OVMF_CODE="$(find_ovmf || true)"
+                if [ -n "$OVMF_CODE" ]; then
+                    OVMF_VARS="/tmp/ncvm-ovmf-vars-$$.fd"
+                    cp /usr/share/OVMF/OVMF_VARS.fd "$OVMF_VARS" 2>/dev/null || cp /usr/share/qemu/OVMF_VARS.fd "$OVMF_VARS" 2>/dev/null || true
+                    QEMU_ARGS+=(-machine q35,smm=on -drive if=pflash,format=raw,unit=0,file="$OVMF_CODE",readonly=on)
+                    [ -f "$OVMF_VARS" ] && QEMU_ARGS+=(-drive if=pflash,format=raw,unit=1,file="$OVMF_VARS")
+                else
+                    QEMU_ARGS+=(-machine q35)
+                fi
+            else
+                QEMU_ARGS+=(-machine q35)
+            fi
+            QEMU_ARGS+=(
+                -vga virtio
+                -display gtk,gl=on 2>/dev/null || -vga std
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -device virtio-net-pci,netdev=net0
+                -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8080-:80
+                -device virtio-rng-pci
+                -device virtio-balloon-pci
+                -device virtio-tablet-pci
+                -device virtio-keyboard-pci
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=virtio)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        freebsd|openbsd|netbsd)
+            if [ -z "$ISO" ] && [ -z "$DISK" ]; then
+                echo "ncvm: --iso or --disk required for $OS" >&2
+                exit 1
+            fi
+            QEMU_ARGS+=(
+                -machine q35
+                -vga std
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -device e1000,netdev=net0
+                -netdev user,id=net0,hostfwd=tcp::2222-:22
+                -device ahci,id=ahci
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=none,id=disk 2>/dev/null || -drive file="$DISK",format=raw,if=none,id=disk -device ide-hd,drive=disk,bus=ahci.0)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        windows)
+            if [ -z "$ISO" ] && [ -z "$DISK" ]; then
+                echo "ncvm: --iso or --disk required for $OS" >&2
+                exit 1
+            fi
+            if [ "$UEFI" -eq 1 ]; then
+                find_ovmf() {
+                    for d in /usr/share/OVMF /usr/share/qemu /usr/share/edk2-ovmf*; do
+                        for f in "$d/OVMF_CODE.fd" "$d/OVMF_CODE_4M.fd"; do
+                            [ -f "$f" ] && echo "$f" && return 0
+                        done
+                    done
+                    return 1
+                }
+                OVMF_CODE="$(find_ovmf || true)"
+                if [ -n "$OVMF_CODE" ]; then
+                    OVMF_VARS="/tmp/ncvm-ovmf-vars-$$.fd"
+                    cp /usr/share/OVMF/OVMF_VARS.fd "$OVMF_VARS" 2>/dev/null || cp /usr/share/qemu/OVMF_VARS.fd "$OVMF_VARS" 2>/dev/null || true
+                    QEMU_ARGS+=(-machine q35,smm=on -drive if=pflash,format=raw,unit=0,file="$OVMF_CODE",readonly=on)
+                    [ -f "$OVMF_VARS" ] && QEMU_ARGS+=(-drive if=pflash,format=raw,unit=1,file="$OVMF_VARS")
+                else
+                    QEMU_ARGS+=(-machine q35)
+                fi
+            else
+                QEMU_ARGS+=(-machine q35)
+            fi
+            QEMU_ARGS+=(
+                -vga std
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -usb
+                -device usb-tablet
+                -device e1000,netdev=net0
+                -netdev user,id=net0
+                -device intel-hda
+                -device hda-duplex
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=ide)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        haiku)
+            if [ -z "$ISO" ] && [ -z "$DISK" ]; then
+                echo "ncvm: --iso or --disk required for $OS" >&2
+                exit 1
+            fi
+            QEMU_ARGS+=(
+                -machine q35
+                -vga std
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -device e1000,netdev=net0
+                -netdev user,id=net0
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=raw,if=ide)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            ;;
+        generic|*)
+            if [ -z "$ISO" ] && [ -z "$DISK" ] && [ -z "$KERNEL" ]; then
+                # Try to find any ISO
+                for f in *.iso iso/*.iso; do
+                    [ -f "$f" ] && ISO="$f" && break
+                done
+            fi
+            if [ "$UEFI" -eq 1 ]; then
+                QEMU_ARGS+=(-machine q35)
+            else
+                QEMU_ARGS+=(-machine q35)
+            fi
+            QEMU_ARGS+=(
+                -vga std
+                -m "$MEM"
+                -smp "$CPUS"
+                -serial stdio
+                -netdev user,id=net0
+                -device e1000,netdev=net0
+            )
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=ide)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-boot order=d -cdrom "$ISO")
+            [ -n "$KERNEL" ] && QEMU_ARGS+=(-kernel "$KERNEL")
+            [ -n "$INITRD" ] && QEMU_ARGS+=(-initrd "$INITRD")
+            ;;
+    esac
 else
-    # aarch64: virt machine. ramfb gives the machine window a display
-    # (otherwise the GUI would show the QEMU (qemu) monitor prompt instead
-    # of the OS screen). The CodeOS/Kernel arm64 ELF is auto-detected next
-    # to the ISO candidates, so `ncvm -a` boots CodeOS arm64 out of the box.
-    QEMU_ARGS+=(-machine virt -cpu max -m "$MEM" -smp "$CPUS" -serial stdio \
-                -device ramfb)
-    kernel_given=0
-    for a in "${EXTRA[@]}"; do [ "$a" = "-kernel" ] && kernel_given=1; done
-    if [ "$kernel_given" -eq 0 ]; then
-        KRN="$(find_arm64_kernel || true)"
-        [ -z "$KRN" ] || QEMU_ARGS+=(-kernel "$KRN")
-    fi
+    # aarch64: virt machine
+    QEMU_ARGS+=(-machine virt -cpu max -m "$MEM" -smp "$CPUS" -serial stdio)
+    case "$OS" in
+        codeos)
+            QEMU_ARGS+=(-device ramfb)
+            kernel_given=0
+            for a in "${EXTRA[@]}"; do [ "$a" = "-kernel" ] && kernel_given=1; done
+            if [ "$kernel_given" -eq 0 ] && [ -z "$KERNEL" ]; then
+                KRN="$(find_arm64_kernel || true)"
+                [ -z "$KRN" ] || KERNEL="$KRN"
+            fi
+            [ -n "$KERNEL" ] && QEMU_ARGS+=(-kernel "$KERNEL")
+            [ -n "$INITRD" ] && QEMU_ARGS+=(-initrd "$INITRD")
+            [ -n "$ISO" ] && QEMU_ARGS+=(-drive file="$ISO",format=raw,if=none,id=cdrom -device virtio-scsi-device -device scsi-cd,drive=cdrom)
+            ;;
+        linux|alpine|debian|ubuntu|arch|fedora)
+            QEMU_ARGS+=(-device ramfb -device virtio-net-pci,netdev=net0 -netdev user,id=net0 -device virtio-rng-pci)
+            [ -n "$KERNEL" ] && QEMU_ARGS+=(-kernel "$KERNEL")
+            [ -n "$INITRD" ] && QEMU_ARGS+=(-initrd "$INITRD")
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=virtio)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-drive file="$ISO",format=raw,if=none,id=cdrom -device virtio-scsi-device -device scsi-cd,drive=cdrom -boot d)
+            ;;
+        *)
+            QEMU_ARGS+=(-device ramfb -netdev user,id=net0 -device virtio-net-pci,netdev=net0)
+            [ -n "$KERNEL" ] && QEMU_ARGS+=(-kernel "$KERNEL")
+            [ -n "$INITRD" ] && QEMU_ARGS+=(-initrd "$INITRD")
+            [ -n "$DISK" ] && QEMU_ARGS+=(-drive file="$DISK",format=qcow2,if=virtio 2>/dev/null || -drive file="$DISK",format=raw,if=virtio)
+            [ -n "$ISO" ] && QEMU_ARGS+=(-drive file="$ISO",format=raw,if=none,id=cdrom -device virtio-scsi-device -device scsi-cd,drive=cdrom -boot d)
+            ;;
+    esac
 fi
 
 # acceleration: KVM only accelerates the host's own arch (x86_64 here);

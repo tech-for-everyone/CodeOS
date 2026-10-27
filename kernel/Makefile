@@ -156,7 +156,7 @@ else
         -not -path "lvgl/src/draw/nxp/*" \
         -not -path "lvgl/src/extra/libs/*" \
         -not -path "lvgl/src/extra/others/*") \
-        arch/pci.c arch/serial.c arch/rtc.c arch/apic.c \
+        arch/pci.c arch/serial.c arch/rtc.c arch/apic.c arch/x86_64/cpu.c \
         lvgl_wm.c lvgl_port.c
 
     # Package sources (auto-discovered from pkgs/core/*/src/)
@@ -252,7 +252,7 @@ BAS_SRC = ../pkgs/core/bas/src
 BAS_PROGS = $(if $(wildcard $(BAS_DIR)/compiler/Cargo.toml),\
              $(addprefix bas-,$(notdir $(basename $(wildcard $(BAS_SRC)/*.ba)))))
 
-USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher ace_ui $(BAS_PROGS)
+USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher ace_ui $(BAS_PROGS)
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 BAS_ELF = $(addprefix userspace/,$(BAS_PROGS))
 
@@ -874,4 +874,25 @@ ifneq ($(ARCH),arm64)
 	cd $(RUST_DIR) && cargo clean 2>/dev/null || true
 	cd $(RUST_HD_DIR) && cargo clean 2>/dev/null || true
 	$(MAKE) -C userspace clean
+endif
+
+# UEFI boot via OVMF
+OVMF_CODE_UEFI ?= /usr/share/edk2/x64/OVMF_CODE.4m.fd
+OVMF_VARS_UEFI ?= /tmp/ovmf-vars-codeos.fd
+
+run-uefi: $(TARGET)
+	@test -f $(OVMF_CODE_UEFI) || (echo "OVMF not found at $(OVMF_CODE_UEFI)"; exit 1)
+	@if [ ! -f $(OVMF_VARS_UEFI) ]; then cp /usr/share/edk2/x64/OVMF_VARS.4m.fd $(OVMF_VARS_UEFI) 2>/dev/null || cp /usr/share/OVMF/x64/OVMF_VARS.4m.fd $(OVMF_VARS_UEFI) 2>/dev/null; fi
+	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -bios $(OVMF_CODE_UEFI) -drive if=pflash,format=raw,unit=1,file=$(OVMF_VARS_UEFI),readonly=off -kernel $(TARGET) $(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
+
+run-iso-uefi: codeos-1.0.iso $(LIVE_DISK_IMG)
+	@test -f $(OVMF_CODE_UEFI) || (echo "OVMF not found at $(OVMF_CODE_UEFI)"; exit 1)
+	@if [ ! -f $(OVMF_VARS_UEFI) ]; then cp /usr/share/edk2/x64/OVMF_VARS.4m.fd $(OVMF_VARS_UEFI) 2>/dev/null || cp /usr/share/OVMF/x64/OVMF_VARS.4m.fd $(OVMF_VARS_UEFI) 2>/dev/null; fi
+	$(QEMU) -machine q35 -m 16G -smp 4 -serial stdio $(QEMU_DISPLAY) -bios $(OVMF_CODE_UEFI) -drive if=pflash,format=raw,unit=1,file=$(OVMF_VARS_UEFI),readonly=off -boot order=d -cdrom codeos-1.0.iso $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
+
+# Make UEFI the default if OVMF is available
+ifeq ($(shell test -f /usr/share/edk2/x64/OVMF_CODE.4m.fd && echo yes),yes)
+run-uefi-default: run-iso-uefi
+else
+run-uefi-default: run-iso
 endif

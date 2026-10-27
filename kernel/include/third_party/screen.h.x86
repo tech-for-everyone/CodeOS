@@ -1,0 +1,19 @@
+/*
+ * This code doesnt work in riscv, only x86
+ */
+#ifndef __SCREEN_H
+#define __SCREEN_H
+
+#define SCREEN_ADDRESS 0xB8000
+#define MAX_COL 80
+#define MAX_ROW 25
+
+#define print(message) print_character(message)
+
+extern int position;
+
+void print_character(char *message);
+void clear_screen(void);
+void start_screen(void);
+
+#endif

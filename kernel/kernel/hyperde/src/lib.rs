@@ -1,5 +1,5 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 
 use core::ffi::{c_char, c_int, c_void};
 use core::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, AtomicPtr, Ordering};
@@ -23,6 +23,7 @@ mod overlay;
 mod animation;
 mod theme;
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     unsafe {

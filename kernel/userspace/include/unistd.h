@@ -352,6 +352,67 @@ static inline int sys_audio_status(void) {
     return ret;
 }
 
+/* The mixer: a stream is a source, and the samples written to it are
+ * played by the device.  These are the calls behind audio.h. */
+static inline int sys_audio_open(int rate, int channels) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_OPEN), "D"(rate), "S"(channels) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_write(int id, const void *buf, int bytes) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_WRITE), "D"(id), "S"(buf), "d"(bytes) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_close(int id) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_CLOSE), "D"(id) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_set_volume(int id, int volume) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_SET_VOLUME), "D"(id), "S"(volume) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_get_volume(int id) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_GET_VOLUME), "D"(id) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_get_free(int id) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_GET_FREE), "D"(id) : "memory");
+    return ret;
+}
+
+/* AUDIO_STATE_PLAY / PAUSE / STOP */
+#define AUDIO_STATE_STOP   0
+#define AUDIO_STATE_PLAY   1
+#define AUDIO_STATE_PAUSE  2
+
+static inline int sys_audio_set_state(int id, int state) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_SET_STATE), "D"(id), "S"(state) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_get_position(int id) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_GET_POS), "D"(id) : "memory");
+    return ret;
+}
+
+static inline int sys_audio_set_master(int volume) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_AUDIO_SET_MASTER), "D"(volume) : "memory");
+    return ret;
+}
+
 static inline int sys_pwrite(int fd, const void *buf, int count) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_PWRITE), "D"(fd), "S"(buf), "d"(count) : "memory");

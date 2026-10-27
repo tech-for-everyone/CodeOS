@@ -32,7 +32,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 QEMU_SRC="${NCVM_QEMU_SRC:-./src/qemu}"
-QEMU_TAG="${NCVM_QEMU_TAG:-v10.2.4}"
+QEMU_TAG="${NCVM_QEMU_TAG:-v11.1.2}"
 JOBS="$(nproc)"
 TARGET="${1:-all}"
 

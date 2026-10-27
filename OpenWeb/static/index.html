@@ -145,4 +145,18 @@
     <script src="/static/app.js"></script>
   </div>
 </body>
-</html>
+</html><script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw.js')
+      .then(registration => {
+        console.log('SW registered: ', registration);
+      })
+      .catch(registrationError => {
+        console.log('SW registration failed: ', registrationError);
+      });
+  });
+}
+</script>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a1a">

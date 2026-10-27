@@ -116,6 +116,7 @@ extern uint64_t syscall_kernel_rsp;
 extern void initramfs_populate(void);
 extern int rootfs_seed_android_stock(void);
 extern void fpu_init_early(void);
+extern void cpu_detect_hypervisor(void);
 extern int  limine_booted(void);
 extern uint64_t limine_hhdm_offset(void);
 extern int  limine_setup_fb(void);
@@ -556,6 +557,7 @@ void kernel_main(uint32_t magic __attribute__((unused)),
     }
 
     fpu_init_early();
+    cpu_detect_hypervisor();
 
     /* Suppress serial text output during bootsplash overlay */
     kprintf_disable_output();
