@@ -34,6 +34,12 @@ int main(void) {
     check("!1", JENGINE_NUMBER, 0);
     check("-(3 + 4)", JENGINE_NUMBER, -7);
 
+    check("true", JENGINE_BOOLEAN, 1);
+    check("false", JENGINE_BOOLEAN, 0);
+    check("null", JENGINE_NULL, 0);
+    check("undefined", JENGINE_UNDEFINED, 0);
+    check("true && false", JENGINE_NUMBER, 0);
+
     /* Comparisons */
     check("2 < 3 && 4 != 5", JENGINE_NUMBER, 1);
     check("2 < 1", JENGINE_NUMBER, 0);
@@ -59,6 +65,9 @@ int main(void) {
     /* Errors */
     check("1 / 0", JENGINE_ERROR, 0);               /* division by zero */
     check("1 % 0", JENGINE_ERROR, 0);               /* modulo by zero */
+    check("9223372036854775807 + 1", JENGINE_ERROR, 0); /* add overflow */
+    check("3037000500 * 3037000500", JENGINE_ERROR, 0); /* multiply overflow */
+    check("9223372036854775808", JENGINE_ERROR, 0);     /* literal overflow */
     check("2 + nope", JENGINE_ERROR, 0);            /* not a number */
     check("2 +", JENGINE_ERROR, 0);                 /* dangling operator */
     check("(1 + 2", JENGINE_ERROR, 0);              /* unbalanced paren */
@@ -85,6 +94,7 @@ int main(void) {
     check("let x = 4; { let y = 5; y } x", JENGINE_NUMBER, 4);        /* outer x */
 
     check("const C = 3; C = 4", JENGINE_ERROR, 0);   /* const is enforced */
+    check("const C = 3; let C = 4", JENGINE_ERROR, 0); /* const redeclaration */
     check("x = 1", JENGINE_ERROR, 0);                /* assign to undeclared */
     check("let x =", JENGINE_ERROR, 0);               /* truncated declaration */
     check("let = 5", JENGINE_ERROR, 0);               /* missing name */

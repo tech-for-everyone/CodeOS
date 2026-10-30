@@ -1,5 +1,4 @@
 #include "codeos_litehtml.h"
-#include "litehtml.h"
 #include "jengine/jengine.h"
 
 #include <memory>
@@ -11,7 +10,7 @@
 class CodeOSContainer : public litehtml::document_container {
 public:
 CodeOSContainer(const codeos_render_callbacks_t *callbacks)
-    : m_callbacks(callbacks), m_script_exec(0), m_width(0), m_height(0) {
+    : m_callbacks(callbacks), m_width(0), m_height(0) {
 
     ~CodeOSContainer() {
         for (auto &font : m_fonts) {
@@ -22,8 +21,8 @@ CodeOSContainer(const codeos_render_callbacks_t *callbacks)
     }
 
     int execute_script(const char *js_source, char *output, int max_out) {
-        if (m_script_exec) {
-            return m_script_exec(m_callbacks->user_data, js_source, output, max_out);
+        if (m_callbacks->script_exec) {
+            return m_callbacks->script_exec(m_callbacks->user_data, js_source, output, max_out);
         }
         if (!output || max_out <= 0) return -1;
         jengine_value result = jengine_eval(js_source);
@@ -210,7 +209,6 @@ private:
     };
 
     const codeos_render_callbacks_t *m_callbacks;
-    int m_script_exec;
     int m_width;
     int m_height;
     std::map<void*, void*> m_fonts;

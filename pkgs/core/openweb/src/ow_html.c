@@ -196,10 +196,9 @@ void render_html(const char *html, int len) {
                 flush_buf(buf, &col); add_blank_line();
                 int ln = ow_txt_lines;
                 if (ln < OW_TXT_LINES) {
+                    for (int li = 0; li < OW_TXT_COLS - 1; li++) ow_txt[ln][li] = ' ';
                     ow_txt[ln][0] = '>';
                     ow_txt[ln][1] = ' ';
-                    ow_txt[ln][2] = 0;
-                    for (int li = 0; li < OW_TXT_COLS - 1; li++) ow_txt[ln][li] = ' ';
                     ow_txt[ln][OW_TXT_COLS-1] = 0;
                     line_set_type(ln, OW_LT_BQ);
                     ow_txt_lines = ln + 1;

@@ -133,6 +133,11 @@ static int nb_sanitize(char *dst, const char *src, int src_max) {
         dst[n++] = c;
     }
     dst[n] = 0;
+    /* A separator-free name still must not be a parent-directory component. */
+    if ((n == 1 && dst[0] == '.') || (n == 2 && dst[0] == '.' && dst[1] == '.')) {
+        dst[0] = 0;
+        return 0;
+    }
     return n;
 }
 
@@ -264,9 +269,11 @@ static int nb_header_parse(char *hdr, char *fname, int *fsize) {
     /* size: after the '|' */
     for (i = i + 1; i < hl && hdr[i] != '\n'; i++) {
         if (hdr[i] < '0' || hdr[i] > '9') break;
+        if (v > (NB_MAX_PAYLOAD - (hdr[i] - '0')) / 10) return 0;
         v = v * 10 + (hdr[i] - '0');
         got_size = 1;
     }
+    if (i >= hl || hdr[i] != '\n') return 0;
     if (!got_size || v <= 0 || v > NB_MAX_PAYLOAD) return 0;
     *fsize = v;
     return 1;
@@ -491,6 +498,11 @@ static int nb_selftest(void) {
     t[nt].ok = (strcmp(clean, "hello.txt") == 0);
     snprintf(t[nt].got, sizeof(t[nt].got), "got '%s'", clean); nt++;
 
+    nb_sanitize(clean, "..", 2);
+    t[nt].what = "sanitize rejects parent component";
+    t[nt].ok = (clean[0] == 0);
+    snprintf(t[nt].got, sizeof(t[nt].got), "got '%s'", clean); nt++;
+
     /* The sender must put only the basename on the wire, or the receiver's
      * sanitizer flattens the whole path into one long filename. */
     t[nt].what = "basename strips directories";
@@ -514,6 +526,11 @@ static int nb_selftest(void) {
     snprintf(hdr, sizeof(hdr), "NB1|huge|%d\n", NB_MAX_PAYLOAD + 1);
     sz = 0;
     t[nt].what = "header rejects oversize";
+    t[nt].ok = !nb_header_parse(hdr, fn, &sz);
+    snprintf(t[nt].got, sizeof(t[nt].got), "sz=%d", sz); nt++;
+
+    snprintf(hdr, sizeof(hdr), "NB1|huge|999999999999999999999999\n");
+    t[nt].what = "header rejects overflowing size";
     t[nt].ok = !nb_header_parse(hdr, fn, &sz);
     snprintf(t[nt].got, sizeof(t[nt].got), "sz=%d", sz); nt++;
 

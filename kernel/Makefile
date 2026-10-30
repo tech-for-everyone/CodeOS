@@ -200,10 +200,12 @@ SRC_C += ../src/jengine.c
 # OpenWeb is an optional checkout.  Search the common sibling locations and
 # only add an include directory when it really exists; a stale absolute path
 # otherwise makes clean builds fail on every other machine.
-OPENWEB_LITEHTML_DIR ?= $(firstword $(wildcard \
+OPENWEB_LITEHTML_DIR ?= $(firstword $(foreach d, \
     ../Openweb/litehtml/include \
     ../Openweb/eclipse/litehtml/include \
-    /usr/include/litehtml))
+    /usr/local/include \
+    /usr/include, \
+    $(if $(wildcard $(d)/litehtml/litehtml.h),$(d))))
 ifneq ($(strip $(OPENWEB_LITEHTML_DIR)),)
     OPENWEB_INCLUDES = -I$(OPENWEB_LITEHTML_DIR)
 else
@@ -456,6 +458,12 @@ lvgl/src/%.o: CFLAGS += -Wno-unused-but-set-variable
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# The packaged litehtml headers are hosted C++ headers and include the
+# standard library (cstdlib, memory, ...).  Keep those includes local to this
+# translation unit; adding them to every freestanding kernel source would
+# accidentally pull hosted libc declarations into unrelated code.
+kernel/codeos_litehtml.o kernel/kernel/codeos_litehtml.o: CXXFLAGS += $(STDCXX_INCLUDES)
 
 # cxx_support.cpp needs SSE for double return values (x86_64 ABI compliance)
 # TEMPORARY: g++ so that the Qt desktop #GP can be isolated to this TU's codegen.

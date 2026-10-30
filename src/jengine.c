@@ -134,8 +134,10 @@ static jengine_var *scope_define(parser_t *ps, const char *name, int64_t value, 
     int i;
     for (i = 0; i < s->count; i++) {
         if (je_streq(s->vars[i].name, name)) {
+            /* A const binding cannot be changed by redeclaring it with let,
+             * nor can it be declared twice. */
+            if (s->vars[i].readonly || readonly) { ps->error = 1; return NULL; }
             s->vars[i].value = value;
-            s->vars[i].readonly = readonly;
             return &s->vars[i];
         }
     }
@@ -187,6 +189,14 @@ static int match_keyword(parser_t *ps, const char *kw) {
     return 1;
 }
 
+static int je_single_word(const char *source, const char *word) {
+    while (je_is_space(*source)) source++;
+    while (*word && *source == *word) { source++; word++; }
+    if (*word) return 0;
+    while (je_is_space(*source)) source++;
+    return *source == 0;
+}
+
 /* ── Forward declarations ── */
 static int64_t parse_expr(parser_t *ps);
 static int64_t exec_statements(parser_t *ps);
@@ -198,11 +208,33 @@ static int64_t parse_number(parser_t *ps) {
     while (je_is_digit(*ps->p)) {
         int digit = *ps->p++ - '0';
         if (value > (INT64_MAX - digit) / 10) ps->error = 1;
-        value = value * 10 + digit;
+        else value = value * 10 + digit;
         digits = 1;
     }
     if (!digits) ps->error = 1;
     return value;
+}
+
+static int je_add(int64_t a, int64_t b, int64_t *out) {
+    if ((b > 0 && a > INT64_MAX - b) || (b < 0 && a < INT64_MIN - b)) return 0;
+    *out = a + b;
+    return 1;
+}
+
+static int je_sub(int64_t a, int64_t b, int64_t *out) {
+    if ((b < 0 && a > INT64_MAX + b) || (b > 0 && a < INT64_MIN + b)) return 0;
+    *out = a - b;
+    return 1;
+}
+
+static int je_mul(int64_t a, int64_t b, int64_t *out) {
+    if (a > 0) {
+        if (b > 0 ? a > INT64_MAX / b : b < INT64_MIN / a) return 0;
+    } else if (a < 0) {
+        if (b > 0 ? a < INT64_MIN / b : (a != 0 && b < INT64_MAX / a)) return 0;
+    }
+    *out = a * b;
+    return 1;
 }
 
 static int64_t parse_or(parser_t *ps);
@@ -268,6 +300,9 @@ static int64_t parse_primary(parser_t *ps) {
             if (failed) { ps->error = 1; return 0; }
             return result;
         }
+        if (je_streq(name, "true")) return 1;
+        if (je_streq(name, "false")) return 0;
+        if (je_streq(name, "null")) return 0;
         /* Bare identifier: a variable, or an unknown name (an error, so
          * `2 + nope` is reported rather than silently treated as 0). */
         jengine_var *v = scope_find(name);
@@ -280,7 +315,13 @@ static int64_t parse_primary(parser_t *ps) {
 static int64_t parse_unary(parser_t *ps) {
     skip_space(ps);
     if (*ps->p == '+') { ps->p++; return parse_unary(ps); }
-    if (*ps->p == '-') { ps->p++; return -parse_unary(ps); }
+    if (*ps->p == '-') {
+        int64_t value;
+        ps->p++;
+        value = parse_unary(ps);
+        if (value == INT64_MIN) ps->error = 1;
+        return -value;
+    }
     if (*ps->p == '!') { ps->p++; return !parse_unary(ps); }
     return parse_primary(ps);
 }
@@ -290,11 +331,14 @@ static int64_t parse_multiply(parser_t *ps) {
     for (;;) {
         skip_space(ps);
         if (*ps->p == '*') {
-            ps->p++; value *= parse_unary(ps);
+            int64_t rhs, out;
+            ps->p++; rhs = parse_unary(ps);
+            if (!je_mul(value, rhs, &out)) ps->error = 1;
+            else value = out;
         } else if (*ps->p == '/') {
             int64_t rhs;
             ps->p++; rhs = parse_unary(ps);
-            if (rhs == 0) ps->error = 1;
+            if (rhs == 0 || (value == INT64_MIN && rhs == -1)) ps->error = 1;
             else value /= rhs;
         } else if (*ps->p == '%') {
             int64_t rhs;
@@ -310,8 +354,18 @@ static int64_t parse_add(parser_t *ps) {
     int64_t value = parse_multiply(ps);
     for (;;) {
         skip_space(ps);
-        if (*ps->p == '+') { ps->p++; value += parse_multiply(ps); }
-        else if (*ps->p == '-') { ps->p++; value -= parse_multiply(ps); }
+        if (*ps->p == '+') {
+            int64_t rhs, out;
+            ps->p++; rhs = parse_multiply(ps);
+            if (!je_add(value, rhs, &out)) ps->error = 1;
+            else value = out;
+        }
+        else if (*ps->p == '-') {
+            int64_t rhs, out;
+            ps->p++; rhs = parse_multiply(ps);
+            if (!je_sub(value, rhs, &out)) ps->error = 1;
+            else value = out;
+        }
         else break;
     }
     return value;
@@ -538,6 +592,19 @@ jengine_value jengine_eval(const char *source) {
     interpreter_reset();
 
     if (!source) return result;
+
+    /* Preserve JavaScript primitive result types for standalone literals;
+     * inside expressions they participate as integer truth values. */
+    if (je_single_word(source, "true")) {
+        result.type = JENGINE_BOOLEAN; result.num_val = 1; return result;
+    }
+    if (je_single_word(source, "false")) {
+        result.type = JENGINE_BOOLEAN; result.num_val = 0; return result;
+    }
+    if (je_single_word(source, "null")) {
+        result.type = JENGINE_NULL; result.num_val = 0; return result;
+    }
+    if (je_single_word(source, "undefined")) return result;
 
     parser.p = source;
     parser.error = 0;

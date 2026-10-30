@@ -2,7 +2,7 @@
 #define CODEOS_LITEHTML_H
 
 #include <stdint.h>
-#include <litehtml.h>
+#include <litehtml/litehtml.h>
 
 #ifdef __cplusplus
 extern "C" {

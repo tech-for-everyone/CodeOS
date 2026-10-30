@@ -6,6 +6,20 @@
 
 static int g_initialized;
 
+static int ow_has_scheme(const char *text) {
+    const char *p = text;
+    if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z'))) return 0;
+    p++;
+    while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+           (*p >= '0' && *p <= '9') || *p == '+' || *p == '-' || *p == '.') p++;
+    return *p == ':';
+}
+
+static int ow_looks_like_url(const char *text) {
+    return ow_has_scheme(text) || text[0] == '/' ||
+           strncmp(text, "localhost", 9) == 0 || strchr(text, '.') != 0;
+}
+
 void ow_core_init(void) {
     if (g_initialized) return;
     ow_tab_new("about:blank");
@@ -18,8 +32,7 @@ void ow_core_navigate(const char *text) {
     if (!text || !text[0]) return;
     ow_core_init();
     kprintf("CORE nav text='%s'\n", text);
-    if (!strchr(text, '.') && strncmp(text, "http", 4) != 0 &&
-        strncmp(text, "about:", 6) != 0) {
+    if (!ow_looks_like_url(text)) {
         kprintf("CORE -> ow_search\n");
         ow_search(text);
         kprintf("CORE ow_search done\n");
