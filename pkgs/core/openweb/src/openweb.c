@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "openweb.h"
 #include "ow_html.h"
+#include "ow_engine.h"
 #include <unistd.h>
 
 #define MAX_URL 512
@@ -188,7 +189,8 @@ static void handle_key(int key) {
             g_url[0] = 0;
             if (idx >= 0 && idx < sys_web_tab_count()) sys_web_tab_set_active(idx);
         } else {
-            snprintf(g_status_msg, sizeof(g_status_msg), "Navigating to: %s", g_url);
+            snprintf(g_status_msg, sizeof(g_status_msg), "Navigating to: %.*s",
+                     (int)sizeof(g_status_msg) - 16, g_url);
             sys_web_navigate(g_url);
             g_url[0] = 0;
             g_scroll = 0;
@@ -238,14 +240,16 @@ static void handle_key(int key) {
     }
     if (key == 'r' || key == 'R') {
         if (g_url[0]) {
-            snprintf(g_status_msg, sizeof(g_status_msg), "Reloading: %s", g_url);
+            snprintf(g_status_msg, sizeof(g_status_msg), "Reloading: %.*s",
+                     (int)sizeof(g_status_msg) - 12, g_url);
             sys_web_navigate(g_url);
         } else {
             web_state_t st;
             memset(&st, 0, sizeof(st));
             sys_web_get_info(&st);
             if (st.url[0]) {
-                snprintf(g_status_msg, sizeof(g_status_msg), "Reloading: %s", st.url);
+                snprintf(g_status_msg, sizeof(g_status_msg), "Reloading: %.*s",
+                         (int)sizeof(g_status_msg) - 12, st.url);
                 sys_web_navigate(st.url);
             } else {
                 snprintf(g_status_msg, sizeof(g_status_msg), "No URL to reload");
@@ -311,13 +315,15 @@ static void handle_key(int key) {
         if (len < MAX_URL - 1) {
             g_url[len] = (char)key;
             g_url[len + 1] = 0;
-            snprintf(g_status_msg, sizeof(g_status_msg), "URL: %s", g_url);
+            snprintf(g_status_msg, sizeof(g_status_msg), "URL: %.*s",
+                     (int)sizeof(g_status_msg) - 6, g_url);
             g_dirty = 1;
         }
     }
 }
 
 int main(void) {
+    ow_engine_init();
     printf("\x1b[?25l");
     int raw = enter_raw_mode();
 

@@ -28,8 +28,8 @@ extern "C" void kprintf(const char *fmt, ...);
 #include <QDesktopServices>
 #include <QPlainTextEdit>
 
-extern "C" void penrose_init(void);
-extern "C" void penrose_pump(void);
+extern "C" void windowland_init(void);
+extern "C" void windowland_pump(void);
 
 extern "C" {
 #include "mouse.h"
@@ -716,7 +716,7 @@ void QtDesktopManager::run() {
     m_running = true;
     kprintf("Qt6: Full desktop running (%dx%d)\n", scr_w, scr_h);
     hyperde_shell_init();
-    penrose_init();   /* penrose tiling WM (X11 position manager) */
+    windowland_init();   /* Windowland tiling WM (X11 position manager) */
     /* HyperDE owns the top chrome when active: hide the Qt menubar so its
        repaints never cover the Rust-drawn liquid-glass bar, and route bar
        clicks through the transparent strip to hyperde_shell_bar_hit(). */
@@ -736,7 +736,7 @@ void QtDesktopManager::run() {
     while (m_running) {
         app.processEvents(QEventLoop::AllEvents, 16);
         extern void xs_present(void);      /* composite X11 client windows */
-        penrose_pump();                    /* run penrose WM against X11 events */
+        windowland_pump();                    /* run Windowland against X11 events */
         xs_present();
         hyperde_shell_pump(&m_wm);
         updater_tick();

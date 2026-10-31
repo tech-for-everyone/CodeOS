@@ -996,11 +996,20 @@ pub unsafe extern "C" fn hyperde_shell_init() {
         FB_W.load(RELAX) as c_int, FB_H.load(RELAX) as c_int, fb_get_bpp() as c_int);
     kprintf(b"HYPERDE: compositor active=%d\0".as_ptr() as *const c_char, ACTIVE.load(RELAX));
 
-    wayland::hyperde_wl_selftest();
-
     /* load conf.lua config into mutable palette */
     config::config_parse_lua(include_str!("../../../../userspace/hyperde/conf.lua").as_bytes());
+    if config::backend() == config::BACKEND_WAYLAND {
+        kprintf(b"HYPERDE: backend=wayland (opt-in)\0".as_ptr() as *const c_char, 0, 0, 0, 0);
+        wayland::hyperde_wl_selftest();
+    } else {
+        kprintf(b"HYPERDE: backend=x11 (default)\0".as_ptr() as *const c_char, 0, 0, 0, 0);
+    }
     palette_load_config();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn hyperde_shell_backend() -> c_int {
+    config::backend() as c_int
 }
 
 #[no_mangle]

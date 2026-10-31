@@ -615,8 +615,9 @@ private:
     QString m_confirmName;
     QString m_status;
     bool m_statusOk = true;
+    QString m_query;
     QRect m_listRect;
-    QRect m_storeTab, m_installedTab, m_installBtn, m_syncBtn;
+    QRect m_storeTab, m_installedTab, m_searchRect, m_installBtn, m_syncBtn;
     QRect m_yesBtn, m_noBtn;
 };
 

@@ -1,5 +1,6 @@
 #include "openweb_core.h"
 #include "ow_html.h"
+#include "ow_engine.h"
 
 #include <string.h>
 #include "kprintf.h"
@@ -22,6 +23,7 @@ static int ow_looks_like_url(const char *text) {
 
 void ow_core_init(void) {
     if (g_initialized) return;
+    ow_engine_init();
     ow_tab_new("about:blank");
     g_initialized = 1;
 }
@@ -133,6 +135,16 @@ int ow_core_tab_count(void) { return g_initialized ? ow_get_tab_count() : 0; }
 int ow_core_active_tab(void) { return g_initialized ? ow_get_tab_active() : -1; }
 int ow_core_used_tab_count(void) { return g_initialized ? ow_tab_used_count() : 0; }
 int ow_core_load_progress(void) { return g_initialized ? ow_get_load_progress() : 0; }
+
+int ow_core_engine_select(int backend) {
+    ow_core_init();
+    return ow_engine_select(backend);
+}
+
+void ow_core_engine_status(ow_engine_status_t *status) {
+    ow_core_init();
+    ow_engine_status(status);
+}
 
 /* Render the active tab with the Rust renderer (ow_render_rs) and print the
  * resulting grid to the console. Headless verification aid. */

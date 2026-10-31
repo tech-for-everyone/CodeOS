@@ -101,6 +101,20 @@ void QtDevStoreWidget::reload() {
         m_entries = only;
     }
 
+    /* Keep search local to the store so filtering never changes package
+     * manager state. Matching name and description makes the catalogue useful
+     * even when the package name is unfamiliar. */
+    if (!m_query.trimmed().isEmpty()) {
+        QList<Entry> filtered;
+        const QString query = m_query.trimmed();
+        for (const Entry &e : m_entries) {
+            if (e.name.contains(query, Qt::CaseInsensitive) ||
+                e.desc.contains(query, Qt::CaseInsensitive))
+                filtered.append(e);
+        }
+        m_entries = filtered;
+    }
+
     if (m_selected >= m_entries.size()) m_selected = -1;
     if (m_selected < 0 && !m_entries.isEmpty()) m_selected = 0;
     m_scroll = 0;
@@ -221,6 +235,21 @@ void QtDevStoreWidget::paintContent(QPainter &p, const QRect &r) {
     /* "Sync repos" — pulls pkg.index from the http(s) repositories so that
      * network-discovered packages show up in the Store. */
     m_syncBtn = QRect(r.right() - DS_PAD - 122, tabsY, 122, DS_TAB_H);
+
+    m_searchRect = QRect(m_installedTab.right() + 12, tabsY,
+                         qMax(120, m_syncBtn.left() - m_installedTab.right() - 28),
+                         DS_TAB_H);
+    p.setPen(QPen(QColor(0x70, 0x70, 0x76, 130), 1));
+    p.setBrush(QColor(0x25, 0x25, 0x29, 190));
+    p.drawRoundedRect(m_searchRect, 8, 8);
+    QFont qf = f; qf.setPointSize(10); p.setFont(qf);
+    p.setPen(m_query.isEmpty() ? c_subtext : c_text);
+    QString searchText = m_query.isEmpty() ? "Search packages (/)" : m_query;
+    p.drawText(m_searchRect.adjusted(10, 0, -10, 0),
+               Qt::AlignVCenter | Qt::AlignLeft,
+               QFontMetrics(qf).elidedText(searchText, Qt::ElideRight,
+                                            m_searchRect.width() - 20));
+
     drawGlassButton(p, m_syncBtn, m_syncing ? "Syncing…" : "Sync repos",
                     m_syncing ? BtnDisabled
                               : (m_hoverBtn == 2 ? BtnHover : BtnNormal),
@@ -386,6 +415,14 @@ void QtDevStoreWidget::mousePressEvent(QMouseEvent *e) {
     if (m_installedTab.contains(pos)) { m_mode = 1; reload(); update(); return; }
     if (m_syncBtn.contains(pos))      { runSync(); return; }
 
+    if (m_searchRect.contains(pos)) {
+        setFocus();
+        m_status = "Type to search; Esc clears the filter.";
+        m_statusOk = true;
+        update();
+        return;
+    }
+
     if (m_installBtn.contains(pos)) {
         beginInstall(m_selected);
         update();
@@ -428,6 +465,25 @@ void QtDevStoreWidget::keyPressEvent(QKeyEvent *e) {
         if (k == Qt::Key_Y || k == Qt::Key_Return || k == Qt::Key_Enter) { runInstall(); return; }
         if (k == Qt::Key_N || k == Qt::Key_Escape) { m_confirm = false; update(); return; }
         return;
+    }
+
+    if (e->key() == Qt::Key_Escape && !m_query.isEmpty()) {
+        m_query.clear(); reload(); update(); return;
+    }
+    if (e->key() == Qt::Key_Backspace && !m_query.isEmpty()) {
+        m_query.chop(1); reload(); update(); return;
+    }
+    if (e->key() == Qt::Key_Slash) {
+        m_query.clear();
+        m_status = "Type to search; Esc clears the filter.";
+        m_statusOk = true;
+        reload(); update(); return;
+    }
+    const QString typed = e->text();
+    if (!typed.isEmpty() && !typed.at(0).isSpace() &&
+        !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+        m_query += typed;
+        reload(); update(); return;
     }
 
     switch (e->key()) {

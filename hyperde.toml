@@ -10,6 +10,9 @@ launcher_command = ""
 normal_border = "#3c3836ff"
 focused_border = "#cc241dff"
 border_width = 2
+# Hyprland-style tiling spacing, in pixels.
+gaps_in = 8
+gaps_out = 12
 focus_follow_mouse = true
 floating_classes = ["dmenu", "dunst"]
 

@@ -282,9 +282,9 @@ $(CDP_BRIDGE_BIN): $(CDP_BRIDGE_SRC)
 	mkdir -p $(dir $@)
 	x86_64-linux-gnu-gcc -O2 -Wall -Wextra -std=c11 -D_GNU_SOURCE -o $@ $(CDP_BRIDGE_SRC) -lpthread
 
-# ── Rust tiling window manager (penrose) ──
+# ── Rust tiling window manager (Windowland, formerly Penrose) ──
 RUST_PR_DIR = kernel/rust_penrose
-RUST_PR_LIB = $(RUST_PR_DIR)/target/x86_64-unknown-none/release/libpenrose.a
+RUST_PR_LIB = $(RUST_PR_DIR)/target/x86_64-unknown-none/release/libwindowland.a
 
 RUST_PR_SRCS = $(wildcard $(RUST_PR_DIR)/src/*.rs) \
                $(wildcard $(RUST_PR_DIR)/src/core/*.rs) \

@@ -1,4 +1,4 @@
-//! The real CodeOS transport for penrose: a [`Conn`] bound to the kernel X11
+//! The real CodeOS transport for Windowland: a [`Conn`] bound to the kernel X11
 //! server and HyperDE compositor via the C bridge in `penrose_bridge.c`.
 
 use crate::pure::geometry::{Point, Rect};
@@ -498,13 +498,13 @@ extern "C" {
 // FFI exports: called from the C desktop loop
 // ---------------------------------------------------------------------------
 
-/// Initialize the penrose WM. Called once from `qt_panels_manager.cpp` at
+/// Initialize Windowland. Called once from `qt_panels_manager.cpp` at
 /// desktop startup after the compositor and X11 server are ready.
 ///
 /// # Safety
 /// Must only be called once.
 #[no_mangle]
-pub unsafe extern "C" fn penrose_init() {
+pub unsafe extern "C" fn windowland_init() {
     use crate::core::WindowManager;
 
     static mut CALL_ID: i32 = 0;
@@ -513,17 +513,17 @@ pub unsafe extern "C" fn penrose_init() {
         CALL_ID
     };
     unsafe {
-        crate::kprintf(b"penrose: start #%d\n\0".as_ptr(), id as usize, 0, 0, 0, 0);
+        crate::kprintf(b"windowland: start #%d\n\0".as_ptr(), id as usize, 0, 0, 0, 0);
     }
 
     let conn = match CodeOSConn::try_new() {
         Ok(c) => c,
         Err(e) => {
-            error!("penrose_init: failed to create CodeOSConn");
+            error!("windowland_init: failed to create CodeOSConn");
             return;
         }
     };
-    klog("penrose: conn ok\n");
+    klog("windowland: conn ok\n");
 
     let mut wm = match WindowManager::new(
         Config::default(),
@@ -533,11 +533,11 @@ pub unsafe extern "C" fn penrose_init() {
     ) {
         Ok(w) => w,
         Err(e) => {
-            error!("penrose_init: failed to create WindowManager");
+            error!("windowland_init: failed to create WindowManager");
             return;
         }
     };
-    klog("penrose: init ok\n");
+    klog("windowland: init ok\n");
 
     // Spawn demo X11 windows via the bridge. Their MapRequests are queued and
     // drained below so the WM manages + tiles them before the first frame.
@@ -549,7 +549,7 @@ pub unsafe extern "C" fn penrose_init() {
     // are the ones the check is actually about.
     unsafe {
         if prs_demos_disabled() != 0 {
-            klog("penrose: demos suppressed by no-demos\n");
+            klog("windowland: demos suppressed by no-demos\n");
         } else {
             let titles: [*const u8; 3] = [
                 b"HyperDE\0".as_ptr(),
@@ -559,14 +559,14 @@ pub unsafe extern "C" fn penrose_init() {
             for &title in &titles {
                 prs_demo_window(title);
             }
-            klog("penrose: demos queued\n");
+            klog("windowland: demos queued\n");
         }
     }
 
     process_pending(&mut wm);
-    klog("penrose: pending done\n");
+    klog("windowland: pending done\n");
 
-    // Keep the WindowManager alive in a static so penrose_pump can access it.
+    // Keep the WindowManager alive in a static so windowland_pump can access it.
     unsafe {
         WM_INSTANCE.replace(wm);
     }
@@ -584,7 +584,7 @@ fn process_pending(wm: &mut crate::core::WindowManager<CodeOSConn>) {
         }
     }
     if count > 0 {
-        klog(&format_str("penrose: processed ", count));
+        klog(&format_str("windowland: processed ", count));
     }
 }
 
@@ -620,9 +620,9 @@ fn klog(msg: &str) {
 /// from the desktop loop, *before* the compositor presents.
 ///
 /// # Safety
-/// Must only be called after `penrose_init`.
+/// Must only be called after `windowland_init`.
 #[no_mangle]
-pub unsafe extern "C" fn penrose_pump() {
+pub unsafe extern "C" fn windowland_pump() {
     let wm = match WM_INSTANCE.as_mut() {
         Some(w) => w,
         None => return,
@@ -630,6 +630,13 @@ pub unsafe extern "C" fn penrose_pump() {
 
     process_pending(wm);
 }
+
+/* Stable ABI aliases for older desktop objects and third-party integrations. */
+#[no_mangle]
+pub unsafe extern "C" fn penrose_init() { windowland_init(); }
+
+#[no_mangle]
+pub unsafe extern "C" fn penrose_pump() { windowland_pump(); }
 
 static mut WM_INSTANCE: Option<crate::core::WindowManager<CodeOSConn>> = None;
 

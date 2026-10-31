@@ -6,6 +6,10 @@ local env = require("rust_desktop_core")
 local actions = env.actions
 
 -- =========================================================================
+-- X11 remains the clean-install default. Set this to "wayland" only when
+-- enabling the opt-in kernel Wayland protocol backend.
+backend = "x11"
+
 -- 2. ENVIRONMENT & PREFERENCES
 -- =========================================================================
 local config = {

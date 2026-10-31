@@ -1,4 +1,4 @@
-//! Penrose: a library for building your very own tiling window manager.
+//! Windowland: CodeOS's tiling window manager, originally based on Penrose.
 //!
 //! Vendored into CodeOS from https://github.com/sminez/penrose (MIT) and adapted
 //! to build as a `no_std` kernel crate (`x86_64-unknown-none`) so that the real
@@ -49,7 +49,7 @@ static ALLOC: KernAlloc = KernAlloc;
 #[panic_handler]
 fn panic(info: &::core::panic::PanicInfo) -> ! {
     unsafe {
-        kprintf(b"PENROSE: PANIC\0".as_ptr(), 0, 0, 0, 0, 0);
+        kprintf(b"WINDOWLAND: PANIC\0".as_ptr(), 0, 0, 0, 0, 0);
         if let Some(loc) = info.location() {
             kprintf(
                 b"  at %s:%u\0".as_ptr(),

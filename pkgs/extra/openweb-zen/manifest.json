@@ -1,0 +1,12 @@
+{
+    "name": "openweb-zen",
+    "version": "0.1.0",
+    "description": "OpenWeb desktop browser, based on Zen, launched inside Debian through linux-runner",
+    "author": "CodeOS OpenWeb Team",
+    "license": "MPL-2.0",
+    "binaries": ["openweb"],
+    "dependencies": ["linux-runner", "debian-minimal"],
+    "categories": ["network", "web", "browser"],
+    "source": "third_party/zen",
+    "runtime": "debian-minimal:/usr/bin/openweb"
+}

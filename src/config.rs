@@ -28,6 +28,8 @@ pub struct WindowManagerConfig {
 	pub normal_border: String,
 	pub focused_border: String,
 	pub border_width: u32,
+	pub gaps_in: u32,
+	pub gaps_out: u32,
 	pub focus_follow_mouse: bool,
 	pub floating_classes: Vec<String>,
 }
@@ -73,6 +75,8 @@ impl Default for WindowManagerConfig {
 			normal_border: String::from("#3c3836ff"),
 			focused_border: String::from("#cc241dff"),
 			border_width: 2,
+			gaps_in: 8,
+			gaps_out: 12,
 			focus_follow_mouse: true,
 			floating_classes: vec![String::from("dmenu"), String::from("dunst")],
 		}
@@ -86,6 +90,9 @@ impl HyperdeConfig {
 		}
 		if self.window_manager.border_width > 64 {
 			return Err("window_manager.border_width must be 64 or less".into());
+		}
+		if self.window_manager.gaps_in > 256 || self.window_manager.gaps_out > 256 {
+			return Err("window_manager gaps must be 256 pixels or less".into());
 		}
 		self.validate_workspaces()?;
 		self.validate_applications()?;
@@ -126,7 +133,7 @@ impl HyperdeConfig {
 		let mut names = HashSet::new();
 		let mut keys = HashSet::new();
 		let mut reserved_keys: HashSet<String> = [
-			"M-j", "M-k", "M-S-j", "M-S-k", "M-S-q", "M-q", "M-space", "M-S-space",
+			"M-h", "M-j", "M-k", "M-l", "M-S-h", "M-S-j", "M-S-k", "M-S-l", "M-S-q", "M-q", "M-f", "M-space", "M-S-space",
 			"M-S-Up", "M-S-Down", "M-S-Right", "M-S-Left", "M-Return", "M-d",
 		]
 		.into_iter()
@@ -167,6 +174,12 @@ impl HyperdeConfig {
 		config.border_width = self.window_manager.border_width;
 		config.focus_follow_mouse = self.window_manager.focus_follow_mouse;
 		config.floating_classes = self.window_manager.floating_classes.clone();
+		config.compose_or_set_layout_hook(penrose::builtin::hooks::SpacingHook {
+			outer_px: self.window_manager.gaps_out,
+			inner_px: self.window_manager.gaps_in,
+			top_px: self.compositor.panel_height as u32,
+			bottom_px: 0,
+		});
 		Ok(config)
 	}
 }
@@ -221,6 +234,12 @@ fn load_lua(contents: &str) -> Result<HyperdeConfig, Box<dyn Error>> {
 		config.window_manager.border_width = window_manager
 			.get::<_, Option<u32>>("border_width")?
 			.unwrap_or(config.window_manager.border_width);
+		config.window_manager.gaps_in = window_manager
+			.get::<_, Option<u32>>("gaps_in")?
+			.unwrap_or(config.window_manager.gaps_in);
+		config.window_manager.gaps_out = window_manager
+			.get::<_, Option<u32>>("gaps_out")?
+			.unwrap_or(config.window_manager.gaps_out);
 		config.window_manager.focus_follow_mouse = window_manager
 			.get::<_, Option<bool>>("focus_follow_mouse")?
 			.unwrap_or(config.window_manager.focus_follow_mouse);

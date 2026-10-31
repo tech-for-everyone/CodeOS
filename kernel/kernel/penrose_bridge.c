@@ -57,7 +57,35 @@ int prs_event_count(void) {
 }
 
 static void push_event(prs_event_t *ev) {
-    if (g_qcount >= PRS_QUEUE_MAX) return;
+    /* Pointer motion can arrive much faster than the desktop frame loop. If
+     * the newest queued event is motion, replace it instead of allowing a
+     * stale cursor position to consume queue capacity. */
+    if (ev->type == PRS_EVENT_MOTION && g_qcount > 0) {
+        int last = (g_qtail + PRS_QUEUE_MAX - 1) % PRS_QUEUE_MAX;
+        if (g_queue[last].type == PRS_EVENT_MOTION) {
+            g_queue[last] = *ev;
+            return;
+        }
+    }
+    if (g_qcount >= PRS_QUEUE_MAX) {
+        /* Dropping motion is safe; dropping map/unmap/configure events can
+         * leave the WM and X server permanently out of sync. */
+        if (ev->type == PRS_EVENT_MOTION) return;
+        for (int i = 0; i < g_qcount; i++) {
+            int at = (g_qhead + i) % PRS_QUEUE_MAX;
+            if (g_queue[at].type == PRS_EVENT_MOTION) {
+                for (int j = i; j < g_qcount - 1; j++) {
+                    int from = (g_qhead + j + 1) % PRS_QUEUE_MAX;
+                    int to = (g_qhead + j) % PRS_QUEUE_MAX;
+                    g_queue[to] = g_queue[from];
+                }
+                g_qtail = (g_qtail + PRS_QUEUE_MAX - 1) % PRS_QUEUE_MAX;
+                g_qcount--;
+                break;
+            }
+        }
+        if (g_qcount >= PRS_QUEUE_MAX) return;
+    }
     g_queue[g_qtail] = *ev;
     g_qtail = (g_qtail + 1) % PRS_QUEUE_MAX;
     g_qcount++;

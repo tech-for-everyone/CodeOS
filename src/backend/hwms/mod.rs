@@ -4,7 +4,7 @@ use penrose::{
     builtin::{
         actions::{
             exit,
-            floating::{MouseDragHandler, MouseResizeHandler},
+            floating::{toggle_floating_focused, MouseDragHandler, MouseResizeHandler},
             modify_with, send_layout_message,
         },
         layout::messages::{ExpandMain, IncMain, ShrinkMain},
@@ -40,12 +40,19 @@ pub fn run(configuration: &HyperdeConfig) -> Result<(), Box<dyn Error>> {
 
 fn key_bindings(configuration: &HyperdeConfig) -> Result<KeyBindings<RustConn>, Box<dyn Error>> {
     let mut bindings: HashMap<String, Box<dyn KeyEventHandler<RustConn>>> = HashMap::new();
+    // Hyprland-style Super+vim navigation. Penrose's stack direction is the
+    // stable cross-backend equivalent of directional focus for this X11 path.
+    bindings.insert(String::from("M-h"), modify_with(|clients| clients.focus_up()));
     bindings.insert(String::from("M-j"), modify_with(|clients| clients.focus_down()));
     bindings.insert(String::from("M-k"), modify_with(|clients| clients.focus_up()));
+    bindings.insert(String::from("M-l"), modify_with(|clients| clients.focus_down()));
+    bindings.insert(String::from("M-S-h"), modify_with(|clients| clients.swap_up()));
     bindings.insert(String::from("M-S-j"), modify_with(|clients| clients.swap_down()));
     bindings.insert(String::from("M-S-k"), modify_with(|clients| clients.swap_up()));
+    bindings.insert(String::from("M-S-l"), modify_with(|clients| clients.swap_down()));
     bindings.insert(String::from("M-S-q"), modify_with(|clients| clients.kill_focused()));
     bindings.insert(String::from("M-q"), exit());
+    bindings.insert(String::from("M-f"), toggle_floating_focused());
     bindings.insert(String::from("M-space"), modify_with(|clients| clients.next_layout()));
     bindings.insert(String::from("M-S-space"), modify_with(|clients| clients.previous_layout()));
     bindings.insert(String::from("M-S-Up"), send_layout_message(|| IncMain(1)));

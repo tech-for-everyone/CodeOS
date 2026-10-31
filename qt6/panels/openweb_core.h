@@ -2,6 +2,7 @@
 #define CODEOS_OPENWEB_CORE_H
 
 #include "ow_http.h"
+#include "ow_engine.h"
 
 /* C backend shared by the Qt frontend and legacy OpenWeb clients. */
 void ow_core_init(void);
@@ -23,6 +24,8 @@ int  ow_core_tab_count(void);
 int  ow_core_active_tab(void);
 int  ow_core_used_tab_count(void);
 int  ow_core_load_progress(void);
+int  ow_core_engine_select(int backend);
+void ow_core_engine_status(ow_engine_status_t *status);
 
 /* Headless diagnostics: render the active tab with the Rust renderer and dump
  * the resulting text grid / links / title to the console. Used by the kernel

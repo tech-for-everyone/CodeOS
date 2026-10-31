@@ -400,6 +400,26 @@ pub unsafe fn hyperde_wl_dispatch(obj: u32, opcode: u32, args: *const u32) -> i3
     r
 }
 
+/// Decode one standard Wayland request message and dispatch it.
+///
+/// A Wayland message starts with a little-endian 32-bit header: the low
+/// sixteen bits are the opcode and the high sixteen bits are the total byte
+/// size, including the header. The transport layer can pass complete frames
+/// here without duplicating protocol validation. No partial frame is
+/// dispatched, and oversized frames are rejected before reading arguments.
+pub unsafe fn hyperde_wl_dispatch_wire(obj: u32, message: *const u8, len: usize) -> i32 {
+    if message.is_null() || len < 8 {
+        return -1;
+    }
+    let header = core::ptr::read_unaligned(message as *const u32);
+    let opcode = header & 0xffff;
+    let size = (header >> 16) as usize;
+    if size < 8 || size > len || (size & 3) != 0 {
+        return -1;
+    }
+    hyperde_wl_dispatch(obj, opcode, message.add(8) as *const u32)
+}
+
 unsafe fn dispatch_locked(obj: u32, opcode: u32, args: *const u32) -> i32 {
     if CLIENT_ERROR != 0 {
         kprintf(

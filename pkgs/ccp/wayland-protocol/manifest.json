@@ -10,5 +10,5 @@
   "homepage": "https://wayland.freedesktop.org",
   "url": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
   "source": "upstream",
-  "note": "Interface XML only (wl_compositor, xdg-shell, ...) plus generated headers. Nothing in the tree consumes this yet: Qt's Wayland support is compiled out and CodeOS drives its display through pkgs/core/wm_protocol. Listed so GUI packages have a real 'wayland' capability to depend on."
+  "note": "Wayland protocol definitions for the opt-in HyperDE backend. X11 remains the clean-install default; enable backend = wayland in userspace/hyperde/conf.lua when the Wayland path is intended."
 }

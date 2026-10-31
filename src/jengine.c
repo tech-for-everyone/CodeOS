@@ -85,6 +85,9 @@ typedef struct {
 
 static jengine_func g_funcs[JENGINE_MAX_FUNCS];
 static int g_nfuncs;
+static int g_backend = JENGINE_BACKEND_NATIVE;
+static jengine_host_eval_fn g_host_eval;
+static void *g_host_eval_data;
 
 static jengine_scope g_scopes[JENGINE_MAX_DEPTH];
 static int g_depth;               /* g_scopes[0] is the global scope */
@@ -576,6 +579,73 @@ void jengine_init(void) {
 
 void jengine_cleanup(void) {
     interpreter_reset();
+}
+
+void jengine_set_backend(int backend) {
+    if (backend == JENGINE_BACKEND_GECKO) g_backend = backend;
+    else g_backend = JENGINE_BACKEND_NATIVE;
+}
+
+int jengine_get_backend(void) {
+    return g_backend;
+}
+
+void jengine_set_host_eval(jengine_host_eval_fn callback, void *user_data) {
+    g_host_eval = callback;
+    g_host_eval_data = user_data;
+}
+
+static int je_write_number(char *out, int cap, int64_t value) {
+    char reversed[24];
+    int n = 0;
+    int negative = value < 0;
+    uint64_t magnitude;
+    int i;
+    if (!out || cap <= 0) return -1;
+    if (negative) magnitude = (uint64_t)(-(value + 1)) + 1u;
+    else magnitude = (uint64_t)value;
+    do {
+        if (n >= (int)sizeof(reversed)) return -1;
+        reversed[n++] = (char)('0' + (magnitude % 10u));
+        magnitude /= 10u;
+    } while (magnitude != 0);
+    if (negative) {
+        if (n + 1 >= cap) return -1;
+        out[0] = '-';
+        for (i = 0; i < n; i++) out[i + 1] = reversed[n - i - 1];
+        out[n + 1] = 0;
+        return n + 1;
+    }
+    if (n >= cap) return -1;
+    for (i = 0; i < n; i++) out[i] = reversed[n - i - 1];
+    out[n] = 0;
+    return n;
+}
+
+int jengine_eval_script(const char *source, char *output, int output_size) {
+    jengine_value result;
+    if (!output || output_size <= 0) return -1;
+    output[0] = 0;
+    if (g_backend == JENGINE_BACKEND_GECKO) {
+        if (!g_host_eval) return JENGINE_BACKEND_UNAVAILABLE;
+        return g_host_eval(g_host_eval_data, source, output, output_size);
+    }
+    result = jengine_eval(source);
+    if (result.type == JENGINE_NUMBER || result.type == JENGINE_BOOLEAN)
+        return je_write_number(output, output_size, result.num_val);
+    if (result.type == JENGINE_NULL) {
+        if (output_size < 5) return -1;
+        output[0] = 'n'; output[1] = 'u'; output[2] = 'l'; output[3] = 'l'; output[4] = 0;
+        return 4;
+    }
+    if (result.type == JENGINE_UNDEFINED) {
+        if (output_size < 10) return -1;
+        output[0] = 'u'; output[1] = 'n'; output[2] = 'd'; output[3] = 'e';
+        output[4] = 'f'; output[5] = 'i'; output[6] = 'n'; output[7] = 'e';
+        output[8] = 'd'; output[9] = 0;
+        return 9;
+    }
+    return -1;
 }
 
 jengine_value jengine_eval(const char *source) {

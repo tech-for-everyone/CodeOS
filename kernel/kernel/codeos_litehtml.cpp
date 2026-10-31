@@ -24,16 +24,7 @@ CodeOSContainer(const codeos_render_callbacks_t *callbacks)
         if (m_callbacks->script_exec) {
             return m_callbacks->script_exec(m_callbacks->user_data, js_source, output, max_out);
         }
-        if (!output || max_out <= 0) return -1;
-        jengine_value result = jengine_eval(js_source);
-        if (result.type == JENGINE_NUMBER) {
-            return std::snprintf(output, (size_t)max_out, "%lld", (long long)result.num_val);
-        }
-        if (result.type == JENGINE_UNDEFINED) {
-            return std::snprintf(output, (size_t)max_out, "undefined");
-        }
-        output[0] = 0;
-        return -1;
+        return jengine_eval_script(js_source, output, max_out);
     }
 
     void set_dimensions(int width, int height) {

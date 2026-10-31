@@ -24,7 +24,11 @@ const MAX_CMD_LEN: usize = 64;
 const MAX_FLOAT_CLASSES: usize = 8;
 const MAX_CLASS_LEN: usize = 32;
 
+pub const BACKEND_X11: u32 = 0;
+pub const BACKEND_WAYLAND: u32 = 1;
+
 pub struct HyperdeConfig {
+    pub backend: u32,
     pub workspace_names: [[u8; 16]; MAX_WORKSPACES],
     pub workspace_count: usize,
     pub accent: u32,
@@ -59,6 +63,7 @@ impl HyperdeConfig {
 }
 
 static mut CONFIG: HyperdeConfig = HyperdeConfig {
+    backend: BACKEND_X11,
     workspace_names: {
         let mut ws = [[0u8; 16]; MAX_WORKSPACES];
         let mut i = 0;
@@ -105,6 +110,10 @@ pub fn config_loaded() -> bool {
     CONFIG_LOADED.load(Ordering::Relaxed)
 }
 
+pub fn backend() -> u32 {
+    unsafe { CONFIG.backend }
+}
+
 /* ───────────────────────── Config parsing via mlua ────────────────── */
 
 /// Load and parse config from a Lua source buffer.
@@ -117,6 +126,9 @@ pub fn config_parse_lua(data: &[u8]) {
     }
 
     let cfg = unsafe { &mut CONFIG };
+
+    let backend = config_get_string(root_idx, "backend");
+    cfg.backend = if backend == b"wayland" { BACKEND_WAYLAND } else { BACKEND_X11 };
 
     /* Read from the parsed Lua config tables */
     cfg.border_width = config_get_number(root_idx, "window_manager.border_width", 2.0) as u32;
@@ -247,6 +259,8 @@ pub fn config_parse_file(path: &str) {
 
 fn config_parse_lua_from_root(root_idx: usize) {
     let cfg = unsafe { &mut CONFIG };
+    let backend = config_get_string(root_idx, "backend");
+    cfg.backend = if backend == b"wayland" { BACKEND_WAYLAND } else { BACKEND_X11 };
     cfg.border_width = config_get_number(root_idx, "window_manager.border_width", 2.0) as u32;
     cfg.focus_follow_mouse = config_get_bool(root_idx, "window_manager.focus_follow_mouse", true);
     cfg.panel_height = config_get_number(root_idx, "compositor.panel_height", 28.0) as u32;
