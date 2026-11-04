@@ -104,7 +104,7 @@ static void launch_app(int item) {
         case 0: terminal_open(); break;
         case 1: about_open(); break;
         case 2: calc_open(); break;
-        case 3: break; /* DevStore is now the live Qt panel, not this legacy stack */
+        case 3: launchpad_toggle(); break; /* Store catalog is exposed from the app grid */
         case 4: settings_open(); break;
         case 5: openweb_open(); break;
         case 6: fmanager_open(); break;

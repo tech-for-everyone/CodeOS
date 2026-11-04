@@ -14,10 +14,7 @@ ifeq ($(ARCH),arm64)
     AS = clang --target=aarch64-linux-gnu
     OBJCOPY = objcopy
 
-    CFLAGS = -ffreestanding -mcmodel=large -fno-stack-protector -fno-PIC \
-             -nostdlib -nostartfiles -nodefaultlibs \
-             -Wall -Wextra -O2 -g -MMD -MP \
-             -I. -I./kernel -I./drivers -I../include -Iarch/arm64
+    CFLAGS = -ffreestanding -mcmodel=large -fno-stack-protector -fno-PIC -D__socklen_t=int -nostdlib -nostartfiles -nodefaultlibs -Wall -Wextra -O2 -g -MMD -MP -I. -I./kernel -I./drivers -I../include -Iarch/arm64
     CXXFLAGS = $(CFLAGS) -std=gnu++20 -fno-exceptions -fno-rtti -fno-use-cxa-atexit
     LDFLAGS = -nostdlib -z max-page-size=0x1000
 
@@ -121,8 +118,9 @@ else
              -fomit-frame-pointer -fno-semantic-interposition -fno-math-errno \
               -nostdinc -I$(CLANG_RESOURCE_INCLUDE) \
               -I. -I./kernel -I./kernel/security -I./drivers -I../include -Iarch/x86_64 \
+              -I$(QT6_PANELS_DIR) \
               -DLV_CONF_INCLUDE_SIMPLE -I./lvgl -isystem ./lvgl/shim \
-              $(PKG_INCLUDES) -I$(QT_BACKEND_DIR) $(OPENWEB_INCLUDES) $(OPENSSL_CFLAGS)
+              -I$(QT6_PANELS_DIR)/../pkgs/core/panels/src $(PKG_INCLUDES) -I$(QT_BACKEND_DIR) -I$(QT6_PANELS_DIR) $(OPENWEB_INCLUDES) $(OPENSSL_CFLAGS)
     # Match what GCC 16 produced here: C23 for C, (GNU) C++20 for C++.  Clang's
     # defaults are older (gnu17 / gnu++17) and would otherwise build the same
     # sources with different semantics.  CFLAGS carries no -std; only CXXFLAGS
@@ -254,7 +252,7 @@ BAS_SRC = ../pkgs/core/bas/src
 BAS_PROGS = $(if $(wildcard $(BAS_DIR)/compiler/Cargo.toml),\
              $(addprefix bas-,$(notdir $(basename $(wildcard $(BAS_SRC)/*.ba)))))
 
-USER_PROGS = init shell csl zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher ace_ui $(BAS_PROGS)
+USER_PROGS = init shell csh zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher $(BAS_PROGS)
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 BAS_ELF = $(addprefix userspace/,$(BAS_PROGS))
 

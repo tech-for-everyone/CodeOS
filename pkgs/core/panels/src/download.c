@@ -41,7 +41,7 @@ int dl_open(void) {
     int sw_i = (int)fb_getwidth(), sh_i = (int)fb_getheight();
     int x = (sw_i - DL_W) / 2;
     int y = (sh_i - DL_H) / 2;
-    dl_win = window_new(x, y, DL_W, DL_H, "Downloads", C_TEXT, C_BASE);
+    dl_win = WindowSpawn(x, y, DL_W, DL_H, "Downloads", C_TEXT, C_BASE);
     if (dl_win < 0) return 0;
     window_t *w = window_get(dl_win);
     w->has_close = 1;

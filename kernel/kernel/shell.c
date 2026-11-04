@@ -262,7 +262,7 @@ static void env_unset(const char *name) {
 static const char *builtins[] = {
     "clear", "echo", "timer", "info", "version", "reboot",
     "export", "unset", "env", "history", "mode", "set", "mouse",
-    "ls", "cd", "pwd", "mkdir", "rmdir", "cat", "rm", "touch", "nano",
+    "ls", "ed", "cd", "pwd", "mkdir", "rmdir", "cat", "rm", "touch", "nano",
     "mem", "pci", "cpu", "fetch", "fastfetch", "sysfetch", "pacman",
     "uptime", "uname", "free", "whoami", "hostname", "which",
         "sleep", "repeat", "seq", "script", "yes", "true", "false",
@@ -940,10 +940,19 @@ static void cmd_ls(int argc, char **argv) {
     fs_ls(path);
 }
 
-static void cmd_cd(int argc, char **argv) {
-    const char *path = (argc > 1) ? argv[1] : "/";
+static void cmd_ed(int argc, char **argv) {
+    const char *path = (argc > 1) ? argv[1] : "~";
+    char home_path[FS_PATH_MAX];
+    if (path[0] == '~') {
+        int n = snprintf(home_path, sizeof(home_path), "/root/home/root%s", path + 1);
+        if (n < 0 || n >= (int)sizeof(home_path)) {
+            kprintf("ed: path too long\n");
+            return;
+        }
+        path = home_path;
+    }
     if (fs_cd(path) < 0)
-        kprintf("cd: %s: no such directory\n", path);
+        kprintf("ed: %s: no such directory\n", path);
 }
 
 static void cmd_pwd(void) {
@@ -2757,17 +2766,17 @@ static void cmd_wine(int argc, char **argv) {
         kprintf("       wine --list-prefixes\n");
         kprintf("       wine --create-prefix <name>\n");
         kprintf("\n");
-        kprintf("The Wine layer translates Windows API calls to CodeOS syscalls.\n");
-        kprintf("PE executables (.exe) are automatically detected and loaded\n");
-        kprintf("via the kernel PE loader with builtin Win32 API stubs.\n");
+        kprintf("Experimental PE32+ inspection only; Windows programs do not yet run.\n");
+        kprintf("Use 'wine --status' for current loader limitations.\n");
         return;
     }
 
     if (strcmp(argv[1], "--status") == 0) {
-        kprintf("Wine compat layer: active\n");
-        kprintf("PE loader: available (kernel/kernel/pe_loader.c)\n");
-        kprintf("API stubs: ntdll, kernel32, user32, gdi32, ole32, advapi32, winmm\n");
-        kprintf("Prefixes: /wines/{default,proton-ge,gaming,desktop}\n");
+        kprintf("PE32+ header and section loader: experimental\n");
+        kprintf("Process startup: unsupported (no Windows PEB/TEB or startup thunk)\n");
+        kprintf("Imports: placeholder stubs; most functions do not implement Win32 semantics\n");
+        kprintf("DLL loading, relocations, exceptions, and console handles: unsupported\n");
+        kprintf("Wine prefixes are directory scaffolds only\n");
         return;
     }
 
@@ -2806,8 +2815,8 @@ static void cmd_wine(int argc, char **argv) {
         return;
     }
 
-    kprintf("wine: loaded at 0x%lx, entry=0x%lx\n", base, entry);
-    kprintf("wine: to execute, use 'wine' user program or exec syscall\n");
+    kprintf("wine: image mapped at 0x%lx, entry=0x%lx\n", base, entry);
+    kprintf("wine: execution is unavailable until Win32 startup and user-mode imports are implemented\n");
 }
 
 static void cmd_wineserver(int argc, char **argv) {
@@ -4283,7 +4292,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "set") == 0) cmd_set();
     else if (strcmp(cmd, "mouse") == 0) cmd_mouse();
     else if (strcmp(cmd, "ls") == 0) cmd_ls(argc, argv);
-    else if (strcmp(cmd, "cd") == 0) cmd_cd(argc, argv);
+    else if (strcmp(cmd, "ed") == 0 || strcmp(cmd, "cd") == 0) cmd_ed(argc, argv);
     else if (strcmp(cmd, "pwd") == 0) cmd_pwd();
     else if (strcmp(cmd, "mkdir") == 0) cmd_mkdir(argc, argv);
     else if (strcmp(cmd, "rmdir") == 0) cmd_rmdir(argc, argv);

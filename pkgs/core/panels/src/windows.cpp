@@ -24,25 +24,28 @@ static int find_window(const char *title) {
     return -1;
 }
 
-int window_new(int x, int y, int w, int h, const char *title, uint32_t fg, uint32_t bg) {
+int WindowSpawn(int x, int y, int width, int height, const char *title, uint32_t fg, uint32_t bg) {
     if (window_count >= MAX_WINDOWS) return -1;
-    window_t *w = &windows[window_count];
-    w->x = x;
-    w->y = y;
-    w->w = w;
-    w->h = h;
-    strncpy(w->title, title, 31);
-    w->title[31] = 0;
-    w->has_close = 1;
-    w->close_x = x + w - 20;
-    w->close_y = y + 4;
-    w->visible = 1;
-    w->minimized = 0;
+    window_t *win = &windows[window_count];
+    memset(win, 0, sizeof(*win));
+    win->x = x;
+    win->y = y;
+    win->w = width;
+    win->h = height;
+    win->fg = fg;
+    win->bg = bg;
+    strncpy(win->title, title, 31);
+    win->title[31] = 0;
+    win->has_close = 1;
+    win->close_x = x + width - 20;
+    win->close_y = y + 4;
+    win->visible = 1;
+    win->draggable = 1;
     window_count++;
     return window_count - 1;
 }
 
-void window_close(int idx) {
+void WindowDelete(int idx) {
     if (idx < 0 || idx >= window_count) return;
     window_t *w = &windows[idx];
     w->visible = 0;

@@ -44,6 +44,12 @@ void fs_init(void) {
     nodes[root].parent = root;
     cwd_path[0] = '/';
     cwd_path[1] = 0;
+    /* Single-user starter tree for the root account.  Keep it in the same
+     * VFS namespace as installed user homes so `ed root` and `ed ~` work
+     * consistently on a fresh boot. */
+    fs_mkdir("/root");
+    fs_mkdir("/root/home");
+    fs_mkdir("/root/home/root");
 }
 
 /* Make a path absolute and normal.

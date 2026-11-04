@@ -5,7 +5,7 @@ use mlua::{Lua, Table, Value};
 use penrose::{core::Config, x11rb::RustConn, Color};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct HyperdeConfig {
 	pub compositor: CompositorConfig,
@@ -48,16 +48,6 @@ pub struct ApplicationCommand {
 	pub command: String,
 	#[serde(default)]
 	pub terminal: bool,
-}
-
-impl Default for HyperdeConfig {
-	fn default() -> Self {
-		Self {
-			compositor: CompositorConfig::default(),
-			window_manager: WindowManagerConfig::default(),
-			applications: ApplicationsConfig::default(),
-		}
-	}
 }
 
 impl Default for CompositorConfig {
@@ -167,13 +157,16 @@ impl HyperdeConfig {
 	}
 
 	pub fn penrose_config(&self) -> Result<Config<RustConn>, Box<dyn Error>> {
-		let mut config = Config::default();
-		config.tags = self.window_manager.workspaces.clone();
-		config.normal_border = Color::try_from(self.window_manager.normal_border.as_str())?;
-		config.focused_border = Color::try_from(self.window_manager.focused_border.as_str())?;
-		config.border_width = self.window_manager.border_width;
-		config.focus_follow_mouse = self.window_manager.focus_follow_mouse;
-		config.floating_classes = self.window_manager.floating_classes.clone();
+		let config = Config {
+			tags: self.window_manager.workspaces.clone(),
+			normal_border: Color::try_from(self.window_manager.normal_border.as_str())?,
+			focused_border: Color::try_from(self.window_manager.focused_border.as_str())?,
+			border_width: self.window_manager.border_width,
+			focus_follow_mouse: self.window_manager.focus_follow_mouse,
+			floating_classes: self.window_manager.floating_classes.clone(),
+			..Config::default()
+		};
+		let mut config = config;
 		config.compose_or_set_layout_hook(penrose::builtin::hooks::SpacingHook {
 			outer_px: self.window_manager.gaps_out,
 			inner_px: self.window_manager.gaps_in,
@@ -206,7 +199,7 @@ pub fn load() -> Result<HyperdeConfig, Box<dyn Error>> {
 
 	let contents = fs::read_to_string(&path)?;
 	if path.extension().and_then(|extension| extension.to_str()) == Some("lua") {
-		return Ok(load_lua(&contents)?);
+		return load_lua(&contents);
 	}
 	let configuration: HyperdeConfig = toml::from_str(&contents)?;
 	configuration.validate()?;
@@ -272,6 +265,33 @@ fn load_lua(contents: &str) -> Result<HyperdeConfig, Box<dyn Error>> {
 	Ok(config)
 }
 
+fn optional_table<'lua>(root: &Table<'lua>, name: &str) -> Result<Option<Table<'lua>>, mlua::Error> {
+	match root.get(name)? {
+		Value::Table(table) => Ok(Some(table)),
+		Value::Nil => Ok(None),
+		_ => Err(mlua::Error::FromLuaConversionError {
+			from: "value",
+			to: "table",
+			message: Some(format!("{name} must be a table")),
+		}),
+	}
+}
+
+fn optional_strings(table: &Table<'_>, name: &str) -> Result<Option<Vec<String>>, mlua::Error> {
+	let values = match table.get::<_, Option<Table>>(name)? {
+		Some(values) => values,
+		None => return Ok(None),
+	};
+	Ok(Some(values.sequence_values::<String>().collect::<Result<Vec<_>, _>>()?))
+}
+
+fn set_string(table: &Table<'_>, name: &str, destination: &mut String) -> Result<(), mlua::Error> {
+	if let Some(value) = table.get::<_, Option<String>>(name)? {
+		*destination = value;
+	}
+	Ok(())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -315,31 +335,4 @@ mod tests {
 		assert_eq!(config.applications.commands[0].command, "btop");
 		assert!(config.applications.commands[0].terminal);
 	}
-}
-
-fn optional_table<'lua>(root: &Table<'lua>, name: &str) -> Result<Option<Table<'lua>>, mlua::Error> {
-	match root.get(name)? {
-		Value::Table(table) => Ok(Some(table)),
-		Value::Nil => Ok(None),
-		_ => Err(mlua::Error::FromLuaConversionError {
-			from: "value",
-			to: "table",
-			message: Some(format!("{name} must be a table")),
-		}),
-	}
-}
-
-fn optional_strings(table: &Table<'_>, name: &str) -> Result<Option<Vec<String>>, mlua::Error> {
-	let values = match table.get::<_, Option<Table>>(name)? {
-		Some(values) => values,
-		None => return Ok(None),
-	};
-	Ok(Some(values.sequence_values::<String>().collect::<Result<Vec<_>, _>>()?))
-}
-
-fn set_string(table: &Table<'_>, name: &str, destination: &mut String) -> Result<(), mlua::Error> {
-	if let Some(value) = table.get::<_, Option<String>>(name)? {
-		*destination = value;
-	}
-	Ok(())
 }

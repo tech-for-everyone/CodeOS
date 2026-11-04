@@ -207,7 +207,10 @@ static void handle_key(int key) {
         }
         return;
     }
-    if (key == 't' || key == 'T') {
+    /* While the address field has text, ordinary letters belong to the URL.
+     * Previously keys such as t, b, r and s always triggered browser actions,
+     * making many hostnames impossible to type. */
+    if (g_url[0] == 0 && (key == 't' || key == 'T')) {
         int cnt = sys_web_tab_count();
         if (cnt >= 12) {
             snprintf(g_status_msg, sizeof(g_status_msg), "Max tabs reached");
@@ -221,7 +224,7 @@ static void handle_key(int key) {
         g_dirty = 1;
         return;
     }
-    if (key == 'c' || key == 'C' || key == 'x' || key == 'X') {
+    if (g_url[0] == 0 && (key == 'c' || key == 'C' || key == 'x' || key == 'X')) {
         int cnt = sys_web_tab_count();
         int active = sys_web_tab_active_get();
         if (cnt > 1) {
@@ -235,10 +238,10 @@ static void handle_key(int key) {
         g_dirty = 1;
         return;
     }
-    if (key == 'q' || key == 'Q') {
+    if (g_url[0] == 0 && (key == 'q' || key == 'Q')) {
         quit();
     }
-    if (key == 'r' || key == 'R') {
+    if (g_url[0] == 0 && (key == 'r' || key == 'R')) {
         if (g_url[0]) {
             snprintf(g_status_msg, sizeof(g_status_msg), "Reloading: %.*s",
                      (int)sizeof(g_status_msg) - 12, g_url);
@@ -258,7 +261,7 @@ static void handle_key(int key) {
         g_dirty = 1;
         return;
     }
-    if (key == 'u' || key == 'U' || key == 'p' || key == 'P') {
+    if (g_url[0] == 0 && (key == 'u' || key == 'U' || key == 'p' || key == 'P')) {
         if (key == 'p' || key == 'P') {
             g_scroll = 0;
         } else {
@@ -268,7 +271,7 @@ static void handle_key(int key) {
         g_dirty = 1;
         return;
     }
-    if (key == 'd' || key == 'D' || key == 'n' || key == 'N') {
+    if (g_url[0] == 0 && (key == 'd' || key == 'D' || key == 'n' || key == 'N')) {
         if (key == 'n' || key == 'N') {
             g_scroll = ow_txt_lines - MAX_LINES;
             if (g_scroll < 0) g_scroll = 0;
@@ -286,25 +289,26 @@ static void handle_key(int key) {
         snprintf(g_status_msg, sizeof(g_status_msg), "Switched to tab %d", (a + 1) % c);
         g_dirty = 1;
         return;
-    }    if (key == 'h' || key == 'H' || key == 'l' || key == 'L') {
+    }
+    if (g_url[0] == 0 && (key == 'h' || key == 'H' || key == 'l' || key == 'L')) {
         g_show_help = (key == 'h' || key == 'H');
         snprintf(g_status_msg, sizeof(g_status_msg), "%s help", g_show_help ? "Showing" : "Hiding");
         g_dirty = 1;
         return;
     }
-    if (key == 'b' || key == 'B') {
+    if (g_url[0] == 0 && (key == 'b' || key == 'B')) {
         sys_web_go_back();
         snprintf(g_status_msg, sizeof(g_status_msg), "Back (history)");
         g_dirty = 1;
         return;
     }
-    if (key == 'f' || key == 'F') {
+    if (g_url[0] == 0 && (key == 'f' || key == 'F')) {
         sys_web_go_forward();
         snprintf(g_status_msg, sizeof(g_status_msg), "Forward (history)");
         g_dirty = 1;
         return;
     }
-    if (key == 's' || key == 'S') {
+    if (g_url[0] == 0 && (key == 's' || key == 'S')) {
         sys_web_stop();
         snprintf(g_status_msg, sizeof(g_status_msg), "Stop loading");
         g_dirty = 1;

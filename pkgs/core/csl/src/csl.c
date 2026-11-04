@@ -20,6 +20,20 @@ static char *trim_whitespace(char *str) {
     return str;
 }
 
+static const char *expand_home(const char *path, char *out, int out_size) {
+    if (!path || !out || out_size < 2) return path;
+    if (path[0] != '~') return path;
+    /* CodeOS currently boots the single root account. Its home is a normal
+     * directory in the visible tree, so `~` follows the same path as `ed`. */
+    const char *home = "/root/home/root";
+    int n = 0;
+    while (*home && n < out_size - 1) out[n++] = *home++;
+    path++;
+    while (*path && n < out_size - 1) out[n++] = *path++;
+    out[n] = 0;
+    return out;
+}
+
 static int split_command(char *line, char **argv, int max_args) {
     int argc = 0;
     char *p = line;
@@ -35,17 +49,26 @@ static int split_command(char *line, char **argv, int max_args) {
 }
 
 static void print_prompt(void) {
-    printf("csl%s> ", root_mode ? "#" : "$");
+    char cwd[256];
+    if (sys_getcwd(cwd, sizeof(cwd)) < 0) strcpy(cwd, "/");
+    printf("csh:%s%s> ", cwd, root_mode ? "#" : "$");
 }
 
 static int builtin_cd(char **argv, int argc) {
-    (void)argv; (void)argc;
-    printf("cd: not supported\n");
-    return 1;
+    char path[512];
+    const char *requested = argc > 1 ? argv[1] : "~";
+    requested = expand_home(requested, path, sizeof(path));
+    if (sys_chdir(requested) < 0) {
+        printf("ed: %s: directory not found\n", requested);
+        return 1;
+    }
+    return 0;
 }
 
 static int builtin_pwd(void) {
-    printf("/\n");
+    char cwd[256];
+    if (sys_getcwd(cwd, sizeof(cwd)) < 0) return 1;
+    printf("%s\n", cwd);
     return 0;
 }
 
@@ -80,10 +103,10 @@ static int builtin_clear(void) {
 }
 
 static int builtin_help(void) {
-    puts("CSL commands:");
+    puts("CodeOS shell (csh):");
     puts("  echo [text]     Print text");
     puts("  pwd             Print working directory");
-    puts("  cd [dir]        Change directory");
+    puts("  ed [path]       Enter directory (cd is an alias; ~ is your home)");
     puts("  ls [dir]        List directory");
     puts("  clear           Clear screen");
     puts("  mkdir [dir]     Create directory");
@@ -192,7 +215,7 @@ int main(void) {
         else if (strcmp(argv[0], "help") == 0) builtin_help();
         else if (strcmp(argv[0], "echo") == 0) builtin_echo(argv, argc);
         else if (strcmp(argv[0], "pwd") == 0) builtin_pwd();
-        else if (strcmp(argv[0], "cd") == 0) builtin_cd(argv, argc);
+        else if (strcmp(argv[0], "ed") == 0 || strcmp(argv[0], "cd") == 0) builtin_cd(argv, argc);
         else if (strcmp(argv[0], "ls") == 0) builtin_ls(argv, argc);
         else if (strcmp(argv[0], "clear") == 0) builtin_clear();
         else if (strcmp(argv[0], "mkdir") == 0) builtin_mkdir(argv, argc);

@@ -1,25 +1,25 @@
 clock.o: ../../pkgs/extra/qt_apps/clock.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stubs/cxx_compat.h \
-  /usr/lib/clang/23/include/stddef.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stddef.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stddef.h \
-  /usr/lib/clang/23/include/__stddef_header_macro.h \
-  /usr/lib/clang/23/include/__stddef_ptrdiff_t.h \
-  /usr/lib/clang/23/include/__stddef_size_t.h \
-  /usr/lib/clang/23/include/__stddef_wchar_t.h \
-  /usr/lib/clang/23/include/__stddef_null.h \
-  /usr/lib/clang/23/include/__stddef_nullptr_t.h \
-  /usr/lib/clang/23/include/__stddef_max_align_t.h \
-  /usr/lib/clang/23/include/__stddef_offsetof.h \
-  /usr/lib/clang/23/include/stdarg.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_size_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_null.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_nullptr_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdarg.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdarg.h \
-  /usr/lib/clang/23/include/__stdarg_header_macro.h \
-  /usr/lib/clang/23/include/__stdarg___gnuc_va_list.h \
-  /usr/lib/clang/23/include/__stdarg_va_list.h \
-  /usr/lib/clang/23/include/__stdarg_va_arg.h \
-  /usr/lib/clang/23/include/__stdarg___va_copy.h \
-  /usr/lib/clang/23/include/__stdarg_va_copy.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_header_macro.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___gnuc_va_list.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_list.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_arg.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___va_copy.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_copy.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/pthread.h \
-  /usr/lib/clang/23/include/stdint.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdint.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint.h qt_panels.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/QWidget \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/qwidget.h \
@@ -27,7 +27,7 @@ clock.o: ../../pkgs/extra/qt_apps/clock.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qtguiglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint-gcc.h \
-  /usr/lib/clang/23/include/stdbool.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdbool.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdbool.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtcoreglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtversionchecks.h \
@@ -88,7 +88,7 @@ clock.o: ../../pkgs/extra/qt_apps/clock.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtmetamacros.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobjectdefs_impl.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qfunctionaltools_impl.h \
-  /usr/lib/clang/23/include/sanitizer/tsan_interface.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sanitizer/tsan_interface.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobject.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qstring.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qchar.h \
@@ -156,7 +156,7 @@ clock.o: ../../pkgs/extra/qt_apps/clock.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qcolor.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgb.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgba64.h \
-  /usr/lib/clang/23/include/limits.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/limits.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/limits.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qshareddata.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qimage.h \
@@ -324,26 +324,26 @@ clock.o: ../../pkgs/extra/qt_apps/clock.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/codeos_platform.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/QtMath
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stubs/cxx_compat.h:
-/usr/lib/clang/23/include/stddef.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stddef.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stddef.h:
-/usr/lib/clang/23/include/__stddef_header_macro.h:
-/usr/lib/clang/23/include/__stddef_ptrdiff_t.h:
-/usr/lib/clang/23/include/__stddef_size_t.h:
-/usr/lib/clang/23/include/__stddef_wchar_t.h:
-/usr/lib/clang/23/include/__stddef_null.h:
-/usr/lib/clang/23/include/__stddef_nullptr_t.h:
-/usr/lib/clang/23/include/__stddef_max_align_t.h:
-/usr/lib/clang/23/include/__stddef_offsetof.h:
-/usr/lib/clang/23/include/stdarg.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_header_macro.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_ptrdiff_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_size_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_wchar_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_null.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_nullptr_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_max_align_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_offsetof.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdarg.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdarg.h:
-/usr/lib/clang/23/include/__stdarg_header_macro.h:
-/usr/lib/clang/23/include/__stdarg___gnuc_va_list.h:
-/usr/lib/clang/23/include/__stdarg_va_list.h:
-/usr/lib/clang/23/include/__stdarg_va_arg.h:
-/usr/lib/clang/23/include/__stdarg___va_copy.h:
-/usr/lib/clang/23/include/__stdarg_va_copy.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_header_macro.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___gnuc_va_list.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_list.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_arg.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___va_copy.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_copy.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/pthread.h:
-/usr/lib/clang/23/include/stdint.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdint.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint.h:
 qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/QWidget:
@@ -352,7 +352,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qtguiglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint-gcc.h:
-/usr/lib/clang/23/include/stdbool.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdbool.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdbool.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtcoreglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtversionchecks.h:
@@ -413,7 +413,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtmetamacros.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobjectdefs_impl.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qfunctionaltools_impl.h:
-/usr/lib/clang/23/include/sanitizer/tsan_interface.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sanitizer/tsan_interface.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobject.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qstring.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qchar.h:
@@ -481,7 +481,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qcolor.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgb.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgba64.h:
-/usr/lib/clang/23/include/limits.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/limits.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/limits.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qshareddata.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qimage.h:

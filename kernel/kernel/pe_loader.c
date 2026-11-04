@@ -55,14 +55,16 @@ static int pe_read_file(const char *path, uint8_t **pages_out, int *page_count_o
 
     if (page_count == 0) return -1;
 
-    *pages_out = (uint8_t *)pmm_alloc_page();
+    int flat_pages = (file_len + 4095) / 4096;
+    uint64_t flat_phys = pmm_alloc_pages((size_t)flat_pages);
+    *pages_out = (uint8_t *)flat_phys;
     if (!*pages_out) {
         for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)file_pages[p]);
         return -1;
     }
 
     /* Flatten into contiguous kernel buffer */
-    uint8_t *kbuf = (uint8_t *)phys_to_virt((uint64_t)*pages_out);
+    uint8_t *kbuf = (uint8_t *)phys_to_virt(flat_phys);
     int copied = 0;
     for (int p = 0; p < page_count; p++) {
         int chunk = file_len - copied;
@@ -73,9 +75,14 @@ static int pe_read_file(const char *path, uint8_t **pages_out, int *page_count_o
     }
     for (int p = 0; p < page_count; p++) pmm_free_page((uint64_t)file_pages[p]);
 
-    *page_count_out = (file_len + 4095) / 4096;
+    *page_count_out = flat_pages;
     *file_len_out = file_len;
     return 0;
+}
+
+static void pe_free_file(uint8_t *file_buf, int page_count) {
+    if (file_buf && page_count > 0)
+        pmm_free_pages((uint64_t)file_buf, (size_t)page_count);
 }
 
 /* ── Parse PE headers ── */
@@ -337,7 +344,7 @@ uint64_t pe_load_executable(const char *path, uint64_t *entry_out,
 
     if (pe_parse_headers(buf, file_len, &coff, &opt, sections, &num_sections) < 0) {
         kprintf("pe: invalid PE headers in %s\n", path);
-        pmm_free_page((uint64_t)file_buf_page);
+        pe_free_file(file_buf_page, page_count);
         return (uint64_t)-1;
     }
 
@@ -357,7 +364,7 @@ uint64_t pe_load_executable(const char *path, uint64_t *entry_out,
     /* Map PE sections */
     if (pe_map_sections(image_base, opt.section_align, sections, num_sections, buf, file_len) < 0) {
         kprintf("pe: failed to map sections for %s\n", path);
-        pmm_free_page((uint64_t)file_buf_page);
+        pe_free_file(file_buf_page, page_count);
         return (uint64_t)-1;
     }
 
@@ -370,7 +377,7 @@ uint64_t pe_load_executable(const char *path, uint64_t *entry_out,
     }
 
     /* Free file pages */
-    pmm_free_page((uint64_t)file_buf_page);
+    pe_free_file(file_buf_page, page_count);
 
     /* Calculate entry point in mapped image */
     uint64_t entry = image_base + opt.address_of_entry;
@@ -410,7 +417,7 @@ uint64_t pe_load_library(const char *path) {
     int num_sections;
 
     if (pe_parse_headers(buf, file_len, &coff, &opt, sections, &num_sections) < 0) {
-        pmm_free_page((uint64_t)file_buf_page);
+        pe_free_file(file_buf_page, page_count);
         return 0;
     }
 
@@ -420,14 +427,14 @@ uint64_t pe_load_library(const char *path) {
     }
 
     if (pe_map_sections(image_base, opt.section_align, sections, num_sections, buf, file_len) < 0) {
-        pmm_free_page((uint64_t)file_buf_page);
+        pe_free_file(file_buf_page, page_count);
         return 0;
     }
 
     pe_apply_relocations(opt.image_base, image_base, opt.size_of_image);
     pe_resolve_imports(image_base, &opt, buf, file_len);
 
-    pmm_free_page((uint64_t)file_buf_page);
+    pe_free_file(file_buf_page, page_count);
     return image_base;
 }
 

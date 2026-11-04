@@ -47,7 +47,7 @@ USER_CFLAGS = -ffreestanding -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
 
 USER_LDFLAGS = -nostdlib -z max-page-size=0x1000 -z noexecstack
 
-PROGRAMS = init shell csl zircapp zircon-notify zircon-clock zircon-info ace_ui \
+PROGRAMS = init shell csh zircapp zircon-notify zircon-clock zircon-info \
            apk-parser android-container android-apps code-music audio-demo \
            linux-runner ld-codeos terminal syscall_test openweb \
            wineserver wine-runner linux-probe run-as dnslookup \
@@ -128,7 +128,7 @@ bas_progs:
 	fi
 
 # Programs that only need core libs
-CORE_PROGS = init shell csl zircon-notify zircon-clock zircon-info \
+CORE_PROGS = init shell zircon-notify zircon-clock zircon-info \
              code-music audio-demo linux-runner syscall_test crosvm-launcher ncvm android-apps \
              wineserver wine-runner run-as dnslookup leveltest netbeam chromium-launcher
 # Programs that also need android lib
@@ -143,6 +143,12 @@ $(1): $$(call pkg_main,$(1)) crt0.o $$(LIB_OBJ)
 	$$(LD) $$(USER_LDFLAGS) -T link.ld -o $$@ $(1).o crt0.o $$(LIB_OBJ)
 endef
 $(foreach p,$(CORE_PROGS),$(eval $(call core-prog-rule,$(p))))
+
+# The standalone shell was renamed from csl to csh; keep its historical source
+# directory so package metadata and scripts remain readable.
+csh: ../../pkgs/core/csl/src/csl.c crt0.o $(LIB_OBJ)
+	$(CC) $(USER_CFLAGS) -c -o csh.o $<
+	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ csh.o crt0.o $(LIB_OBJ)
 
 # zircapp is not a normal single-source package.  The CodeOS host
 # (pkgs/core/zircapp) links the *unmodified* Zircon application framework
@@ -223,10 +229,12 @@ terminal: $(TERM)/terminal.c crt0.o $(LIB_OBJ)
 	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ terminal.o crt0.o $(LIB_OBJ)
 
 OPENWEB_SRC = $(PKG_SRC)/openweb/src
-openweb: $(OPENWEB_SRC)/openweb.c $(OPENWEB_SRC)/ow_html.c crt0.o $(LIB_OBJ)
+openweb: $(OPENWEB_SRC)/openweb.c $(OPENWEB_SRC)/ow_html.c $(OPENWEB_SRC)/ow_engine.c crt0.o $(LIB_OBJ)
 	$(CC) $(USER_CFLAGS) -c -o openweb.o $(OPENWEB_SRC)/openweb.c
 	$(CC) $(USER_CFLAGS) -c -o ow_html.o $(OPENWEB_SRC)/ow_html.c
-	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ openweb.o ow_html.o crt0.o $(LIB_OBJ)
+	$(CC) $(USER_CFLAGS) -c -o ow_engine.o $(OPENWEB_SRC)/ow_engine.c
+	$(CC) $(USER_CFLAGS) -I../../include -c -o jengine.o ../../src/jengine.c
+	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ openweb.o ow_html.o ow_engine.o jengine.o crt0.o $(LIB_OBJ)
 
 # ld-codeos: userspace dynamic linker (standalone, no crt0 or libc)
 LD_SRC = $(PKG_SRC)/ld-codeos/src
@@ -257,7 +265,3 @@ apk-parser-check:
 	@sh ../../pkgs/extra/apk-parser/tests/run.sh
 
 .PHONY: all clean check apk-parser-check
-
-# ace_ui: ArkUI UI app (from ace-host freestanding build)
-ace_ui: ../../ace-host/build/ace_codeos_elf
-	cp $< $@

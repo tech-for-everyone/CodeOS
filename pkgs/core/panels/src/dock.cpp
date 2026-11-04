@@ -14,6 +14,24 @@ extern "C" {
 #define DOCK_GLASS_TOP 8
 #define DOCK_GLASS_H 72
 #define DOCK_GLASS_BOTTOM 8
+#define DOCK_PINNED_COUNT 6
+static const int dock_pins[DOCK_PINNED_COUNT] = { 0, 2, 5, 6, 1, 4 };
+
+static void draw_dock_icon(int x, int y, const uint32_t *pixels) {
+    if (!pixels) return;
+    for (int py = 0; py < 44; py++) {
+        for (int px = 0; px < 44; px++) {
+            uint32_t src = pixels[py * 44 + px];
+            uint32_t a = src >> 24;
+            if (!a) continue;
+            uint32_t dst = fb_getpixel((uint32_t)(x + px), (uint32_t)(y + py));
+            uint32_t r = (((src >> 16) & 255) * a + ((dst >> 16) & 255) * (255 - a)) / 255;
+            uint32_t g = (((src >> 8) & 255) * a + ((dst >> 8) & 255) * (255 - a)) / 255;
+            uint32_t b = ((src & 255) * a + (dst & 255) * (255 - a)) / 255;
+            fb_putpixel((uint32_t)(x + px), (uint32_t)(y + py), (r << 16) | (g << 8) | b);
+        }
+    }
+}
 
 static int dock_anim_progress[APP_COUNT_MAX];
 static int dock_hover_idx = -1;
@@ -46,8 +64,8 @@ void dock_tick(int mx) {
 
 static void draw_glass_pill(uint32_t scr_w, uint32_t scr_h) {
     int dy = scr_h - DOCK_GLASS_TOP - DOCK_GLASS_H - DOCK_GLASS_BOTTOM;
-    int pill_x = (scr_w - 400) / 2;
-    int pill_w = 400;
+    int pill_w = 6 * 48 + 5 * 8 + 24;
+    int pill_x = ((int)scr_w - pill_w) / 2;
     int pill_y = dy + DOCK_GLASS_TOP;
 
     /* Glass background */
@@ -55,8 +73,7 @@ static void draw_glass_pill(uint32_t scr_w, uint32_t scr_h) {
                            0x182A2A2A, 0x101A1A1A);
 
     /* Divider */
-    int div_x = pill_x + 200;
-    fb_fillrect(div_x - 2, pill_y + 4, 4, DOCK_GLASS_H - 8, 0x30FFFFFF);
+    (void)pill_x;
 }
 
 void dock_draw(uint32_t scr_w, uint32_t scr_h) {
@@ -69,31 +86,32 @@ void dock_draw(uint32_t scr_w, uint32_t scr_h) {
     int icon_y = pill_y + (DOCK_GLASS_H - 44) / 2;
 
     /* Draw icons */
-    for (int i = 0; i < APP_COUNT_MAX; i++) {
-        int ix = 30 + i * (44 + 12);
+    int pill_w = 6 * 48 + 5 * 8 + 24;
+    int pill_x = ((int)scr_w - pill_w) / 2;
+    for (int slot = 0; slot < DOCK_PINNED_COUNT; slot++) {
+        int item = dock_pins[slot];
+        int ix = pill_x + 12 + slot * 56;
         int iy = icon_y;
 
-        /* Simple icon rect */
-        fb_fill_rounded_rect(ix, iy + 2, 44, 44, 8, 0x20FFFFFF);
-        fb_draw_rounded_rect(ix, iy + 2, 44, 44, 8, 0x50FFFFFF);
+        draw_dock_icon(ix, iy + 2, icon_buf_dock[item]);
+        if (!icon_buf_dock[item]) {
+            fb_fill_rounded_rect(ix, iy + 2, 44, 44, 8, 0x20FFFFFF);
+            fb_draw_rounded_rect(ix, iy + 2, 44, 44, 8, 0x50FFFFFF);
+        }
 
         /* App name */
-        if (dock_tooltip_alpha[i] > 20) {
-            int tw = strlen(app_names[i]) * 7 + 12;
+        if (dock_tooltip_alpha[item] > 20) {
+            int tw = strlen(app_names[item]) * 7 + 12;
             int tx = ix + (44 - tw) / 2;
             int ty = iy + 44 + 25;
-            uint8_t a = dock_tooltip_alpha[i];
+            uint8_t a = dock_tooltip_alpha[item];
             fb_fill_rounded_rect(tx - 2, ty - 2, tw + 4, 20, 6, 0x00000000 | (((uint32_t)a * 0xDD / 255) << 24));
-            fb_drawstr_px(tx + 2, ty + 1, app_names[i], C_TEXT, 0);
+            fb_drawstr_px(tx + 2, ty + 1, app_names[item], C_TEXT, 0);
         }
     }
 
     /* Trash can */
-    int trash_x = (scr_w - 400) / 2 + 350;
-    int trash_y = pill_y + 8;
-    fb_fill_rounded_rect(trash_x, trash_y, 40, 24, 6, 0x30000000);
-    fb_draw_rounded_rect(trash_x, trash_y, 40, 24, 6, 0x50FFFFFF);
-    fb_drawstr_px(trash_x + 8, trash_y + 2, "Trash", C_TEXT, 0);
+    (void)pill_y;
 }
 
 int dock_hover(int mx, int my, uint32_t scr_w, uint32_t scr_h) {
@@ -109,17 +127,13 @@ int dock_click(int mx, int my, uint32_t scr_w, uint32_t scr_h) {
     if (my < dy) return -1;
 
     /* Check icons */
-    for (int i = 0; i < APP_COUNT_MAX; i++) {
-        int ix = 30 + i * (44 + 12);
+    int pill_w = 6 * 48 + 5 * 8 + 24;
+    int pill_x = ((int)scr_w - pill_w) / 2;
+    for (int slot = 0; slot < DOCK_PINNED_COUNT; slot++) {
+        int ix = pill_x + 12 + slot * 56;
         if (mx >= ix && mx < ix + 44 && my >= dy && my < dy + DOCK_GLASS_H) {
-            return i;
+            return dock_pins[slot];
         }
-    }
-
-    /* Check trash */
-    int trash_x = (scr_w - 400) / 2 + 350;
-    if (mx >= trash_x && mx < trash_x + 40 && my >= dy) {
-        return APP_COUNT_MAX;
     }
     return -1;
 }

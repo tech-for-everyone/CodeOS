@@ -12,7 +12,7 @@ extern "C" {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   OpenWeb C++ Frontend — WhiteSur-KDE / macOS toolbar style
+   OpenWeb C++ Frontend — CodeOS strata navigation surface
    Uses Rust backend (ow_http) for HTTP + search engine routing
    Uses ow_html for HTML→text rendering
    ══════════════════════════════════════════════════════════════════════ */
@@ -24,24 +24,24 @@ extern "C" {
 #define OW_BOOKMARKS_H  24
 #define OW_MAX_BOOKMARKS 16
 
-/* ── Big Sur WhiteSur color palette ── */
-#define C_OW_BG         0xFFF5F5F7
-#define C_OW_TOOLBAR    0xDDD6D8E0
-#define C_OW_TOOLBARBot 0xCCBFC1CC
-#define C_OW_TAB_BG     0x33C8C8D0
-#define C_OW_TAB_ACT    0xFFEEEEF2
-#define C_OW_URL_BG     0xFFFFFFFF
-#define C_OW_URL_BORDER 0x44AAAAAA
-#define C_OW_TEXT       0xFF1D1D1F
-#define C_OW_SUBTEXT    0xFF86868B
-#define C_OW_BG_DARK    0xFFE8E8ED
-#define C_OW_BOOK_BG    0xFFEDEDF0
-#define C_OW_STATUS     0xFFF0F0F4
-#define C_OW_SHADOW     0x22000000
+/* CodeOS's ink / mineral palette uses sharp strata and ochre wayfinding. */
+#define C_OW_BG         0xFF10191B
+#define C_OW_TOOLBAR    0xFF1B292A
+#define C_OW_TOOLBARBot 0xFF202F30
+#define C_OW_TAB_BG     0xFF182426
+#define C_OW_TAB_ACT    0xFF294040
+#define C_OW_URL_BG     0xFF0C1416
+#define C_OW_URL_BORDER 0xFF46605A
+#define C_OW_TEXT       0xFFE7E3D8
+#define C_OW_SUBTEXT    0xFF9DAFA7
+#define C_OW_BG_DARK    0xFF172325
+#define C_OW_BOOK_BG    0xFF1A292A
+#define C_OW_STATUS     0xFF142022
+#define C_OW_SHADOW     0x44000000
 
 /* ── Search engines ── */
 
-#define OW_MAX_ENGINES  5
+#define OW_MAX_ENGINES  8
 
 struct OwEngine {
     const char *name;
@@ -55,6 +55,9 @@ static const OwEngine ow_engines[OW_MAX_ENGINES] = {
     { "Bing",        "https://www.bing.com/search?q=%s",        "https://www.bing.com" },
     { "Brave",       "https://search.brave.com/search?q=%s",    "https://search.brave.com" },
     { "Startpage",   "https://www.startpage.com/sp/search?q=%s","https://www.startpage.com" },
+    { "Ecosia",      "https://www.ecosia.org/search?q=%s",      "https://www.ecosia.org" },
+    { "Qwant",       "https://www.qwant.com/?q=%s",             "https://www.qwant.com" },
+    { "Wikipedia",   "https://en.wikipedia.org/w/index.php?search=%s", "https://www.wikipedia.org" },
 };
 
 /* ── IP-only navigation (DNS is disabled in the kernel) ── */

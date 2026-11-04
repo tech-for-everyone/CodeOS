@@ -25,20 +25,20 @@ pub struct ThemeColors {
 
 impl ThemeColors {
     pub const DEFAULT: Self = Self {
-        accent: 0x0040D9F0,
-        background: 0xFF1a1a2e,
-        foreground: 0xFFe0e0e0,
-        surface: 0xFF16213e,
-        surface_variant: 0xFF0f3460,
-        border: 0xFF2a2a4a,
-        error: 0xFFe94560,
-        warning: 0xFFffc107,
-        success: 0xFF4caf50,
-        panel_bg: 0xFF1e1e2e,
-        panel_fg: 0xFFcdd6f4,
-        glass_top: 0xFF242428,
-        glass_bottom: 0xFF17171B,
-        glass_alpha: 0xC8,
+        accent: 0xFFE7A94B,
+        background: 0xFF111A1C,
+        foreground: 0xFFE7E3D8,
+        surface: 0xFF1A292A,
+        surface_variant: 0xFF294040,
+        border: 0xFF46605A,
+        error: 0xFFE47768,
+        warning: 0xFFE7A94B,
+        success: 0xFF82B89A,
+        panel_bg: 0xFF182426,
+        panel_fg: 0xFFD5DED5,
+        glass_top: 0xFF263535,
+        glass_bottom: 0xFF111A1C,
+        glass_alpha: 0xE8,
     };
 }
 

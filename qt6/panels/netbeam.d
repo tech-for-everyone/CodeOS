@@ -1,25 +1,25 @@
 netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stubs/cxx_compat.h \
-  /usr/lib/clang/23/include/stddef.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stddef.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stddef.h \
-  /usr/lib/clang/23/include/__stddef_header_macro.h \
-  /usr/lib/clang/23/include/__stddef_ptrdiff_t.h \
-  /usr/lib/clang/23/include/__stddef_size_t.h \
-  /usr/lib/clang/23/include/__stddef_wchar_t.h \
-  /usr/lib/clang/23/include/__stddef_null.h \
-  /usr/lib/clang/23/include/__stddef_nullptr_t.h \
-  /usr/lib/clang/23/include/__stddef_max_align_t.h \
-  /usr/lib/clang/23/include/__stddef_offsetof.h \
-  /usr/lib/clang/23/include/stdarg.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_size_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_null.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_nullptr_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdarg.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdarg.h \
-  /usr/lib/clang/23/include/__stdarg_header_macro.h \
-  /usr/lib/clang/23/include/__stdarg___gnuc_va_list.h \
-  /usr/lib/clang/23/include/__stdarg_va_list.h \
-  /usr/lib/clang/23/include/__stdarg_va_arg.h \
-  /usr/lib/clang/23/include/__stdarg___va_copy.h \
-  /usr/lib/clang/23/include/__stdarg_va_copy.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_header_macro.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___gnuc_va_list.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_list.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_arg.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___va_copy.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_copy.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/pthread.h \
-  /usr/lib/clang/23/include/stdint.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdint.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint.h qt_panels.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/QWidget \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/qwidget.h \
@@ -27,7 +27,7 @@ netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qtguiglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint-gcc.h \
-  /usr/lib/clang/23/include/stdbool.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdbool.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdbool.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtcoreglobal.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtversionchecks.h \
@@ -88,7 +88,7 @@ netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtmetamacros.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobjectdefs_impl.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qfunctionaltools_impl.h \
-  /usr/lib/clang/23/include/sanitizer/tsan_interface.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sanitizer/tsan_interface.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobject.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qstring.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qchar.h \
@@ -156,7 +156,7 @@ netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qcolor.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgb.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgba64.h \
-  /usr/lib/clang/23/include/limits.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/limits.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/limits.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qshareddata.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qimage.h \
@@ -358,122 +358,127 @@ netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qloggingcategory.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/6.11.1/QtCore/private/qnumeric_p.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qsimd.h \
-  /usr/lib/clang/23/include/immintrin.h \
-  /usr/lib/clang/23/include/x86gprintrin.h \
-  /usr/lib/clang/23/include/hresetintrin.h \
-  /usr/lib/clang/23/include/uintrintrin.h \
-  /usr/lib/clang/23/include/usermsrintrin.h \
-  /usr/lib/clang/23/include/crc32intrin.h \
-  /usr/lib/clang/23/include/prfchiintrin.h \
-  /usr/lib/clang/23/include/raointintrin.h \
-  /usr/lib/clang/23/include/cmpccxaddintrin.h \
-  /usr/lib/clang/23/include/mmintrin.h \
-  /usr/lib/clang/23/include/xmmintrin.h \
-  /usr/lib/clang/23/include/mm_malloc.h \
-  /usr/lib/clang/23/include/emmintrin.h \
-  /usr/lib/clang/23/include/pmmintrin.h \
-  /usr/lib/clang/23/include/tmmintrin.h \
-  /usr/lib/clang/23/include/smmintrin.h \
-  /usr/lib/clang/23/include/popcntintrin.h \
-  /usr/lib/clang/23/include/wmmintrin.h \
-  /usr/lib/clang/23/include/__wmmintrin_aes.h \
-  /usr/lib/clang/23/include/__wmmintrin_pclmul.h \
-  /usr/lib/clang/23/include/clflushoptintrin.h \
-  /usr/lib/clang/23/include/clwbintrin.h \
-  /usr/lib/clang/23/include/avxintrin.h \
-  /usr/lib/clang/23/include/avx2intrin.h \
-  /usr/lib/clang/23/include/f16cintrin.h \
-  /usr/lib/clang/23/include/bmiintrin.h \
-  /usr/lib/clang/23/include/bmi2intrin.h \
-  /usr/lib/clang/23/include/lzcntintrin.h \
-  /usr/lib/clang/23/include/fmaintrin.h \
-  /usr/lib/clang/23/include/avx512fintrin.h \
-  /usr/lib/clang/23/include/avx512vlintrin.h \
-  /usr/lib/clang/23/include/avx512bwintrin.h \
-  /usr/lib/clang/23/include/avx512bitalgintrin.h \
-  /usr/lib/clang/23/include/avx512bmmintrin.h \
-  /usr/lib/clang/23/include/avx512bmmvlintrin.h \
-  /usr/lib/clang/23/include/avx512cdintrin.h \
-  /usr/lib/clang/23/include/avx512vpopcntdqintrin.h \
-  /usr/lib/clang/23/include/avx512vpopcntdqvlintrin.h \
-  /usr/lib/clang/23/include/avx512vnniintrin.h \
-  /usr/lib/clang/23/include/avx512vlvnniintrin.h \
-  /usr/lib/clang/23/include/avxvnniintrin.h \
-  /usr/lib/clang/23/include/avx512dqintrin.h \
-  /usr/lib/clang/23/include/avx512vlbitalgintrin.h \
-  /usr/lib/clang/23/include/avx512vlbwintrin.h \
-  /usr/lib/clang/23/include/avx512vlcdintrin.h \
-  /usr/lib/clang/23/include/avx512vldqintrin.h \
-  /usr/lib/clang/23/include/avx512ifmaintrin.h \
-  /usr/lib/clang/23/include/avx512ifmavlintrin.h \
-  /usr/lib/clang/23/include/avxifmaintrin.h \
-  /usr/lib/clang/23/include/avx512vbmiintrin.h \
-  /usr/lib/clang/23/include/avx512vbmivlintrin.h \
-  /usr/lib/clang/23/include/avx512vbmi2intrin.h \
-  /usr/lib/clang/23/include/avx512vlvbmi2intrin.h \
-  /usr/lib/clang/23/include/avx512fp16intrin.h \
-  /usr/lib/clang/23/include/avx512vlfp16intrin.h \
-  /usr/lib/clang/23/include/avx512bf16intrin.h \
-  /usr/lib/clang/23/include/avx512vlbf16intrin.h \
-  /usr/lib/clang/23/include/pkuintrin.h \
-  /usr/lib/clang/23/include/vpclmulqdqintrin.h \
-  /usr/lib/clang/23/include/vaesintrin.h \
-  /usr/lib/clang/23/include/gfniintrin.h \
-  /usr/lib/clang/23/include/avxvnniint8intrin.h \
-  /usr/lib/clang/23/include/avxneconvertintrin.h \
-  /usr/lib/clang/23/include/sha512intrin.h \
-  /usr/lib/clang/23/include/sm3intrin.h \
-  /usr/lib/clang/23/include/sm4intrin.h \
-  /usr/lib/clang/23/include/avxvnniint16intrin.h \
-  /usr/lib/clang/23/include/rtmintrin.h \
-  /usr/lib/clang/23/include/xtestintrin.h \
-  /usr/lib/clang/23/include/shaintrin.h \
-  /usr/lib/clang/23/include/fxsrintrin.h \
-  /usr/lib/clang/23/include/xsaveintrin.h \
-  /usr/lib/clang/23/include/xsaveoptintrin.h \
-  /usr/lib/clang/23/include/xsavecintrin.h \
-  /usr/lib/clang/23/include/xsavesintrin.h \
-  /usr/lib/clang/23/include/cetintrin.h \
-  /usr/lib/clang/23/include/adcintrin.h \
-  /usr/lib/clang/23/include/adxintrin.h \
-  /usr/lib/clang/23/include/rdseedintrin.h \
-  /usr/lib/clang/23/include/wbnoinvdintrin.h \
-  /usr/lib/clang/23/include/cldemoteintrin.h \
-  /usr/lib/clang/23/include/waitpkgintrin.h \
-  /usr/lib/clang/23/include/movdirintrin.h \
-  /usr/lib/clang/23/include/movrsintrin.h \
-  /usr/lib/clang/23/include/movrs_avx10_2intrin.h \
-  /usr/lib/clang/23/include/movrs_avx10_2_512intrin.h \
-  /usr/lib/clang/23/include/pconfigintrin.h \
-  /usr/lib/clang/23/include/sgxintrin.h \
-  /usr/lib/clang/23/include/ptwriteintrin.h \
-  /usr/lib/clang/23/include/invpcidintrin.h \
-  /usr/lib/clang/23/include/keylockerintrin.h \
-  /usr/lib/clang/23/include/amxintrin.h \
-  /usr/lib/clang/23/include/amxfp16intrin.h \
-  /usr/lib/clang/23/include/amxcomplexintrin.h \
-  /usr/lib/clang/23/include/amxfp8intrin.h \
-  /usr/lib/clang/23/include/amxmovrsintrin.h \
-  /usr/lib/clang/23/include/amxavx512intrin.h \
-  /usr/lib/clang/23/include/avx512vp2intersectintrin.h \
-  /usr/lib/clang/23/include/avx512vlvp2intersectintrin.h \
-  /usr/lib/clang/23/include/avx10_2bf16intrin.h \
-  /usr/lib/clang/23/include/avx10_2convertintrin.h \
-  /usr/lib/clang/23/include/avx10_2copyintrin.h \
-  /usr/lib/clang/23/include/avx10_2minmaxintrin.h \
-  /usr/lib/clang/23/include/avx10_2niintrin.h \
-  /usr/lib/clang/23/include/avx10_2satcvtdsintrin.h \
-  /usr/lib/clang/23/include/avx10_2satcvtintrin.h \
-  /usr/lib/clang/23/include/avx10_2_512bf16intrin.h \
-  /usr/lib/clang/23/include/avx10_2_512convertintrin.h \
-  /usr/lib/clang/23/include/avx10_2_512minmaxintrin.h \
-  /usr/lib/clang/23/include/avx10_2_512niintrin.h \
-  /usr/lib/clang/23/include/avx10_2_512satcvtdsintrin.h \
-  /usr/lib/clang/23/include/avx10_2_512satcvtintrin.h \
-  /usr/lib/clang/23/include/sm4evexintrin.h \
-  /usr/lib/clang/23/include/enqcmdintrin.h \
-  /usr/lib/clang/23/include/serializeintrin.h \
-  /usr/lib/clang/23/include/tsxldtrkintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/immintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/x86gprintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/hresetintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/uintrintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/usermsrintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/crc32intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/prfchiintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/raointintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cmpccxaddintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/mmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xmmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/mm_malloc.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/emmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pmmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/tmmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/smmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/popcntintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/wmmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__wmmintrin_aes.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__wmmintrin_pclmul.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/clflushoptintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/clwbintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx2intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/f16cintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/bmiintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/bmi2intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/lzcntintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/fmaintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512fintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bwintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bitalgintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512cdintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vpopcntdqintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vpopcntdqvlintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vnniintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvnniintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512dqintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbitalgintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbwintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlcdintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vldqintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512ifmaintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512ifmavlintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxifmaintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmiintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmivlintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmi2intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvbmi2intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512fp16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlfp16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bf16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbf16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pkuintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/vpclmulqdqintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/vaesintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/gfniintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniint8intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxneconvertintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sha512intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm3intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm4intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniint16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/rtmintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xtestintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/shaintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/fxsrintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsaveintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsaveoptintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsavecintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsavesintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cetintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/adcintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/adxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/rdseedintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/wbnoinvdintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cldemoteintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/waitpkgintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movdirintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrsintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrs_avx10_2intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrs_avx10_2_512intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pconfigintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sgxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/ptwriteintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/invpcidintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/keylockerintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxcomplexintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp8intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtransposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxmovrsintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxmovrstransposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxavx512intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtf32intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtf32transposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxbf16transposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp16transposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxcomplextransposeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vp2intersectintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvp2intersectintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2bf16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2convertintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2copyintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2minmaxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2niintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2satcvtdsintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2satcvtintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512bf16intrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512convertintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512minmaxintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512niintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512satcvtdsintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512satcvtintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm4evexintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/enqcmdintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/serializeintrin.h \
+  /home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/tsxldtrkintrin.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/q26numeric.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/6.11.1/QtCore/private/qthread_p.h \
   /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qthread.h \
@@ -552,26 +557,26 @@ netbeam.o: ../../pkgs/extra/qt_apps/netbeam.cpp \
   /home/codeosuser/CodeOS/kernel/kernel/ip.h \
   /home/codeosuser/CodeOS/kernel/kernel/installer_qt.h
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stubs/cxx_compat.h:
-/usr/lib/clang/23/include/stddef.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stddef.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stddef.h:
-/usr/lib/clang/23/include/__stddef_header_macro.h:
-/usr/lib/clang/23/include/__stddef_ptrdiff_t.h:
-/usr/lib/clang/23/include/__stddef_size_t.h:
-/usr/lib/clang/23/include/__stddef_wchar_t.h:
-/usr/lib/clang/23/include/__stddef_null.h:
-/usr/lib/clang/23/include/__stddef_nullptr_t.h:
-/usr/lib/clang/23/include/__stddef_max_align_t.h:
-/usr/lib/clang/23/include/__stddef_offsetof.h:
-/usr/lib/clang/23/include/stdarg.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_header_macro.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_ptrdiff_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_size_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_wchar_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_null.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_nullptr_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_max_align_t.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stddef_offsetof.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdarg.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdarg.h:
-/usr/lib/clang/23/include/__stdarg_header_macro.h:
-/usr/lib/clang/23/include/__stdarg___gnuc_va_list.h:
-/usr/lib/clang/23/include/__stdarg_va_list.h:
-/usr/lib/clang/23/include/__stdarg_va_arg.h:
-/usr/lib/clang/23/include/__stdarg___va_copy.h:
-/usr/lib/clang/23/include/__stdarg_va_copy.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_header_macro.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___gnuc_va_list.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_list.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_arg.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg___va_copy.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__stdarg_va_copy.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/pthread.h:
-/usr/lib/clang/23/include/stdint.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdint.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint.h:
 qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtWidgets/QWidget:
@@ -580,7 +585,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qtguiglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdint-gcc.h:
-/usr/lib/clang/23/include/stdbool.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/stdbool.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/stdbool.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtcoreglobal.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtversionchecks.h:
@@ -641,7 +646,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qtmetamacros.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobjectdefs_impl.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qfunctionaltools_impl.h:
-/usr/lib/clang/23/include/sanitizer/tsan_interface.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sanitizer/tsan_interface.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qobject.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qstring.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qchar.h:
@@ -709,7 +714,7 @@ qt_panels.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qcolor.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgb.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qrgba64.h:
-/usr/lib/clang/23/include/limits.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/limits.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/limits.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qshareddata.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtGui/qimage.h:
@@ -911,122 +916,127 @@ qt_panels_common.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qloggingcategory.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/6.11.1/QtCore/private/qnumeric_p.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qsimd.h:
-/usr/lib/clang/23/include/immintrin.h:
-/usr/lib/clang/23/include/x86gprintrin.h:
-/usr/lib/clang/23/include/hresetintrin.h:
-/usr/lib/clang/23/include/uintrintrin.h:
-/usr/lib/clang/23/include/usermsrintrin.h:
-/usr/lib/clang/23/include/crc32intrin.h:
-/usr/lib/clang/23/include/prfchiintrin.h:
-/usr/lib/clang/23/include/raointintrin.h:
-/usr/lib/clang/23/include/cmpccxaddintrin.h:
-/usr/lib/clang/23/include/mmintrin.h:
-/usr/lib/clang/23/include/xmmintrin.h:
-/usr/lib/clang/23/include/mm_malloc.h:
-/usr/lib/clang/23/include/emmintrin.h:
-/usr/lib/clang/23/include/pmmintrin.h:
-/usr/lib/clang/23/include/tmmintrin.h:
-/usr/lib/clang/23/include/smmintrin.h:
-/usr/lib/clang/23/include/popcntintrin.h:
-/usr/lib/clang/23/include/wmmintrin.h:
-/usr/lib/clang/23/include/__wmmintrin_aes.h:
-/usr/lib/clang/23/include/__wmmintrin_pclmul.h:
-/usr/lib/clang/23/include/clflushoptintrin.h:
-/usr/lib/clang/23/include/clwbintrin.h:
-/usr/lib/clang/23/include/avxintrin.h:
-/usr/lib/clang/23/include/avx2intrin.h:
-/usr/lib/clang/23/include/f16cintrin.h:
-/usr/lib/clang/23/include/bmiintrin.h:
-/usr/lib/clang/23/include/bmi2intrin.h:
-/usr/lib/clang/23/include/lzcntintrin.h:
-/usr/lib/clang/23/include/fmaintrin.h:
-/usr/lib/clang/23/include/avx512fintrin.h:
-/usr/lib/clang/23/include/avx512vlintrin.h:
-/usr/lib/clang/23/include/avx512bwintrin.h:
-/usr/lib/clang/23/include/avx512bitalgintrin.h:
-/usr/lib/clang/23/include/avx512bmmintrin.h:
-/usr/lib/clang/23/include/avx512bmmvlintrin.h:
-/usr/lib/clang/23/include/avx512cdintrin.h:
-/usr/lib/clang/23/include/avx512vpopcntdqintrin.h:
-/usr/lib/clang/23/include/avx512vpopcntdqvlintrin.h:
-/usr/lib/clang/23/include/avx512vnniintrin.h:
-/usr/lib/clang/23/include/avx512vlvnniintrin.h:
-/usr/lib/clang/23/include/avxvnniintrin.h:
-/usr/lib/clang/23/include/avx512dqintrin.h:
-/usr/lib/clang/23/include/avx512vlbitalgintrin.h:
-/usr/lib/clang/23/include/avx512vlbwintrin.h:
-/usr/lib/clang/23/include/avx512vlcdintrin.h:
-/usr/lib/clang/23/include/avx512vldqintrin.h:
-/usr/lib/clang/23/include/avx512ifmaintrin.h:
-/usr/lib/clang/23/include/avx512ifmavlintrin.h:
-/usr/lib/clang/23/include/avxifmaintrin.h:
-/usr/lib/clang/23/include/avx512vbmiintrin.h:
-/usr/lib/clang/23/include/avx512vbmivlintrin.h:
-/usr/lib/clang/23/include/avx512vbmi2intrin.h:
-/usr/lib/clang/23/include/avx512vlvbmi2intrin.h:
-/usr/lib/clang/23/include/avx512fp16intrin.h:
-/usr/lib/clang/23/include/avx512vlfp16intrin.h:
-/usr/lib/clang/23/include/avx512bf16intrin.h:
-/usr/lib/clang/23/include/avx512vlbf16intrin.h:
-/usr/lib/clang/23/include/pkuintrin.h:
-/usr/lib/clang/23/include/vpclmulqdqintrin.h:
-/usr/lib/clang/23/include/vaesintrin.h:
-/usr/lib/clang/23/include/gfniintrin.h:
-/usr/lib/clang/23/include/avxvnniint8intrin.h:
-/usr/lib/clang/23/include/avxneconvertintrin.h:
-/usr/lib/clang/23/include/sha512intrin.h:
-/usr/lib/clang/23/include/sm3intrin.h:
-/usr/lib/clang/23/include/sm4intrin.h:
-/usr/lib/clang/23/include/avxvnniint16intrin.h:
-/usr/lib/clang/23/include/rtmintrin.h:
-/usr/lib/clang/23/include/xtestintrin.h:
-/usr/lib/clang/23/include/shaintrin.h:
-/usr/lib/clang/23/include/fxsrintrin.h:
-/usr/lib/clang/23/include/xsaveintrin.h:
-/usr/lib/clang/23/include/xsaveoptintrin.h:
-/usr/lib/clang/23/include/xsavecintrin.h:
-/usr/lib/clang/23/include/xsavesintrin.h:
-/usr/lib/clang/23/include/cetintrin.h:
-/usr/lib/clang/23/include/adcintrin.h:
-/usr/lib/clang/23/include/adxintrin.h:
-/usr/lib/clang/23/include/rdseedintrin.h:
-/usr/lib/clang/23/include/wbnoinvdintrin.h:
-/usr/lib/clang/23/include/cldemoteintrin.h:
-/usr/lib/clang/23/include/waitpkgintrin.h:
-/usr/lib/clang/23/include/movdirintrin.h:
-/usr/lib/clang/23/include/movrsintrin.h:
-/usr/lib/clang/23/include/movrs_avx10_2intrin.h:
-/usr/lib/clang/23/include/movrs_avx10_2_512intrin.h:
-/usr/lib/clang/23/include/pconfigintrin.h:
-/usr/lib/clang/23/include/sgxintrin.h:
-/usr/lib/clang/23/include/ptwriteintrin.h:
-/usr/lib/clang/23/include/invpcidintrin.h:
-/usr/lib/clang/23/include/keylockerintrin.h:
-/usr/lib/clang/23/include/amxintrin.h:
-/usr/lib/clang/23/include/amxfp16intrin.h:
-/usr/lib/clang/23/include/amxcomplexintrin.h:
-/usr/lib/clang/23/include/amxfp8intrin.h:
-/usr/lib/clang/23/include/amxmovrsintrin.h:
-/usr/lib/clang/23/include/amxavx512intrin.h:
-/usr/lib/clang/23/include/avx512vp2intersectintrin.h:
-/usr/lib/clang/23/include/avx512vlvp2intersectintrin.h:
-/usr/lib/clang/23/include/avx10_2bf16intrin.h:
-/usr/lib/clang/23/include/avx10_2convertintrin.h:
-/usr/lib/clang/23/include/avx10_2copyintrin.h:
-/usr/lib/clang/23/include/avx10_2minmaxintrin.h:
-/usr/lib/clang/23/include/avx10_2niintrin.h:
-/usr/lib/clang/23/include/avx10_2satcvtdsintrin.h:
-/usr/lib/clang/23/include/avx10_2satcvtintrin.h:
-/usr/lib/clang/23/include/avx10_2_512bf16intrin.h:
-/usr/lib/clang/23/include/avx10_2_512convertintrin.h:
-/usr/lib/clang/23/include/avx10_2_512minmaxintrin.h:
-/usr/lib/clang/23/include/avx10_2_512niintrin.h:
-/usr/lib/clang/23/include/avx10_2_512satcvtdsintrin.h:
-/usr/lib/clang/23/include/avx10_2_512satcvtintrin.h:
-/usr/lib/clang/23/include/sm4evexintrin.h:
-/usr/lib/clang/23/include/enqcmdintrin.h:
-/usr/lib/clang/23/include/serializeintrin.h:
-/usr/lib/clang/23/include/tsxldtrkintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/immintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/x86gprintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/hresetintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/uintrintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/usermsrintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/crc32intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/prfchiintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/raointintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cmpccxaddintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/mmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xmmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/mm_malloc.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/emmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pmmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/tmmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/smmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/popcntintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/wmmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__wmmintrin_aes.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/__wmmintrin_pclmul.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/clflushoptintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/clwbintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx2intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/f16cintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/bmiintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/bmi2intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/lzcntintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/fmaintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512fintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bwintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bitalgintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512cdintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vpopcntdqintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vpopcntdqvlintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vnniintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvnniintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512dqintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbitalgintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbwintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlcdintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vldqintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512ifmaintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512ifmavlintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxifmaintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmiintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmivlintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vbmi2intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvbmi2intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512fp16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlfp16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512bf16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlbf16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pkuintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/vpclmulqdqintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/vaesintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/gfniintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniint8intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxneconvertintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sha512intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm3intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm4intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avxvnniint16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/rtmintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xtestintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/shaintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/fxsrintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsaveintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsaveoptintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsavecintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/xsavesintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cetintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/adcintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/adxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/rdseedintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/wbnoinvdintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/cldemoteintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/waitpkgintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movdirintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrsintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrs_avx10_2intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/movrs_avx10_2_512intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/pconfigintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sgxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/ptwriteintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/invpcidintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/keylockerintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxcomplexintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp8intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtransposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxmovrsintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxmovrstransposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxavx512intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtf32intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxtf32transposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxbf16transposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxfp16transposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/amxcomplextransposeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vp2intersectintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx512vlvp2intersectintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2bf16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2convertintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2copyintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2minmaxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2niintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2satcvtdsintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2satcvtintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512bf16intrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512convertintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512minmaxintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512niintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512satcvtdsintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/avx10_2_512satcvtintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/sm4evexintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/enqcmdintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/serializeintrin.h:
+/home/codeosuser/.local/share/swiftly/toolchains/6.4.2/usr/lib/clang/21/include/tsxldtrkintrin.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/q26numeric.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/6.11.1/QtCore/private/qthread_p.h:
 /home/codeosuser/CodeOS/qt6/sysroot/usr/include/QtCore/qthread.h:

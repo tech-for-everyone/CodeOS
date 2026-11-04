@@ -65,6 +65,20 @@ static int test_loopback(void) {
     pid_t pid;
     int wait_status = 0;
 
+    /* Some CI sandboxes intentionally deny AF_INET sockets.  The protocol
+     * self-tests above are still fully meaningful there; report the
+     * environment limitation as a skip instead of turning it into a flaky
+     * failure after fifty identical retries. */
+    {
+        int probe = socket(AF_INET, SOCK_STREAM, 0);
+        if (probe < 0 && (errno == EPERM || errno == EACCES || errno == ENOSYS)) {
+            printf("loopback [skip] host does not permit AF_INET sockets (%s)\n",
+                   strerror(errno));
+            return 0;
+        }
+        if (probe >= 0) close(probe);
+    }
+
     system("rm -rf /tmp/netbeam-hosttest");
     if (mkdir("/tmp/netbeam-hosttest", 0755) != 0) {
         perror("mkdir scratch");

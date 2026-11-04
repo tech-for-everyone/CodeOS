@@ -34,7 +34,7 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
-.PHONY: bas bas-check bas-target-check vsnprintf-check device-check
+.PHONY: bas bas-check bas-target-check swift-check vsnprintf-check device-check
 
 all: kernel iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
@@ -48,6 +48,7 @@ check:
 	$(MAKE) device-check
 	$(MAKE) codec-check
 	$(MAKE) bas-check
+	$(MAKE) swift-check
 	$(MAKE) bas-target-check
 	$(MAKE) netbeam-check
 
@@ -140,10 +141,15 @@ bas:
 bas-check:
 	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_DIR)/tests/run.sh" ]; then \
 	    printf "$(DIM)bas-check: no bas checkout at '$(BAS_DIR)' (optional); skipping$(RESET)\n"; \
+	elif [ ! -w "$(BAS_DIR)/compiler" ] || { [ -e "$(BAS_DIR)/compiler/target" ] && [ ! -w "$(BAS_DIR)/compiler/target" ]; }; then \
+	    printf "$(DIM)bas-check: checkout at '$(BAS_DIR)' is read-only; skipping$(RESET)\n"; \
 	else \
 	    printf "$(CYAN)$(BOLD)==> Checking bas language...$(RESET)\n"; \
 	    bash "$(BAS_DIR)/tests/run.sh"; \
 	fi
+
+swift-check:
+	@./tools/swift-codeos
 
 # Cross-build check: every pkgs/core/bas/src/*.ba must compile into a real
 # CodeOS userland ELF for BOTH targets.  A target can break without the host

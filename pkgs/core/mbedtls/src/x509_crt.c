@@ -2522,10 +2522,10 @@ static int x509_crt_verify_chain(
     int signature_is_good;
     unsigned self_cnt;
     mbedtls_x509_crt *cur_trust_ca = NULL;
-    mbedtls_x509_time now;
+    const mbedtls_x509_time *now;
 
 #if defined(MBEDTLS_HAVE_TIME_DATE)
-    if (mbedtls_x509_time_gmtime(mbedtls_time(NULL), &now) != 0) {
+    if (mbedtls_x509_time_gmtime(mbedtls_time(NULL), now) != 0) {
         return MBEDTLS_ERR_X509_FATAL_ERROR;
     }
 #endif
@@ -2620,7 +2620,7 @@ find_parent:
         ret = x509_crt_find_parent(child, cur_trust_ca, &parent,
                                    &parent_is_trusted, &signature_is_good,
                                    ver_chain->len - 1, self_cnt, rs_ctx,
-                                   &now);
+                                   now);
 
 #if defined(MBEDTLS_ECDSA_C) && defined(MBEDTLS_ECP_RESTARTABLE)
         if (rs_ctx != NULL && ret == MBEDTLS_ERR_ECP_IN_PROGRESS) {

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Linux compatibility entry point for Apple Container's basic CLI workflow.
+# Apple’s Swift CLI and macOS service stack cannot execute on Linux, so this
+# adapter uses the host OCI engine while preserving the common command shape.
+ENGINE="${CODEOS_OCI_ENGINE:-}"
+if [[ -z "$ENGINE" ]]; then
+    if command -v docker >/dev/null 2>&1; then
+        ENGINE=docker
+    elif command -v podman >/dev/null 2>&1; then
+        ENGINE=podman
+    elif command -v nerdctl >/dev/null 2>&1; then
+        ENGINE=nerdctl
+    else
+        echo "container-linux: install Docker, Podman, or nerdctl to run OCI containers" >&2
+        exit 127
+    fi
+fi
+
+if ! command -v "$ENGINE" >/dev/null 2>&1; then
+    echo "container-linux: OCI engine '$ENGINE' was not found" >&2
+    exit 127
+fi
+
+if (($# == 0)); then
+    set -- --help
+fi
+
+case "$1" in
+    --help|-h|help)
+        cat <<'EOF'
+Usage: container-linux COMMAND [OPTIONS]
+
+Linux compatibility commands backed by the installed OCI engine:
+  run       Run an image (supports the engine's run options)
+  pull      Pull an image
+  images    List local images
+  ps        List containers
+  rm        Remove containers
+  stop      Stop containers
+  exec      Run a command in a running container
+  logs      Show container logs
+  version   Show the engine version
+
+Set CODEOS_OCI_ENGINE to select docker, podman, or nerdctl.
+This compatibility layer uses the engine's own storage and configuration.
+EOF
+        ;;
+    run|pull|images|ps|rm|stop|exec|logs|version|inspect|start|restart|kill|stats|top|cp)
+        exec "$ENGINE" "$@"
+        ;;
+    *)
+        echo "container-linux: unsupported command '$1'; run 'container-linux --help'" >&2
+        exit 2
+        ;;
+esac

@@ -2,7 +2,7 @@
 #define CODEOS_OPENWEB_CORE_H
 
 #include "ow_http.h"
-#include "ow_engine.h"
+#include "../ow_engine.h"
 
 /* C backend shared by the Qt frontend and legacy OpenWeb clients. */
 void ow_core_init(void);

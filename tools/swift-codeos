@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONTAINER_DIR="${CODEOS_CONTAINER_DIR:-/home/codeosuser/container}"
+SWIFT_BIN="${CODEOS_SWIFT:-}"
+if [[ -z "$SWIFT_BIN" ]]; then
+    if [[ -x /usr/bin/swiftc ]]; then
+        SWIFT_BIN=/usr/bin/swiftc
+    elif [[ -x /home/codeosuser/.local/share/swiftly/bin/swiftc ]]; then
+        SWIFT_BIN=/home/codeosuser/.local/share/swiftly/bin/swiftc
+    else
+        echo "swift-check: Swift compiler not installed; skipping" >&2
+        exit 0
+    fi
+fi
+
+if [[ ! -d "$CONTAINER_DIR" ]]; then
+    echo "swift-check: container checkout not found at $CONTAINER_DIR; skipping" >&2
+    exit 0
+fi
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CACHE_DIR="${CODEOS_SWIFT_CACHE:-/tmp/codeos-swift-cache}"
+SWIFT_REAL="$(readlink -f "$SWIFT_BIN" 2>/dev/null || printf '%s' "$SWIFT_BIN")"
+SWIFT_ROOT="$(cd "$(dirname "$SWIFT_REAL")/.." && pwd)"
+LIB_DIR="$SWIFT_ROOT/lib/swift/linux"
+TOOLCHAIN_LIB_DIR="$SWIFT_ROOT/lib"
+SWIFT_DRIVER="${CODEOS_SWIFT_DRIVER:-$(dirname "$SWIFT_BIN")/swift}"
+SHIM_DIR="$CACHE_DIR/libs"
+mkdir -p "$CACHE_DIR/module" "$CACHE_DIR/clang" "$SHIM_DIR" \
+    "$CACHE_DIR/xdg" "$CACHE_DIR/config" "$CACHE_DIR/package"
+
+# This Linux image exposes the ABI-compatible wide-character ncurses soname.
+if [[ ! -e "$SHIM_DIR/libncurses.so.6" ]] && [[ -e /usr/lib/libncursesw.so.6 ]]; then
+    ln -s /usr/lib/libncursesw.so.6 "$SHIM_DIR/libncurses.so.6"
+fi
+if [[ ! -e "$SHIM_DIR/libtinfo.so.6" ]] && [[ -e /usr/lib/libncursesw.so.6 ]]; then
+    ln -s /usr/lib/libncursesw.so.6 "$SHIM_DIR/libtinfo.so.6"
+fi
+
+export LD_LIBRARY_PATH="$SHIM_DIR:$TOOLCHAIN_LIB_DIR:$LIB_DIR:/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export SWIFT_MODULECACHE_PATH="$CACHE_DIR/module"
+export CLANG_MODULE_CACHE_PATH="$CACHE_DIR/clang"
+export XDG_CACHE_HOME="$CACHE_DIR/xdg"
+export XDG_CONFIG_HOME="$CACHE_DIR/config"
+
+# Parse the real Apple package manifest as part of the integration check. This
+# is intentionally metadata-only: resolving/building its macOS Virtualization
+# stack cannot make a freestanding CodeOS kernel able to run it.
+if [[ -x "$SWIFT_DRIVER" ]]; then
+    PACKAGE_JSON="$CACHE_DIR/package/manifest.json"
+    "$SWIFT_DRIVER" package dump-package \
+        --package-path "$CONTAINER_DIR" \
+        --scratch-path "$CACHE_DIR/package/scratch" > "$PACKAGE_JSON"
+    if ! grep -q '"name" : "container"' "$PACKAGE_JSON"; then
+        echo "swift-check: unexpected package manifest at $CONTAINER_DIR" >&2
+        exit 1
+    fi
+else
+    echo "swift-check: Swift package driver not found; skipping manifest validation" >&2
+fi
+
+OUT="$CACHE_DIR/codeos-swift-probe"
+"$SWIFT_BIN" "$ROOT_DIR/swift/CodeOSSwiftProbe.swift" -o "$OUT"
+RESULT="$("$OUT")"
+if [[ "$RESULT" != "CodeOS:Swift:ready" ]]; then
+    echo "swift-check: unexpected probe output: $RESULT" >&2
+    exit 1
+fi
+echo "swift-check: $RESULT (container source: $CONTAINER_DIR)"
