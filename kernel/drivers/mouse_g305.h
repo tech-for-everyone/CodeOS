@@ -27,6 +27,7 @@
 #define HIDPP_FEATURE_BATTERY_STATUS     0x1000
 #define HIDPP_FEATURE_HIRES_WHEEL        0x2121
 #define HIDPP_FEATURE_ADJUSTABLE_DPI     0x2201
+#define HIDPP_FEATURE_POLLING_RATE       0x2000   /* Performance/polling rate control */
 
 /* G305 Performance Modes */
 #define G305_MODE_ENDURANCE              0       /* 125 Hz (8ms) power-save */
@@ -40,6 +41,8 @@
 #define G305_BTN_BACK                    (1 << 3) /* Side back button */
 #define G305_BTN_FORWARD                 (1 << 4) /* Side forward button */
 #define G305_BTN_DPI_SWITCH              (1 << 5) /* Top DPI toggle button */
+
+/* HID++ 2.0 helpers (testable, pure framing/parsing; no USB I/O). */
 
 /* G305 Internal State allocated in RAM */
 struct g305_state {
@@ -73,9 +76,20 @@ int  g305_set_dpi(int dpi);
 int  g305_get_dpi(void);
 int  g305_cycle_dpi(void);
 int  g305_get_battery_level(void);
+int  g305_refresh_battery(void);
+int  g305_refresh_device_info(void);
 int  g305_set_performance_mode(int mode);
 int  g305_get_performance_mode(void);
 void g305_print_info(void);
 struct g305_state *g305_get_state(void);
+
+/* HID++ Protocol Helpers (testable, no USB I/O) */
+int hidpp_short_build(uint8_t *buf, size_t len, uint8_t dev_index,
+                      uint16_t feature_idx, uint8_t param1, uint8_t param2, uint8_t param3);
+int hidpp_long_build(uint8_t *buf, size_t len, uint8_t dev_index,
+                     uint16_t feature_idx, uint8_t reg_addr, const uint8_t *params, int param_count);
+int hidpp_parse_battery(const uint8_t *resp, int len, int *percent, int *charging);
+int hidpp_parse_dpi(const uint8_t *resp, int len, int *dpi);
+int hidpp_parse_polling_rate(const uint8_t *resp, int len, int *mode);
 
 #endif /* MOUSE_G305_H */

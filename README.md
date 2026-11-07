@@ -19,7 +19,7 @@ works — not a bajillion distros, one approachable system.
 - **Android compat** — Binder IPC, ashmem, property system
 - **Security** — AdBlock, firewall, file integrity monitoring, ClamAV
 - **Automated Driver Detection Subsystem** — runtime hardware identification probes, dynamic loading into volatile RAM, strictly withholding un-detected drivers
-- **Peripherals** — Logitech G305 Lightspeed receiver identification and generic HID mouse input; AULA F87 identification, generic USB keyboard input, and software Win-lock. HID++ controls, device RGB, and NKRO report parsing are not yet implemented.
+- **Peripherals** — Logitech G305 Lightspeed: receiver identification, HID mouse input, DPI presets/software scaling, DPI-cycle button, and best-effort HID++ battery/polling queries. AULA F87: identification, USB HID input, software Win-lock, RGB mode/brightness API with best-effort vendor control, and NKRO activity heuristics. Full HID++ feature-map negotiation and vendor-specific RGB/NKRO report-descriptor parsing remain hardware/firmware-dependent.
 - **CLI & Python Tools** — `codeos-cli`, Python `cmatrix`, and analogous Swift `cmatrix`
 
 ## Roadmap

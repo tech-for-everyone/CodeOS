@@ -173,7 +173,7 @@ SRC_C   += kernel/x11_server.c kernel/x11_stubs.c
     SRC_CXX = kernel/cxx_support.cpp kernel/stdcxx_support.cpp kernel/xserver.cpp arch/fb.cpp \
               arch/cursor_theme.cpp \
               kernel/desktop.cpp kernel/qt_desktop.cpp \
-              $(QT_BACKEND_DIR)/pixelman.cpp $(PKG_SRC_CXX)
+              $(QT_BACKEND_DIR)/pixelman.cpp $(HYPERDE_CXX) $(PKG_SRC_CXX)
     SRC_ASM = $(shell find arch -maxdepth 1 -name "*.S")
     TARGET = codeos-1-kernel.bin
     LDSCRIPT = linker.ld
@@ -265,12 +265,14 @@ RUST_TOOLCHAIN = $(HOME)/.rustup/toolchains/1.92.0-x86_64-unknown-linux-gnu/bin
 $(RUST_LIB): $(wildcard $(RUST_DIR)/src/*.rs) $(RUST_DIR)/Cargo.toml
 	cd $(RUST_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" cargo build --target x86_64-unknown-none --release
 
-# ── Rust compositor shell (HyperDE) ──
-RUST_HD_DIR = kernel/hyperde
-RUST_HD_LIB = $(RUST_HD_DIR)/target/x86_64-unknown-none/release/libhyperde_shell.a
-
-$(RUST_HD_LIB): $(wildcard $(RUST_HD_DIR)/src/*.rs) $(RUST_HD_DIR)/Cargo.toml ../userspace/hyperde/conf.lua
-	cd $(RUST_HD_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" cargo build --target x86_64-unknown-none --release
+# ── HyperDE compositor shell (C++ port, replaces Rust hyperde_shell) ──
+HYPERDE_DIR = kernel/hyperde
+HYPERDE_CXX = $(HYPERDE_DIR)/hyperde_shell.cpp \
+              $(HYPERDE_DIR)/hyperde_config.cpp \
+              $(HYPERDE_DIR)/hyperde_keybind.cpp \
+              $(HYPERDE_DIR)/hyperde_launcher.cpp \
+              $(HYPERDE_DIR)/hyperde_notify.cpp
+RUST_HD_LIB =
 
 # ── CDP Bridge for Chromium (runs in debian-minimal container) ──
 CDP_BRIDGE_SRC = ../pkgs/core/chromium-launcher/src/cdp_bridge.c
@@ -513,8 +515,8 @@ OBJ = $(OBJ_ALL) $(EMBED_OBJ)
 PHASE1_OBJ = $(OBJ_ALL)
 
 ifdef STAGE1_TARGET
-$(STAGE1_TARGET): $(PHASE1_OBJ) $(RUST_LIB) $(RUST_HD_LIB) $(RUST_PR_LIB) $(LDSCRIPT)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(RUST_LIB) $(RUST_HD_LIB) $(RUST_PR_LIB) $(OPENSSL_LDLIBS) --end-group
+$(STAGE1_TARGET): $(PHASE1_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(LDSCRIPT)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(OPENSSL_LDLIBS) --end-group
 	@echo "Stage 1: $@"
 
 kernel/embed_kernel.S: $(STAGE1_TARGET)
@@ -533,8 +535,8 @@ kernel/embed_splash.o: bootloader/splash.png
 	$(LD_BINARY) -r -b binary -o $@ $<
 endif
 
-$(TARGET): $(PHASE1_OBJ) $(EMBED_OBJ) $(RUST_LIB) $(RUST_HD_LIB) $(RUST_PR_LIB) $(QT6_OBJS) $(QT6_PANELS_STAMP) $(LDSCRIPT)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(EMBED_OBJ) --whole-archive $(QT6_OBJS) --no-whole-archive $(RUST_LIB) $(RUST_HD_LIB) $(RUST_PR_LIB) $(QT6_LIBS) $(OPENSSL_LDLIBS) --end-group
+$(TARGET): $(PHASE1_OBJ) $(EMBED_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(QT6_OBJS) $(QT6_PANELS_STAMP) $(LDSCRIPT)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(EMBED_OBJ) --whole-archive $(QT6_OBJS) --no-whole-archive $(RUST_LIB) $(RUST_PR_LIB) $(QT6_LIBS) $(OPENSSL_LDLIBS) --end-group
 	@echo "Built: $@"
 
 # Flat binary for QEMU -kernel (multiboot2-compatible)
