@@ -538,7 +538,8 @@ qt_panels_openweb.o: qt_panels_openweb.cpp \
   /home/codeosuser/CodeOS/pkgs/core/panels/src/net.h openweb_core.h \
   /home/codeosuser/CodeOS/pkgs/core/panels/src/ow_http.h \
   /home/codeosuser/CodeOS/pkgs/core/panels/src/openweb.h \
-  /home/codeosuser/CodeOS/kernel/../ow_engine.h ow_html.h \
+  ../../pkgs/core/openweb/src/ow_engine.h \
+  /home/codeosuser/CodeOS/include/jengine/jengine.h ow_html.h \
   /home/codeosuser/CodeOS/kernel/kernel/apphost.h \
   /home/codeosuser/CodeOS/kernel/kernel/block.h \
   /home/codeosuser/CodeOS/kernel/arch/x86_64/io.h \
@@ -1088,7 +1089,8 @@ qt_panels_common.h:
 openweb_core.h:
 /home/codeosuser/CodeOS/pkgs/core/panels/src/ow_http.h:
 /home/codeosuser/CodeOS/pkgs/core/panels/src/openweb.h:
-/home/codeosuser/CodeOS/kernel/../ow_engine.h:
+../../pkgs/core/openweb/src/ow_engine.h:
+/home/codeosuser/CodeOS/include/jengine/jengine.h:
 ow_html.h:
 /home/codeosuser/CodeOS/kernel/kernel/apphost.h:
 /home/codeosuser/CodeOS/kernel/kernel/block.h:

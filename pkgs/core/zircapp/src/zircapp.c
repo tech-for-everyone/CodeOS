@@ -31,9 +31,9 @@
 #include <stdio.h>
 #include <time.h>
 
-/* The launcher.  Registering it also registers the app suite
- * (Zircon's home app: home_init calls zircapp_register for each). */
-extern zircapp_app_t home_app;
+/* The compositor-owned shell is not an app; register the app modules
+ * directly for the desktop host. */
+extern void zircon_apps_register(void);
 
 /* Provided by pkgs/core/zircapp/src/zircapp_platform.c (and declared the
  * same way in Zircon/zircapp/zircapp.c).  freestd unistd.h has no usleep. */
@@ -1264,7 +1264,7 @@ int main(int argc, char **argv) {
     zircapp_init();
     zircapp_phone_init();
     zircapp_phone_set_screen(SCREEN_W, SCREEN_H);
-    zircapp_register(&home_app);
+    zircon_apps_register();
     printf("zircapp: framework up (%d apps registered)\n", zircapp_count());
 
     if (!force_console && sys_wm_attach() >= 0 && run_windowed())

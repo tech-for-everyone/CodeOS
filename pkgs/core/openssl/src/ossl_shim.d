@@ -22,7 +22,7 @@
   /usr/lib/clang/23/include/__stdarg_va_copy.h \
   ../pkgs/core/openssl/freestd/time.h kernel/kprintf.h kernel/types.h \
   drivers/timer.h ../pkgs/core/openssl/freestd/sys/types.h \
-  /usr/lib/clang/23/include/stdint.h kernel/rng.h
+  /usr/lib/clang/23/include/stdint.h kernel/rng.h arch/x86_64/rtc.h
 ../pkgs/core/openssl/freestd/string.h:
 ../pkgs/core/openssl/freestd/stdlib.h:
 /usr/lib/clang/23/include/stddef.h:
@@ -50,3 +50,4 @@ drivers/timer.h:
 ../pkgs/core/openssl/freestd/sys/types.h:
 /usr/lib/clang/23/include/stdint.h:
 kernel/rng.h:
+arch/x86_64/rtc.h:

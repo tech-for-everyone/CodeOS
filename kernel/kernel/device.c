@@ -22,8 +22,8 @@
 /* The supported devices.
  *
  * The logical size is what the interface is drawn for; the panel is what the
- * device actually has.  They differ on the 1080x2400 phone (a 360x800
- * logical screen at 3x) and on the 800x1280 tablet (400x640 logical at 2x).
+ * device actually has. They differ on the 1080x2400 phone (360x800 at 3x),
+ * the Galaxy S9 (360x740 at 4x), and the 1600x2560 tablet (800x1280 at 2x).
  * A profile whose scale is 1 is used as-is.
  */
 static const zircon_device_t kDevices[] = {
@@ -31,6 +31,7 @@ static const zircon_device_t kDevices[] = {
     { "phone-412x915",    412,  915,  412,  915, ZIRCON_DEVICE_PHONE,  ZIRCON_DEVICE_TOUCH, 1 },
     { "phone-1080x2340", 1080, 2340,  360,  780, ZIRCON_DEVICE_PHONE,  ZIRCON_DEVICE_TOUCH, 3 },
     { "phone-1080x2400", 1080, 2400,  360,  800, ZIRCON_DEVICE_PHONE,  ZIRCON_DEVICE_TOUCH, 3 },
+    { "sm-g960u",        1440, 2960,  360,  740, ZIRCON_DEVICE_PHONE,  ZIRCON_DEVICE_TOUCH, 4 },
     { "tablet-800x1280",  800, 1280,  800, 1280, ZIRCON_DEVICE_TABLET, ZIRCON_DEVICE_TOUCH | ZIRCON_DEVICE_POINTER | ZIRCON_DEVICE_KEYBOARD, 1 },
     { "tablet-1024x768", 1024,  768, 1024,  768, ZIRCON_DEVICE_TABLET, ZIRCON_DEVICE_TOUCH | ZIRCON_DEVICE_POINTER | ZIRCON_DEVICE_KEYBOARD, 1 },
     { "tablet-1200x1920",1200, 1920, 1200, 1920, ZIRCON_DEVICE_TABLET, ZIRCON_DEVICE_TOUCH | ZIRCON_DEVICE_POINTER | ZIRCON_DEVICE_KEYBOARD, 1 },

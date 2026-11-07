@@ -52,6 +52,7 @@ PROGRAMS = init shell csh zircapp zircon-notify zircon-clock zircon-info \
            linux-runner ld-codeos terminal syscall_test openweb \
            wineserver wine-runner linux-probe run-as dnslookup \
            crosvm-launcher ncvm chromium-launcher \
+           offline-ide \
            android-launcher android-clock android-calculator \
            android-settings android-dialer android-music android-browser \
            android-camera android-calendar android-keyboard
@@ -130,7 +131,8 @@ bas_progs:
 # Programs that only need core libs
 CORE_PROGS = init shell zircon-notify zircon-clock zircon-info \
              code-music audio-demo linux-runner syscall_test crosvm-launcher ncvm android-apps \
-             wineserver wine-runner run-as dnslookup leveltest netbeam chromium-launcher
+             wineserver wine-runner run-as dnslookup leveltest netbeam chromium-launcher \
+             offline-ide
 # Programs that also need android lib
 ANDROID_PROGS = apk-parser android-container android-launcher \
                 android-clock android-calculator android-settings \

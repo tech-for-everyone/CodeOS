@@ -18,6 +18,9 @@ works — not a bajillion distros, one approachable system.
 - **Containers** — Docker-like container engine with namespaces and cgroups
 - **Android compat** — Binder IPC, ashmem, property system
 - **Security** — AdBlock, firewall, file integrity monitoring, ClamAV
+- **Automated Driver Detection Subsystem** — runtime hardware identification probes, dynamic loading into volatile RAM, strictly withholding un-detected drivers
+- **Peripherals** — Logitech G305 Lightspeed receiver identification and generic HID mouse input; AULA F87 identification, generic USB keyboard input, and software Win-lock. HID++ controls, device RGB, and NKRO report parsing are not yet implemented.
+- **CLI & Python Tools** — `codeos-cli`, Python `cmatrix`, and analogous Swift `cmatrix`
 
 ## Roadmap
 1. Make NetBeam for every OS
@@ -119,6 +122,30 @@ Installed state is stored in `/.pkg/db`; repository configuration and metadata
 are cached under `/.pkg` so package listings and dependency checks survive a
 reboot.
 
+### Move On: transfer data from Zircon to CodeOS
+
+The native Move On app is included in Zircon and in the `zircapp` built by
+CodeOS. On Zircon, launch **Move On** and tap **Prepare export** to
+copy the phone's user files to
+`/root/root/home/Move On/export-NNN`. The app checks the whole tree before
+copying and refuses data sets with files over 64 KiB,
+unsupported path names, or more than 500 entries (limits of the current
+Zircon filesystem APIs). Copy that export directory to a host computer, then
+create a portable, checksum-verified bundle and import it into CodeOS:
+
+```sh
+python3 Zircon/scripts/move_on.py export /path/to/export-NNN \
+  --output /path/to/shared-storage/zircon-data.moveon
+python3 Zircon/scripts/move_on.py import /path/to/shared-storage/zircon-data.moveon \
+  --destination /path/to/codeos/home/root
+```
+
+The importer verifies SHA-256 checksums, rejects unsafe paths and unsupported
+file types, and refuses to overwrite an existing destination. Empty
+directories and staged file permission bits are preserved. Run `make move-on-check`
+to test the export/import flow and its safety checks. The Zircon app is
+compiled into the phone launcher as part of both `make all` builds.
+
 ### Xora application archives
 
 Installed applications are distributed as `.xora` files: gzip-compressed tar
@@ -144,6 +171,20 @@ Each install records SHA-256 baselines under `.xora/integrity/`. Auditing
 reports changed files; repair deletes changed executable/code files only.
 `make xora-all` packages every executable in `kernel/userspace/` into
 `pkgs/xora/`, including legacy apps that do not yet have a source manifest.
+
+The self-contained terminal IDE can be built and packaged without network
+access:
+
+```sh
+make offline-ide-package
+make xora-inspect XORA_ARCHIVE=pkgs/xora/offline-ide-1.0.0.xora
+```
+
+In CodeOS, run `offline-ide [file]` from `csh`. The editor includes C and Swift
+templates, local file editing, and build/run attempts using installed local
+compilers. Swift source editing is available offline; CodeOS does not yet ship
+a native Swift compiler/runtime, so Swift build/run requires one to be added
+separately. `make swift-check` tests the host-side Swift toolchain when present.
 
 ### Release tarball
 

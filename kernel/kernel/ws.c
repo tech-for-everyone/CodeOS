@@ -129,13 +129,14 @@ int ws_client_handshake(ws_client_t *w, const char *host, const char *path) {
     key[32] = 0;
 
     char req[512];
-    int n = sprintf(req,
+    int n = snprintf(req, sizeof(req),
         "GET %s HTTP/1.1\r\n"
         "Host: %s\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Key: %s\r\n"
         "Sec-WebSocket-Version: 13\r\n\r\n", path, host, key);
+    if (n < 0 || n >= (int)sizeof(req)) return -1;
 
     if (w->send(w->ctx, req, n) != n) return -1;
 

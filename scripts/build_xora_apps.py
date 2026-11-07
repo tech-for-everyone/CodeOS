@@ -59,14 +59,21 @@ def main() -> None:
     parser.add_argument("--userspace", default="kernel/userspace")
     parser.add_argument("--packages", default="pkgs/core")
     parser.add_argument("--output", default="pkgs/xora")
+    parser.add_argument("--app", help="package only this built userspace application")
     args = parser.parse_args()
 
     userspace = Path(args.userspace)
     packages = Path(args.packages)
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
-    binaries = sorted(path for path in userspace.iterdir()
-                      if path.is_file() and path.stat().st_mode & stat.S_IXUSR)
+    if args.app:
+        binary = userspace / args.app
+        if not binary.is_file() or not binary.stat().st_mode & stat.S_IXUSR:
+            raise SystemExit(f"userspace application is not built or executable: {binary}")
+        binaries = [binary]
+    else:
+        binaries = sorted(path for path in userspace.iterdir()
+                          if path.is_file() and path.stat().st_mode & stat.S_IXUSR)
     if not binaries:
         raise SystemExit(f"no executable userspace apps found in {userspace}")
 

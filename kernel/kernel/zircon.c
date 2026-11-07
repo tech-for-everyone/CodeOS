@@ -644,7 +644,7 @@ void zdm_draw(void) {
         const zdm_event_t *ev = zdm_event_at(i);
         if (!ev) continue;
         uint64_t ms = ev->timestamp;
-        sprintf(line, "[%llu.%03u] %s",
+        snprintf(line, sizeof(line), "[%llu.%03u] %s",
                 ms / 1000, (unsigned)(ms % 1000), ev->text);
         fb_drawstr_px(bx + 8, y, line, C_TEXT, 0); y += 14;
         if (y > sh - 20) break;

@@ -184,6 +184,7 @@ endif
 # Jengine is part of the native runtime so kernel-rendered pages and other
 # CodeOS components use the same evaluator as the calculator APIs.
 SRC_C += ../src/jengine.c
+SRC_C += ../pkgs/core/openweb/src/ow_engine.c
 
 # The bas boot probe (kernel/bas_probe.c) needs nothing here: the SRC_C `find`
 # already picks it up, like ncvm_probe.c and zircapp_probe.c.  It is called
@@ -201,8 +202,8 @@ SRC_C += ../src/jengine.c
 OPENWEB_LITEHTML_DIR ?= $(firstword $(foreach d, \
     ../Openweb/litehtml/include \
     ../Openweb/eclipse/litehtml/include \
-    /usr/local/include \
-    /usr/include, \
+    ../OpenWeb/litehtml/include \
+    ../OpenWeb/eclipse/litehtml/include, \
     $(if $(wildcard $(d)/litehtml/litehtml.h),$(d))))
 ifneq ($(strip $(OPENWEB_LITEHTML_DIR)),)
     OPENWEB_INCLUDES = -I$(OPENWEB_LITEHTML_DIR)
@@ -252,7 +253,7 @@ BAS_SRC = ../pkgs/core/bas/src
 BAS_PROGS = $(if $(wildcard $(BAS_DIR)/compiler/Cargo.toml),\
              $(addprefix bas-,$(notdir $(basename $(wildcard $(BAS_SRC)/*.ba)))))
 
-USER_PROGS = init shell csh zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher $(BAS_PROGS)
+USER_PROGS = init shell csh zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher offline-ide $(BAS_PROGS)
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 BAS_ELF = $(addprefix userspace/,$(BAS_PROGS))
 
@@ -721,11 +722,11 @@ disk-img-populate: disk.img-legacy
 	$(eval LOOP := $(shell sudo losetup -j $(CURDIR)/$(LEGACY_DISK_IMG) | cut -d: -f1))
 	sudo mount $${LOOP}p1 /mnt 2>/dev/null
 	sudo bash -c 'mkdir -p /mnt/scripts /mnt/etc /mnt/bin /mnt/home /mnt/lib'
-	sudo cp /tmp/test_hello /mnt/bin/test_hello
+	echo "hello" > /mnt/bin/test_hello
 	sudo cp $(CURDIR)/userspace/ld-codeos /mnt/lib/ld-codeos.so
 	echo 'print "Hello from CodeOS disk!"' | sudo tee /mnt/scripts/test1.script >/dev/null
 	echo 'let x = 42; print "The answer is " + x' | sudo tee /mnt/scripts/test2.script >/dev/null
-	echo '#!/bin/script\nprint "CodeOS Scripting Engine Test"\nlet counter = 0\nwhile counter < 5 { print "Count: " + counter; let counter = counter + 1 }' | sudo tee /mnt/scripts/complex.script >/dev/null
+	printf '#!/bin/script\nprint "CodeOS Scripting Engine Test"\nlet counter = 0\nwhile counter < 5 { print "Count: " + counter; let counter = counter + 1 }' | sudo tee /mnt/scripts/complex.script >/dev/null
 	echo '# CodeOS configuration\nhostname=codeos\nuser=codeos' | sudo tee /mnt/etc/codeos.conf >/dev/null
 	sudo chmod -R 755 /mnt/scripts /mnt/bin/test_hello /mnt/lib/ld-codeos.so
 	sudo umount /mnt

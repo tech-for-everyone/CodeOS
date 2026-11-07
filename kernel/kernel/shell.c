@@ -23,6 +23,8 @@
 #include "../drivers/speaker.h"
 #include "block.h"
 #include "../drivers/drivers.h"
+#include "../drivers/mouse_g305.h"
+#include "../drivers/kbd_aula_f87.h"
 #include "../drivers/e1000.h"
 #include "../drivers/usb.h"
 #include "desktop.h"
@@ -1685,7 +1687,7 @@ static void cmd_sysfetch(void) {
     sprintf(buf_threads, "%d", sched_thread_count());
 
     const char *shell = env_get("SHELL");
-    sprintf(buf_shell, "%s", shell ? shell : "csl");
+    snprintf(buf_shell, sizeof(buf_shell), "%s", shell ? shell : "csl");
     sprintf(buf_pkgs, "%d (CodeOS)", pkg_installed_count());
 
     sprintf(buf_res, "%ux%u", (unsigned)fb_getwidth(), (unsigned)fb_getheight());
@@ -2794,12 +2796,16 @@ static void cmd_wine(int argc, char **argv) {
         kprintf("wine: creating prefix '%s'...\n", argv[2]);
         fs_path_mkdir("/wines");
         char buf[256];
-        strcpy(buf, "/wines/");
-        strcat(buf, argv[2]);
+        if (snprintf(buf, sizeof(buf), "/wines/%s", argv[2]) >= (int)sizeof(buf)) {
+            kprintf("wine: prefix name too long\n");
+            return;
+        }
         fs_path_mkdir(buf);
         char dc[256];
-        strcpy(dc, buf);
-        strcat(dc, "/drive_c");
+        if (snprintf(dc, sizeof(dc), "%s/drive_c", buf) >= (int)sizeof(dc)) {
+            kprintf("wine: prefix path too long\n");
+            return;
+        }
         fs_path_mkdir(dc);
         kprintf("wine: prefix '%s' created\n", argv[2]);
         return;
@@ -4141,6 +4147,19 @@ static void cmd_devices(void) {
     pci_print_devices();
 }
 
+static void cmd_driver_detect(void) {
+    kprintf("=== Automated Driver Detection & In-Memory Loading Subsystem ===\n");
+    drivers_dump_detection_table();
+    if (g305_is_available()) {
+        kprintf("\n");
+        g305_print_info();
+    }
+    if (aula_f87_is_available()) {
+        kprintf("\n");
+        aula_f87_print_info();
+    }
+}
+
 static void cmd_heapstat(void) {
     kprintf("=== Heap Statistics ===\n");
     size_t total = mm_heap_total();
@@ -4429,6 +4448,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "meminfo") == 0) cmd_meminfo();
     else if (strcmp(cmd, "stats") == 0) cmd_stats();
     else if (strcmp(cmd, "devices") == 0) cmd_devices();
+    else if (strcmp(cmd, "drivers") == 0 || strcmp(cmd, "driver-detect") == 0) cmd_driver_detect();
     else if (strcmp(cmd, "heapstat") == 0) cmd_heapstat();
     else if (strcmp(cmd, "update-check") == 0) cmd_update_check(argc, argv);
     else if (strcmp(cmd, "update-status") == 0) cmd_update_status(argc, argv);

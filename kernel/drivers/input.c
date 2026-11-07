@@ -1,6 +1,8 @@
 #include "input.h"
 #include "keyboard.h"
 #include "mouse.h"
+#include "mouse_g305.h"
+#include "kbd_aula_f87.h"
 #include "ps2.h"
 #include "usb.h"
 #include "gesture.h"
@@ -74,39 +76,26 @@ static void push_key_event(int key) {
 
 void input_poll(void) {
 
-    /* Try PS/2 keyboard first — must check bit 5 to distinguish from mouse data */
-    if ((inb(0x64) & 0x01) && !(inb(0x64) & 0x20)) {
-        int c = keyboard_poll();
-        if (c) {
-            push_key_event(c);
-            /* Start/restart key repeat */
-            uint64_t now = timer_get_milliseconds();
-            if (c != repeat_key || !repeat_active) {
-                repeat_key = c;
-                repeat_first_time = now;
-                repeat_last_time = now;
-                repeat_active = 1;
-            }
-        } else {
-            /* scancode 0 = key release → stop repeat */
-            repeat_active = 0;
-            repeat_key = 0;
+    int key = aula_f87_is_available() ? aula_f87_poll() : 0;
+    /* A detected USB keyboard must not mask a working PS/2 keyboard when
+     * that USB device has no event ready. */
+    if (!key && (inb(0x64) & 0x01) && !(inb(0x64) & 0x20))
+        key = keyboard_poll();
+    if (!key && usb_kbd_available())
+        key = usb_kbd_poll();
+
+    if (key) {
+        push_key_event(key);
+        uint64_t now = timer_get_milliseconds();
+        if (key != repeat_key || !repeat_active) {
+            repeat_key = key;
+            repeat_first_time = now;
+            repeat_last_time = now;
+            repeat_active = 1;
         }
-    } else if (usb_kbd_available()) {
-        int c = usb_kbd_poll();
-        if (c) {
-            push_key_event(c);
-            uint64_t now = timer_get_milliseconds();
-            if (c != repeat_key || !repeat_active) {
-                repeat_key = c;
-                repeat_first_time = now;
-                repeat_last_time = now;
-                repeat_active = 1;
-            }
-        } else {
-            repeat_active = 0;
-            repeat_key = 0;
-        }
+    } else if (!aula_f87_is_available()) {
+        repeat_active = 0;
+        repeat_key = 0;
     }
 
     /* Key repeat: if a key is held down and enough time has passed,
@@ -153,8 +142,27 @@ void input_poll(void) {
         }
     }
 
+    /* Logitech G305 Lightspeed Mouse */
+    if (g305_is_available()) {
+        static int prev_g305_buttons;
+        int gdx = 0, gdy = 0, gbtn = 0, gwhl = 0;
+        if (g305_poll(&gdx, &gdy, &gbtn, &gwhl)) {
+            if (gdx || gdy || gwhl || gbtn != prev_g305_buttons) {
+                input_event_t event;
+                event.type = INPUT_EVENT_MOUSE;
+                event.data.mouse.x = 0;
+                event.data.mouse.y = 0;
+                event.data.mouse.dx = gdx;
+                event.data.mouse.dy = gdy;
+                event.data.mouse.buttons = gbtn;
+                event.data.mouse.wheel = gwhl;
+                input_queue_push(&event);
+                prev_g305_buttons = gbtn;
+            }
+        }
+    }
     /* USB HID relative mouse (boot protocol) */
-    if (usb_mouse_available()) {
+    else if (usb_mouse_available()) {
         static int prev_buttons;
         int mdx, mdy, mbuttons, mwheel;
         if (usb_mouse_poll(&mdx, &mdy, &mbuttons, &mwheel)) {

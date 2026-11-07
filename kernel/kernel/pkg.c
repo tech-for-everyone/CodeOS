@@ -236,11 +236,11 @@ static int pkg_fetch_repo_index(const repository_t *repo) {
     char path[576];
     int plen = (int)strlen(u.path);
     if (plen == 0 || strcmp(u.path, "/") == 0)
-        sprintf(path, "/pkg.index");
+        snprintf(path, sizeof(path), "/pkg.index");
     else if (u.path[plen - 1] == '/')
-        sprintf(path, "%spkg.index", u.path);
+        snprintf(path, sizeof(path), "%spkg.index", u.path);
     else
-        sprintf(path, "%spkg.index", u.path);
+        snprintf(path, sizeof(path), "%s/pkg.index", u.path);
 
     char buf[2048];
     int n = use_tls ? https_get(u.host, u.port, path, buf, sizeof(buf) - 1)
@@ -263,7 +263,7 @@ static int pkg_write_pkg_index(void) {
             int need = (int)strlen(p->name) + (int)strlen(p->version) + 32 +
                        (int)strlen(repositories[i].name);
             if (n + need >= (int)sizeof(buf)) break;
-            n += sprintf(buf + n, "%s %s %u %s\n",
+            n += snprintf(buf + n, sizeof(buf) - n, "%s %s %u %s\n",
                          p->name, p->version, p->size, repositories[i].name);
             entries++;
         }
@@ -273,7 +273,7 @@ static int pkg_write_pkg_index(void) {
         int need = (int)strlen(remote_name[j]) + (int)strlen(remote_ver[j]) + 32 +
                    (int)strlen(remote_src[j]);
         if (n + need >= (int)sizeof(buf)) break;
-        n += sprintf(buf + n, "%s %s %u %s\n",
+        n += snprintf(buf + n, sizeof(buf) - n, "%s %s %u %s\n",
                      remote_name[j], remote_ver[j], remote_size[j], remote_src[j]);
         entries++;
     }
@@ -287,9 +287,9 @@ static int pkg_write_pkg_index(void) {
 /* Persist repo config so it survives reboot (moss: config in /.moss). */
 static void pkg_save_repo_config(void) {
     char buf[FS_CONTENT_MAX];
-    int n = sprintf(buf, "# CodeOS CCP repo config\n# last-update: %u\n", pkg_metadata_ts);
+    int n = snprintf(buf, sizeof(buf), "# CodeOS CCP repo config\n# last-update: %u\n", pkg_metadata_ts);
     for (int i = 0; i < repo_count && n < (int)sizeof(buf) - 96; i++)
-        n += sprintf(buf + n, "%s %s %d\n",
+        n += snprintf(buf + n, sizeof(buf) - n, "%s %s %d\n",
                      repositories[i].name, repositories[i].url, repositories[i].enabled);
     fs_mkdir(PKG_DIR);
     fs_mkfile(PKG_REPOS_FILE);
@@ -1293,7 +1293,7 @@ void pkg_fetch(const char *name, const char *out_dir) {
     }
 
     char stone[FS_CONTENT_MAX];
-    int n = sprintf(stone,
+    int n = snprintf(stone, sizeof(stone),
         "pkg-index: 1\n"
         "name: %s\n"
         "version: %s\n"
@@ -1453,7 +1453,7 @@ int pkg_fetch_payload(const char *name, const char *out_dir) {
     /* Synthetic manifest payload (NAME:/VERSION:/file: lines, -If compatible). */
     {
         char body[FS_CONTENT_MAX];
-        int n = sprintf(body,
+        int n = snprintf(body, sizeof(body),
                         "NAME:%s\n"
                         "VERSION:%s\n"
                         "DESC:%s\n"

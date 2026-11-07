@@ -316,8 +316,9 @@ int sprintf(char *buf, const char *fmt, ...) {
 }
 
 size_t strlcpy(char *dst, const char *src, size_t dstsize) {
-    if (!dst || !src || dstsize == 0) return 0;
+    if (!src) return 0;
     size_t slen = strlen(src);
+    if (!dst || dstsize == 0) return slen;
     size_t to_copy = (slen < dstsize - 1) ? slen : dstsize - 1;
     for (size_t i = 0; i < to_copy; i++) dst[i] = src[i];
     dst[to_copy] = 0;
@@ -325,9 +326,11 @@ size_t strlcpy(char *dst, const char *src, size_t dstsize) {
 }
 
 size_t strlcat(char *dst, const char *src, size_t dstsize) {
-    if (!dst || !src || dstsize == 0) return 0;
+    if (!src) return 0;
+    size_t slen = strlen(src);
+    if (!dst || dstsize == 0) return slen;
     size_t dlen = strlen(dst);
-    if (dlen >= dstsize) return dstsize + strlen(src);
+    if (dlen >= dstsize) return dstsize + slen;
     return dlen + strlcpy(dst + dlen, src, dstsize - dlen);
 }
 

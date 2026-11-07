@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <codeos/syscall_abi.h>
 #include "device.h"
 
 /* The two kernel functions device.c uses that the host does not have.
@@ -55,6 +56,18 @@ int main(void) {
     CHECK(zircon_device_count() >= 6, "the table has several devices");
     CHECK(named("phone-412x915") >= 0, "a phone is in the table");
     CHECK(named("tablet-1024x768") >= 0, "a tablet is in the table");
+    CHECK(CODEOS_INFO_DEVICE == 4, "the device-info query id remains ABI-stable");
+
+    int is9 = named("sm-g960u");
+    CHECK(is9 >= 0, "the Galaxy S9 profile is in the table");
+    if (is9 >= 0) {
+        const zircon_device_t *d = zircon_device_at(is9);
+        CHECK(d->panel_w == 1440 && d->panel_h == 2960, "the Galaxy S9 panel is 1440x2960");
+        CHECK(d->ui_w == 360 && d->ui_h == 740, "the Galaxy S9 logical screen is 360x740");
+        CHECK(d->scale == 4, "the Galaxy S9 profile scales 4x");
+        CHECK(d->form == ZIRCON_DEVICE_PHONE, "the Galaxy S9 is a phone");
+        CHECK(d->caps == ZIRCON_DEVICE_TOUCH, "the Galaxy S9 profile advertises touch only");
+    }
 
     int ip = named("phone-1080x2400");
     CHECK(ip >= 0, "a 1080x2400 phone is in the table");
@@ -126,6 +139,21 @@ int main(void) {
     d = zircon_device();
     CHECK(d->scale == 3, "the 3x scale survives on a 1080x2400 panel");
     CHECK(d->ui_w == 360 && d->ui_h == 800, "the logical screen is 360x800");
+
+    zircon_device_init("", 1440, 2960);
+    d = zircon_device();
+    CHECK(!strcmp(d->name, "sm-g960u"), "the Galaxy S9 profile matches its native panel");
+
+    zircon_device_init("zircon.device=sm-g960u", 1440, 2960);
+    d = zircon_device();
+    CHECK(!strcmp(d->name, "sm-g960u"), "the Galaxy S9 profile can be selected by name");
+    CHECK(d->scale == 4 && d->ui_w == 360 && d->ui_h == 740,
+          "the Galaxy S9 logical layout is preserved at native resolution");
+
+    zircon_device_init("zircon.device=sm-g960u", 720, 1480);
+    d = zircon_device();
+    CHECK(d->scale == 2 && d->ui_w == 360 && d->ui_h == 740,
+          "the Galaxy S9 profile scales down to a half-resolution panel");
 
     if (failures) {
         printf("%d check(s) failed\n", failures);

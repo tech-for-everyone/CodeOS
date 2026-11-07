@@ -8,15 +8,12 @@ if [[ -z "$SWIFT_BIN" ]]; then
         SWIFT_BIN=/usr/bin/swiftc
     elif [[ -x /home/codeosuser/.local/share/swiftly/bin/swiftc ]]; then
         SWIFT_BIN=/home/codeosuser/.local/share/swiftly/bin/swiftc
+    elif command -v swiftc >/dev/null 2>&1; then
+        SWIFT_BIN="$(command -v swiftc)"
     else
         echo "swift-check: Swift compiler not installed; skipping" >&2
         exit 0
     fi
-fi
-
-if [[ ! -d "$CONTAINER_DIR" ]]; then
-    echo "swift-check: container checkout not found at $CONTAINER_DIR; skipping" >&2
-    exit 0
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,6 +23,9 @@ SWIFT_ROOT="$(cd "$(dirname "$SWIFT_REAL")/.." && pwd)"
 LIB_DIR="$SWIFT_ROOT/lib/swift/linux"
 TOOLCHAIN_LIB_DIR="$SWIFT_ROOT/lib"
 SWIFT_DRIVER="${CODEOS_SWIFT_DRIVER:-$(dirname "$SWIFT_BIN")/swift}"
+if [[ ! -x "$SWIFT_DRIVER" ]] && command -v swift >/dev/null 2>&1; then
+    SWIFT_DRIVER="$(command -v swift)"
+fi
 SHIM_DIR="$CACHE_DIR/libs"
 mkdir -p "$CACHE_DIR/module" "$CACHE_DIR/clang" "$SHIM_DIR" \
     "$CACHE_DIR/xdg" "$CACHE_DIR/config" "$CACHE_DIR/package"
@@ -47,7 +47,9 @@ export XDG_CONFIG_HOME="$CACHE_DIR/config"
 # Parse the real Apple package manifest as part of the integration check. This
 # is intentionally metadata-only: resolving/building its macOS Virtualization
 # stack cannot make a freestanding CodeOS kernel able to run it.
-if [[ -x "$SWIFT_DRIVER" ]]; then
+if [[ ! -d "$CONTAINER_DIR" ]]; then
+    echo "swift-check: container checkout not found at $CONTAINER_DIR; skipping manifest validation" >&2
+elif [[ -x "$SWIFT_DRIVER" ]]; then
     PACKAGE_JSON="$CACHE_DIR/package/manifest.json"
     "$SWIFT_DRIVER" package dump-package \
         --package-path "$CONTAINER_DIR" \
@@ -67,4 +69,4 @@ if [[ "$RESULT" != "CodeOS:Swift:ready" ]]; then
     echo "swift-check: unexpected probe output: $RESULT" >&2
     exit 1
 fi
-echo "swift-check: $RESULT (container source: $CONTAINER_DIR)"
+echo "swift-check: $RESULT"

@@ -41,6 +41,11 @@
 #define SYSCALL_DUP2              34
 #define SYSCALL_SHM               35
 #define SYSCALL_GET_INFO          36
+#define CODEOS_INFO_KERNEL_VERSION 0
+#define CODEOS_INFO_KERNEL_NAME    1
+#define CODEOS_INFO_APPHOST_CONTEXT 2
+#define CODEOS_INFO_RTC_TIME       3
+#define CODEOS_INFO_DEVICE         4
 #define SYSCALL_WEB               37
 #define SYSCALL_STAT              38
 #define SYSCALL_CHDIR             39
@@ -100,13 +105,14 @@
  * userspace program -- /bin/zircapp, /bin/terminal -- ask for it.
  * Returns 1 when armed, 0 when no compositor/bridge is available. */
 #define SYSCALL_WM_ATTACH          80 /* wm_attach()                     -> 1/0 */
-#define SYSCALL_WIFI_CONTROL       81 /* wifi_control(cmd, arg)          -> 0/-1 */
+#define SYSCALL_WIFI_CONTROL       81 /* wifi_control; cmd 4 returns enabled state */
 #define SYSCALL_BT_CONTROL         82 /* bt_control(cmd, arg)            -> 0/-1 */
 #define SYSCALL_DND_SET            83 /* dnd_set(enabled)                -> 0/-1 */
 #define SYSCALL_DND_GET            84 /* dnd_get()                       -> 0/1 */
 #define SYSCALL_AIRPLANE_SET       85 /* airplane_set(enabled)           -> 0/-1 */
 #define SYSCALL_AIRPLANE_GET       86 /* airplane_get()                  -> 0/1 */
+#define SYSCALL_NET_HTTP_GET       87 /* a1=host,a2=port,a3=path,a4=buf,a5=cap,a6=tls */
 
-#define CODEOS_SYSCALL_COUNT 87
+#define CODEOS_SYSCALL_COUNT 88
 
 #endif

@@ -1,0 +1,11 @@
+{
+  "name": "offline-ide",
+  "version": "1.0.0",
+  "description": "Offline terminal IDE with C and Swift templates, local editing, and optional compiler integration",
+  "license": "MIT",
+  "type": "source",
+  "category": "Development",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/offline-ide",
+  "source": "src/"
+}

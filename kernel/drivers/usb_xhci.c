@@ -7,6 +7,8 @@
 #include "../kernel/vmm.h"
 #include "../kernel/pmm.h"
 #include "mouse.h"
+#include "keyboard.h"
+#include "hid_keys.h"
 
 #define XHCI_CLASS    0x0C
 #define XHCI_SUBCLASS 0x03
@@ -91,6 +93,30 @@ struct usb_device_desc {
     uint8_t  bNumConfigurations;
 } __attribute__((packed));
 
+/* USB configuration/interface/endpoint descriptors for parsing */
+struct usb_config_desc {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+    uint16_t wTotalLength;
+    uint8_t  bNumInterfaces;
+    uint8_t  bConfigurationValue;
+    uint8_t  iConfiguration;
+    uint8_t  bmAttributes;
+    uint8_t  bMaxPower;
+} __attribute__((packed));
+
+struct usb_iface_desc {
+    uint8_t  bLength;
+    uint8_t  bDescriptorType;
+    uint8_t  bInterfaceNumber;
+    uint8_t  bAlternateSetting;
+    uint8_t  bNumEndpoints;
+    uint8_t  bInterfaceClass;
+    uint8_t  bInterfaceSubClass;
+    uint8_t  bInterfaceProtocol;
+    uint8_t  iInterface;
+} __attribute__((packed));
+
 struct xhci_dev_state {
     int slot_id;
     struct usb_dev dev;
@@ -136,6 +162,49 @@ static int dev_transfer_idx[MAX_SLOTS + 1];
 /* Bounce buffer for control transfer data (higher-half mapped, DMA-safe) */
 static uint8_t *xfer_buf;
 static uint64_t xfer_buf_paddr;
+
+/* ───── HID keyboard/mouse tracking ───── */
+static int xhci_kbd_dev_idx = -1;
+static uint8_t xhci_kbd_prev_report[16];
+static int xhci_kbd_prev_valid;
+
+static int xhci_mouse_dev_idx = -1;
+static int xhci_touch_dev_idx = -1;
+
+/* HID-to-ASCII tables (same as EHCI driver) */
+static const char hid_to_ascii[256] = {
+    [0x04] = 'a', [0x05] = 'b', [0x06] = 'c', [0x07] = 'd',
+    [0x08] = 'e', [0x09] = 'f', [0x0A] = 'g', [0x0B] = 'h',
+    [0x0C] = 'i', [0x0D] = 'j', [0x0E] = 'k', [0x0F] = 'l',
+    [0x10] = 'm', [0x11] = 'n', [0x12] = 'o', [0x13] = 'p',
+    [0x14] = 'q', [0x15] = 'r', [0x16] = 's', [0x17] = 't',
+    [0x18] = 'u', [0x19] = 'v', [0x1A] = 'w', [0x1B] = 'x',
+    [0x1C] = 'y', [0x1D] = 'z',
+    [0x1E] = '1', [0x1F] = '2', [0x20] = '3', [0x21] = '4',
+    [0x22] = '5', [0x23] = '6', [0x24] = '7', [0x25] = '8',
+    [0x26] = '9', [0x27] = '0', [0x28] = '\n', [0x2A] = '\b',
+    [0x2B] = '\t', [0x2C] = ' ', [0x2D] = '-', [0x2E] = '=',
+    [0x2F] = '[', [0x30] = ']', [0x31] = '\\', [0x33] = ';',
+    [0x34] = '\'', [0x35] = '`', [0x36] = ',', [0x37] = '.',
+    [0x38] = '/',
+};
+
+static const char hid_to_ascii_shift[256] = {
+    [0x04] = 'A', [0x05] = 'B', [0x06] = 'C', [0x07] = 'D',
+    [0x08] = 'E', [0x09] = 'F', [0x0A] = 'G', [0x0B] = 'H',
+    [0x0C] = 'I', [0x0D] = 'J', [0x0E] = 'K', [0x0F] = 'L',
+    [0x10] = 'M', [0x11] = 'N', [0x12] = 'O', [0x13] = 'P',
+    [0x14] = 'Q', [0x15] = 'R', [0x16] = 'S', [0x17] = 'T',
+    [0x18] = 'U', [0x19] = 'V', [0x1A] = 'W', [0x1B] = 'X',
+    [0x1C] = 'Y', [0x1D] = 'Z',
+    [0x1E] = '!', [0x1F] = '@', [0x20] = '#', [0x21] = '$',
+    [0x22] = '%', [0x23] = '^', [0x24] = '&', [0x25] = '*',
+    [0x26] = '(', [0x27] = ')', [0x28] = '\n', [0x2A] = '\b',
+    [0x2B] = '\t', [0x2C] = ' ', [0x2D] = '_', [0x2E] = '+',
+    [0x2F] = '{', [0x30] = '}', [0x31] = '|', [0x33] = ':',
+    [0x34] = '"', [0x35] = '~', [0x36] = '<', [0x37] = '>',
+    [0x38] = '?',
+};
 
 /* MMIO helpers */
 static uint32_t xh_r32(uintptr_t base, uint16_t o) {
@@ -357,13 +426,194 @@ struct usb_dev *xhci_get_dev(int idx) {
     return &dev_states[idx].dev;
 }
 
-int xhci_kbd_available(void) { return 0; }
-int xhci_kbd_poll(void) { return 0; }
-int xhci_touch_available(void) { return 0; }
-int xhci_touch_poll(int *x, int *y, int *btn) { (void)x;(void)y;(void)btn; return 0; }
-int xhci_mouse_available(void) { return 0; }
+/* ───── USB HID keyboard polling ───── */
+
+int xhci_kbd_available(void) {
+    return xhci_kbd_dev_idx >= 0 && xhci_kbd_dev_idx < num_devs;
+}
+
+int xhci_kbd_poll(void) {
+    if (xhci_kbd_dev_idx < 0 || xhci_kbd_dev_idx >= num_devs) return 0;
+    struct usb_dev *dev = &dev_states[xhci_kbd_dev_idx].dev;
+
+    uint8_t report[16];
+    memset(report, 0, sizeof(report));
+
+    /* Try reading up to 16 bytes — many gaming keyboards (NKRO) send >8 byte reports */
+    int ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0100, 0, 16, report);
+    if (ret < 0) {
+        /* Fallback: try raw input report (report ID 0) with 8 bytes */
+        memset(report, 0, 8);
+        ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0000, 0, 8, report);
+        if (ret < 0) return 0;
+    }
+
+    uint8_t mod = report[0];
+
+    /* Update global modifier state (keyboard.c globals) for Alt+Tab, Ctrl+W etc. */
+    extern int shift_down, ctrl_down, alt_down, super_down;
+    shift_down  = (mod & HID_MOD_SHIFT) ? 1 : 0;
+    ctrl_down   = (mod & HID_MOD_CTRL)  ? 1 : 0;
+    alt_down    = (mod & HID_MOD_ALT)   ? 1 : 0;
+    super_down  = (mod & HID_MOD_GUI)   ? 1 : 0;
+
+    /* Boot reports carry up to six keys; NKRO keyboards commonly carry more.
+       Return one newly pressed usage per poll and remember the complete
+       report, so rollover and simultaneous chords do not lose keys. */
+    uint8_t key = 0;
+    for (int i = 2; i < (int)sizeof(report); i++) {
+        if (!report[i]) continue;
+        int was_down = 0;
+        for (int j = 2; j < (int)sizeof(xhci_kbd_prev_report); j++)
+            if (xhci_kbd_prev_report[j] == report[i]) { was_down = 1; break; }
+        if (!was_down || !xhci_kbd_prev_valid) { key = report[i]; break; }
+    }
+    memcpy(xhci_kbd_prev_report, report, sizeof(report));
+    xhci_kbd_prev_valid = 1;
+    if (!key) return 0;
+
+    /* Check for special keys first (arrows, F-keys, Escape, etc.) */
+    int sp = hid_special_key(key);
+    if (sp) return sp;
+
+    /* Standard alphanumeric/punctuation */
+    char c = 0;
+    if (mod & HID_MOD_SHIFT)
+        c = hid_to_ascii_shift[key];
+    if (!c)
+        c = hid_to_ascii[key];
+
+    /* Ctrl combinations */
+    if ((mod & HID_MOD_CTRL) && c >= 'a' && c <= 'z')
+        c = c - 'a' + 1;
+
+    return (unsigned char)c;
+}
+
+/* ───── USB HID touch/tablet (absolute) ───── */
+
+int xhci_touch_available(void) {
+    return xhci_touch_dev_idx >= 0 && xhci_touch_dev_idx < num_devs;
+}
+
+int xhci_touch_poll(int *x, int *y, int *btn) {
+    if (xhci_touch_dev_idx < 0 || xhci_touch_dev_idx >= num_devs)
+        return 0;
+    struct usb_dev *dev = &dev_states[xhci_touch_dev_idx].dev;
+
+    uint8_t report[16];
+    int ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0100, 0, sizeof(report), report);
+    if (ret < 0) {
+        ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0000, 0, 8, report);
+        if (ret < 0) return 0;
+    }
+
+    int bx = (int)(int8_t)report[1] | ((int)report[2] << 8)
+           | ((int)report[3] << 16) | ((int)report[4] << 24);
+    int by = (int)(int8_t)report[5] | ((int)report[6] << 8)
+           | ((int)report[7] << 16) | ((int)report[8] << 24);
+
+    if (bx < 0) bx = 0;
+    if (by < 0) by = 0;
+
+    *x = bx;
+    *y = by;
+    *btn = report[0] & 0x03;
+
+    return 1;
+}
+
+/* ───── USB HID relative mouse (boot protocol) ───── */
+/* Standard USB mouse boot protocol report:
+   byte 0: buttons (bit0=left, bit1=right, bit2=middle, bit3=, bit4=X1, bit5=X2)
+   byte 1: X displacement (signed)
+   byte 2: Y displacement (signed)
+   byte 3: wheel (signed, optional) */
+
+int xhci_mouse_available(void) {
+    return xhci_mouse_dev_idx >= 0 && xhci_mouse_dev_idx < num_devs;
+}
+
 int xhci_mouse_poll(int *dx, int *dy, int *buttons, int *wheel) {
-    (void)dx;(void)dy;(void)buttons;(void)wheel; return 0;
+    if (xhci_mouse_dev_idx < 0 || xhci_mouse_dev_idx >= num_devs)
+        return 0;
+    struct usb_dev *dev = &dev_states[xhci_mouse_dev_idx].dev;
+
+    uint8_t report[8];
+    int ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0100, 0, sizeof(report), report);
+    if (ret < 0) {
+        ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
+                                    0x0000, 0, 4, report);
+        if (ret < 0) return 0;
+    }
+
+    *dx = (int)(int8_t)report[1];
+    *dy = (int)(int8_t)report[2];
+    *buttons = report[0] & 0x07;
+    if (report[0] & 0x10) *buttons |= MOUSE_X1;
+    if (report[0] & 0x20) *buttons |= MOUSE_X2;
+    *wheel = (ret > 3) ? (int)(int8_t)report[3] : 0;
+
+    return 1;
+}
+
+/* ─── Classify a device as keyboard/mouse/touch after enumeration ─── */
+static void classify_hid_device(int dev_idx, struct usb_dev *dev) {
+    int hid_proto = dev->hid_protocol ? dev->hid_protocol : dev->protocol;
+
+    /* Check VID:PID for known keyboards */
+    int is_known_kbd = 0;
+    if (dev->vendor_id == 0x3554 && dev->product_id == 0xFA09)  /* AULA F87 dongle */
+        is_known_kbd = 1;
+    if (dev->vendor_id == 0x3151 && dev->product_id == 0x4010)  /* another AULA variant */
+        is_known_kbd = 1;
+
+    /* Check VID:PID for known mice */
+    int is_known_mouse = 0;
+    if (dev->vendor_id == 0x046D && dev->product_id == 0xC53F)  /* Logitech G305 receiver */
+        is_known_mouse = 1;
+    if (dev->vendor_id == 0x046D && dev->product_id == 0xC547)  /* Logitech Unifying */
+        is_known_mouse = 1;
+
+    if (is_known_kbd && xhci_kbd_dev_idx < 0) {
+        xhci_kbd_dev_idx = dev_idx;
+        kprintf("xhci-kbd: keyboard ready (VID=%04x PID=%04x)\n",
+                dev->vendor_id, dev->product_id);
+        return;
+    }
+    if (is_known_mouse && xhci_mouse_dev_idx < 0) {
+        xhci_mouse_dev_idx = dev_idx;
+        kprintf("xhci-mouse: mouse ready (VID=%04x PID=%04x)\n",
+                dev->vendor_id, dev->product_id);
+        return;
+    }
+
+    /* Standard HID classification by protocol */
+    if (dev->is_hid || dev->class_code == 0x03) {
+        if (hid_proto == 1 && xhci_kbd_dev_idx < 0) {
+            xhci_kbd_dev_idx = dev_idx;
+            kprintf("xhci-kbd: keyboard ready (proto=%d)\n", hid_proto);
+        } else if (hid_proto == 2) {
+            /* Mouse / touchscreen / tablet — differentiate by endpoint size */
+            if (dev->ep_in_maxp <= 8 && xhci_mouse_dev_idx < 0) {
+                xhci_mouse_dev_idx = dev_idx;
+                kprintf("xhci-mouse: relative input device ready (maxp=%d)\n",
+                        dev->ep_in_maxp);
+            } else if (xhci_touch_dev_idx < 0) {
+                xhci_touch_dev_idx = dev_idx;
+                kprintf("xhci-touch: absolute input device ready\n");
+            }
+        } else if (hid_proto != 2 && xhci_kbd_dev_idx < 0) {
+            /* Unknown HID protocol — assume keyboard (common for gaming boards) */
+            xhci_kbd_dev_idx = dev_idx;
+            kprintf("xhci-kbd: keyboard ready (unknown proto=%d)\n", hid_proto);
+        }
+    }
 }
 
 /* ─── Enumerate a port ─── */
@@ -454,20 +704,93 @@ static void enumerate_port(int port) {
     kprintf("xhci: device slot=%d VID=%04x PID=%04x class=%02x\n",
             slot_id, dd.idVendor, dd.idProduct, dd.bDeviceClass);
 
+    int cur_dev_idx = num_devs;
     num_devs++;
-}
 
-int xhci_init(void) {
-    uint8_t bus, slot, func;
-    if (!pci_find_class_idx(XHCI_CLASS, XHCI_SUBCLASS, 0, &bus, &slot, &func))
-        return -1;
+    /* Parse configuration descriptor to find HID interfaces */
+    uint8_t cfg_buf[256];
+    memset(cfg_buf, 0, sizeof(cfg_buf));
+    int cfg_ret = xhci_control_transfer(&st->dev, 1, 0x80, 6,
+                                        (2 << 8), 0, 256, cfg_buf);
+    if (cfg_ret >= 0) {
+        struct usb_config_desc *cd = (struct usb_config_desc *)cfg_buf;
+        int pos = cd->bLength;
+        int total = cd->wTotalLength;
+        if (total > 256) total = 256;
 
-    uint8_t prog_if = (pci_config_read(bus, slot, func, 0x08) >> 8) & 0xFF;
-    if (prog_if != XHCI_PROGIF) {
-        kprintf("xhci: prog_if 0x%02x != 0x30\n", prog_if);
-        return -1;
+        while (pos + 1 < total) {
+            uint8_t len = cfg_buf[pos];
+            uint8_t type = cfg_buf[pos + 1];
+            if (len == 0) break;
+            if (pos + len > total) break;
+
+            if (type == 4) { /* Interface descriptor */
+                struct usb_iface_desc *iface = (struct usb_iface_desc *)(cfg_buf + pos);
+                if (iface->bInterfaceClass == 0x03) {
+                    kprintf("xhci: HID interface (subclass=%02x proto=%02x)\n",
+                            iface->bInterfaceSubClass, iface->bInterfaceProtocol);
+                    st->dev.is_hid = 1;
+                    st->dev.hid_subclass = iface->bInterfaceSubClass;
+                    st->dev.hid_protocol = iface->bInterfaceProtocol;
+                }
+            }
+
+            if (type == 5) { /* Endpoint descriptor */
+                uint8_t addr = cfg_buf[pos + 2];
+                uint16_t maxp = cfg_buf[pos + 4] | ((uint16_t)cfg_buf[pos + 5] << 8);
+                uint8_t attr = cfg_buf[pos + 3];
+                if (addr & 0x80) {
+                    st->dev.ep_in_addr = addr;
+                    st->dev.ep_in_attr = attr;
+                    st->dev.ep_in_maxp = maxp;
+                } else {
+                    st->dev.ep_out_addr = addr;
+                    st->dev.ep_out_attr = attr;
+                    st->dev.ep_out_maxp = maxp;
+                }
+            }
+            pos += len;
+        }
     }
 
+    /* Classify HID devices and activate them */
+    int is_hid = st->dev.is_hid || st->dev.class_code == 0x03;
+
+    /* Also check known VID:PIDs for composite devices with class 0 */
+    if (!is_hid && st->dev.class_code == 0x00) {
+        if ((dd.idVendor == 0x3554 && dd.idProduct == 0xFA09) ||
+            (dd.idVendor == 0x3151 && dd.idProduct == 0x4010) ||
+            (dd.idVendor == 0x046D && dd.idProduct == 0xC53F) ||
+            (dd.idVendor == 0x046D && dd.idProduct == 0xC547)) {
+            is_hid = 1;
+            st->dev.is_hid = 1;
+        }
+    }
+
+    if (is_hid) {
+        /* SET_CONFIGURATION(1) to activate the device */
+        xhci_control_transfer(&st->dev, 0, 0x00, 9, 1, 0, 0, NULL);
+        /* SET_PROTOCOL(0) — request boot protocol */
+        xhci_control_transfer(&st->dev, 0, 0x21, 0x0B, 0, 0, 0, NULL);
+        /* SET_IDLE(0) — suppress NAK when no change */
+        xhci_control_transfer(&st->dev, 0, 0x21, 0x0A, 0, 0, 0, NULL);
+
+        classify_hid_device(cur_dev_idx, &st->dev);
+    }
+
+    /* CDC ECM */
+    if (st->dev.class_code == 0x02 || st->dev.class_code == 0xEF ||
+        st->dev.class_code == 0x00) {
+        if (st->dev.ep_in_addr && st->dev.ep_out_addr && !is_hid) {
+            xhci_control_transfer(&st->dev, 0, 0x00, 9, 1, 0, 0, NULL);
+            kprintf("xhci: CDC ECM device configured, ep_in=0x%02x ep_out=0x%02x\n",
+                    st->dev.ep_in_addr, st->dev.ep_out_addr);
+        }
+    }
+}
+
+/* ─── Helper: init a single xHCI controller ─── */
+static int xhci_init_controller(uint8_t bus, uint8_t slot, uint8_t func) {
     uint32_t bar0 = pci_config_read(bus, slot, func, 0x10);
     xhci_mmio_base = (uintptr_t)(uint64_t)(bar0 & ~0xF);
     if (bar0 & 4) {
@@ -563,6 +886,48 @@ int xhci_init(void) {
             enumerate_port(p);
     }
 
-    kprintf("xhci: %d device(s)\n", num_devs);
+    return 0;
+}
+
+int xhci_init(void) {
+    uint8_t bus, slot, func;
+    int found = 0;
+
+    /* Iterate ALL xHCI controllers on the PCI bus.
+       This captures AMD 500-series (1022:43EE), AMD Matisse (1022:149C),
+       NVIDIA TU104 (10DE:1AD8), and any other xHCI host. */
+    for (int idx = 0; idx < 16; idx++) {
+        if (!pci_find_class_idx(XHCI_CLASS, XHCI_SUBCLASS, idx, &bus, &slot, &func))
+            break;
+
+        uint8_t prog_if = (pci_config_read(bus, slot, func, 0x08) >> 8) & 0xFF;
+        if (prog_if != XHCI_PROGIF) {
+            kprintf("xhci: skipping %02x:%02x.%x prog_if=0x%02x (not xHCI)\n",
+                    bus, slot, func, prog_if);
+            continue;
+        }
+
+        uint32_t vid_did = pci_config_read(bus, slot, func, 0x00);
+        uint16_t vid = vid_did & 0xFFFF;
+        uint16_t did = (vid_did >> 16) & 0xFFFF;
+        kprintf("xhci: probing controller %02x:%02x.%x VID=%04x DID=%04x\n",
+                bus, slot, func, vid, did);
+
+        if (xhci_init_controller(bus, slot, func) == 0)
+            found = 1;
+
+        /* If we found keyboard and mouse, no need to probe more controllers */
+        if (xhci_kbd_dev_idx >= 0 && xhci_mouse_dev_idx >= 0)
+            break;
+    }
+
+    if (!found) {
+        kprintf("xhci: no xHCI controller found or started\n");
+        return -1;
+    }
+
+    kprintf("xhci: %d device(s), kbd=%s mouse=%s\n", num_devs,
+            xhci_kbd_dev_idx >= 0 ? "yes" : "no",
+            xhci_mouse_dev_idx >= 0 ? "yes" : "no");
     return 0;
 }

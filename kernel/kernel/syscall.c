@@ -2053,7 +2053,7 @@ typedef struct {
     uint32_t ui_w;      /* the logical screen the interface is laid out for */
     uint32_t ui_h;
     uint32_t scale;     /* panel pixels per logical pixel */
-    uint32_t form;      /* 0 = phone, 1 = tablet */
+    uint32_t form;      /* 0 = phone, 1 = tablet, 2 = desktop */
     uint32_t caps;      /* bit 0 touch, bit 1 pointer, bit 2 keyboard */
     char     name[24];
 } codeos_device_info_t;
@@ -2624,7 +2624,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         uint64_t user_buf = a2;
         size_t max_len = (size_t)a3;
         switch (cmd) {
-        case 0: { /* kernel version string */
+        case CODEOS_INFO_KERNEL_VERSION: { /* kernel version string */
             const char *ver = KERNEL_VERSION_STR;
             int len = strlen(ver) + 1;
             if (user_buf && max_len > 0) {
@@ -2634,7 +2634,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             }
             return len;
         }
-        case 1: { /* kernel name */
+        case CODEOS_INFO_KERNEL_NAME: { /* kernel name */
             const char *name = KERNEL_NAME;
             int len = strlen(name) + 1;
             if (user_buf && max_len > 0) {
@@ -2644,9 +2644,9 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             }
             return len;
         }
-        case 2: /* apphost context: 1 when stdin is the async apphost terminal */
+        case CODEOS_INFO_APPHOST_CONTEXT: /* apphost context: 1 when stdin is the async apphost terminal */
             return apphost_active() ? 1 : 0;
-        case 3: { /* RTC wall clock, "YYYY-MM-DD HH:MM:SS"; -1 when no RTC.
+        case CODEOS_INFO_RTC_TIME: { /* RTC wall clock, "YYYY-MM-DD HH:MM:SS"; -1 when no RTC.
                    * Zircon's ZircApp host formats this for the Clock app so
                    * userspace can show real time without a CMOS driver. */
             if (!rtc_available()) return -1;
@@ -2663,7 +2663,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             }
             return len;
         }
-        case 4: { /* the device profile (kernel/device.h) */
+        case CODEOS_INFO_DEVICE: { /* the device profile (kernel/device.h) */
             const zircon_device_t *dev = zircon_device();
             codeos_device_info_t info;
             memset(&info, 0, sizeof(info));

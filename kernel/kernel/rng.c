@@ -70,6 +70,28 @@ uint64_t rng_next(void) {
     return x;
 }
 
+int rng_secure_bytes(void *buf, size_t len) {
+    if (!buf && len != 0)
+        return -1;
+
+    unsigned char *out = (unsigned char *)buf;
+    while (len > 0) {
+        uint64_t word = 0;
+        int ok = rdseed64(&word);
+        for (int attempts = 0; !ok && attempts < 10; attempts++)
+            ok = rdrand64(&word);
+        if (!ok)
+            return -1;
+
+        size_t count = len < sizeof(word) ? len : sizeof(word);
+        for (size_t i = 0; i < count; i++)
+            out[i] = (unsigned char)(word >> (i * 8));
+        out += count;
+        len -= count;
+    }
+    return 0;
+}
+
 void rng_init(void) {
     uint64_t hw = 0;
     rng_hw_ok = rdrand64(&hw) || rdseed64(&hw);

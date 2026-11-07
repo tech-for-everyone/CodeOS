@@ -31,6 +31,7 @@
 #include "kprintf.h"
 #include "timer.h"
 #include "rng.h"
+#include "rtc.h"
 
 #define WEAK __attribute__((weak))
 
@@ -46,6 +47,8 @@ WEAK int *__error(void)          { return &ossl_errno_slot; }  /* macOS alias */
 #define ENOMEM 12
 #define EINVAL 22
 #define EAGAIN 11
+#define EIO 5
+#define EBADF 9
 
 /* ── abort / exit ───────────────────────────────────────────────
  * The kernel cannot unwind or raise a signal; on a software fault the safest
@@ -60,12 +63,46 @@ WEAK void exit(int status)         { (void)status; abort(); }
 WEAK void _exit(int status)        { (void)status; abort(); }
 
 /* ── time ───────────────────────────────────────────────────────
- * Kernel has no absolute wall clock; we expose monotonic ms as seconds so
- * OpenSSL's time-based logic (session tickets, OCSP, cert date sanity) stays
- * structurally sound without a real epoch.  Verify() skips validity-date
- * checks for the same reason mbedtls does (no MBEDTLS_HAVE_TIME_DATE). */
+ * Certificate validity checks require wall-clock UTC. If the RTC is
+ * unavailable or invalid, return the Unix epoch so verification fails closed
+ * rather than pretending monotonic uptime is a calendar date. */
+static int64_t rtc_epoch_seconds(void) {
+    if (!rtc_available())
+        return 0;
+
+    rtc_time_t rtc;
+    rtc_read(&rtc);
+    if (rtc.year < 1970 || rtc.month < 1 || rtc.month > 12 ||
+        rtc.day < 1 || rtc.hour < 0 || rtc.hour > 23 ||
+        rtc.minute < 0 || rtc.minute > 59 ||
+        rtc.second < 0 || rtc.second > 60)
+        return 0;
+
+    static const int days_in_month[] = {
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+    int leap = (rtc.year % 4 == 0 && rtc.year % 100 != 0) ||
+               rtc.year % 400 == 0;
+    int max_day = days_in_month[rtc.month - 1] +
+                  (rtc.month == 2 && leap ? 1 : 0);
+    if (rtc.day > max_day)
+        return 0;
+
+    int year = rtc.year - (rtc.month <= 2);
+    int era = (year >= 0 ? year : year - 399) / 400;
+    unsigned year_of_era = (unsigned)(year - era * 400);
+    unsigned adjusted_month =
+        (unsigned)(rtc.month + (rtc.month > 2 ? -3 : 9));
+    unsigned day_of_year = (153 * adjusted_month + 2) / 5 +
+                           (unsigned)rtc.day - 1;
+    unsigned day_of_era = year_of_era * 365 + year_of_era / 4 -
+                          year_of_era / 100 + day_of_year;
+    int64_t days = (int64_t)era * 146097 + day_of_era - 719468;
+    return days * 86400 + rtc.hour * 3600 + rtc.minute * 60 + rtc.second;
+}
+
 WEAK time_t time(time_t *tloc) {
-    time_t s = (time_t)(timer_get_milliseconds() / 1000u);
+    time_t s = (time_t)rtc_epoch_seconds();
     if (tloc) *tloc = s;
     return s;
 }
@@ -273,15 +310,87 @@ WEAK unsigned long int __isoc23_strtoul(const char *n, char **e, int b) { return
 WEAK int __isoc23_sscanf(const char *s, const char *fmt, ...) { (void)s; (void)fmt; return 0; }
 
 /* ── ctype low-level glibc tables ───────────────────────────── */
-static const unsigned short s_ctype_b[257];
-static const unsigned short *s_ctype_b_p = s_ctype_b;
-WEAK const unsigned short **__ctype_b_loc(void) { return &s_ctype_b_p; }
-static const int s_ctype_tolower[257];
-static const int *s_ctype_tolower_p = s_ctype_tolower;
-WEAK const int **__ctype_tolower_loc(void) { return &s_ctype_tolower_p; }
-static const int s_ctype_toupper[257];
-static const int *s_ctype_toupper_p = s_ctype_toupper;
-WEAK const int **__ctype_toupper_loc(void) { return &s_ctype_toupper_p; }
+enum {
+    CTYPE_BLANK = 0x0001,
+    CTYPE_CONTROL = 0x0002,
+    CTYPE_PUNCT = 0x0004,
+    CTYPE_ALNUM = 0x0008,
+    CTYPE_UPPER = 0x0100,
+    CTYPE_LOWER = 0x0200,
+    CTYPE_ALPHA = 0x0400,
+    CTYPE_DIGIT = 0x0800,
+    CTYPE_XDIGIT = 0x1000,
+    CTYPE_SPACE = 0x2000,
+    CTYPE_PRINT = 0x4000,
+    CTYPE_GRAPH = 0x8000
+};
+
+static unsigned short s_ctype_b[384];
+static const unsigned short *s_ctype_b_p = s_ctype_b + 128;
+static int s_ctype_tolower[384];
+static const int *s_ctype_tolower_p = s_ctype_tolower + 128;
+static int s_ctype_toupper[384];
+static const int *s_ctype_toupper_p = s_ctype_toupper + 128;
+static int s_ctype_initialized;
+
+static void init_ctype_tables(void) {
+    if (s_ctype_initialized)
+        return;
+
+    for (int c = -128; c <= 255; c++) {
+        size_t index = (size_t)(c + 128);
+        unsigned short flags = 0;
+        s_ctype_tolower[index] = c;
+        s_ctype_toupper[index] = c;
+
+        if (c < 0 || c > 127) {
+            s_ctype_b[index] = 0;
+            continue;
+        }
+        if (c < 0x20 || c == 0x7f)
+            flags |= CTYPE_CONTROL;
+        if (c == ' ' || (c >= '\t' && c <= '\r'))
+            flags |= CTYPE_SPACE;
+        if (c == ' ' || c == '\t')
+            flags |= CTYPE_BLANK;
+        if (c >= 'A' && c <= 'Z') {
+            flags |= CTYPE_UPPER | CTYPE_ALPHA | CTYPE_ALNUM;
+            s_ctype_tolower[index] = c + ('a' - 'A');
+        } else if (c >= 'a' && c <= 'z') {
+            flags |= CTYPE_LOWER | CTYPE_ALPHA | CTYPE_ALNUM;
+            s_ctype_toupper[index] = c - ('a' - 'A');
+        } else if (c >= '0' && c <= '9') {
+            flags |= CTYPE_DIGIT | CTYPE_ALNUM;
+            if (c <= '9' && c >= '0')
+                flags |= CTYPE_XDIGIT;
+        }
+        if ((c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))
+            flags |= CTYPE_XDIGIT;
+        if (c >= 0x20 && c <= 0x7e)
+            flags |= CTYPE_PRINT;
+        if (c >= 0x21 && c <= 0x7e)
+            flags |= CTYPE_GRAPH;
+        if ((flags & CTYPE_GRAPH) &&
+            !(flags & (CTYPE_ALPHA | CTYPE_DIGIT)))
+            flags |= CTYPE_PUNCT;
+
+        s_ctype_b[index] = flags;
+    }
+    s_ctype_initialized = 1;
+}
+
+WEAK const unsigned short **__ctype_b_loc(void) {
+    init_ctype_tables();
+    return &s_ctype_b_p;
+}
+WEAK const int **__ctype_tolower_loc(void) {
+    init_ctype_tables();
+    return &s_ctype_tolower_p;
+}
+WEAK const int **__ctype_toupper_loc(void) {
+    init_ctype_tables();
+    return &s_ctype_toupper_p;
+}
 
 /* ── stdio streams + extra stdio entries ────────────────────── */
 static struct _IO_FILE s_stdin = {0};
@@ -335,26 +444,70 @@ WEAK time_t mktime(struct tm *tm) { (void)tm; return 0; }
 
 /* ── basic POSIX I/O ─────────────────────────────────────────────
  * OpenSSL's OS entropy source (rand_unix.c) seeds its DRBG from
- * /dev/urandom (or /dev/random).  There is no such device in the kernel
- * VFS, so we back it with the kernel RNG (rng_next) through a reserved
- * mock fd.  This is the only path OpenSSL's SSL layer needs from the
- * BSD/POSIX file layer; everything else stays inert.
+ * /dev/urandom (or /dev/random). There is no such device in the kernel VFS,
+ * so a reserved mock fd supplies bytes directly from hardware entropy.
  *
  * Mock fd rules:
  *   open("/dev/urandom"|"/dev/random", ...)  -> URAND_FD (3)
- *   read(URAND_FD, buf, n)                   -> fill n RNG bytes
- *   close(URAND_FD) / lseek / fstat / stat   -> succeed harmlessly
+ *   read(URAND_FD, buf, n)                   -> fill n hardware entropy bytes
+ *   fstat/stat/lstat                         -> stable device metadata
  */
 #define URAND_FD 3
 
-WEAK int read(int fd, void *buf, unsigned long count) {
-    if (fd == URAND_FD && buf && count > 0) {
-        unsigned char *b = (unsigned char *)buf;
-        for (unsigned long i = 0; i < count; i++)
-            b[i] = (unsigned char)(rng_next() & 0xff);
-        return (int)count;
+struct codeos_stat {
+    uint64_t dev, ino, nlink;
+    uint32_t mode, uid, gid;
+    int32_t pad;
+    uint64_t rdev;
+    int64_t size, blksize, blocks;
+    int64_t atime_sec, atime_nsec;
+    int64_t mtime_sec, mtime_nsec;
+    int64_t ctime_sec, ctime_nsec;
+    int64_t reserved[3];
+};
+
+_Static_assert(sizeof(struct codeos_stat) == 144, "unexpected x86_64 stat size");
+
+static int fill_urandom_stat(void *sb) {
+    if (!sb)
+        return -1;
+
+    struct codeos_stat st;
+    memset(&st, 0, sizeof(st));
+    st.dev = 1;
+    st.ino = 8;
+    st.nlink = 1;
+    st.mode = 0020000 | 0444;
+    st.rdev = 0x109;
+    memcpy(sb, &st, sizeof(st));
+    return 0;
+}
+
+WEAK long read(int fd, void *buf, unsigned long count) {
+    if (fd != URAND_FD || (!buf && count != 0)) {
+        ossl_errno_slot = EBADF;
+        return -1;
     }
-    return -1;
+    if (count > 0x7fffffffffffffffUL) {
+        ossl_errno_slot = EINVAL;
+        return -1;
+    }
+    if (rng_secure_bytes(buf, count) != 0) {
+        ossl_errno_slot = EIO;
+        return -1;
+    }
+    return (long)count;
+}
+WEAK int getentropy(void *buf, size_t len) {
+    if ((!buf && len != 0) || len > 256) {
+        ossl_errno_slot = EINVAL;
+        return -1;
+    }
+    if (rng_secure_bytes(buf, len) != 0) {
+        ossl_errno_slot = EIO;
+        return -1;
+    }
+    return 0;
 }
 WEAK int write(int fd, const void *buf, unsigned long count) {
     (void)fd; (void)buf; (void)count; return -1;
@@ -374,20 +527,23 @@ WEAK int fcntl(int fd, int cmd, ...) { (void)fd; (void)cmd; return 0; }
 WEAK int ioctl(int fd, unsigned long req, ...) { (void)fd; (void)req; return -1; }
 WEAK int poll(void *fds, unsigned long nfds, int timeout) { (void)fds; (void)nfds; (void)timeout; return 0; }
 WEAK int stat(const char *p, void *sb) {
-    (void)sb;
     if (p && (strcmp(p, "/dev/urandom") == 0 ||
               strcmp(p, "/dev/random") == 0))
-        return 0;
+        return fill_urandom_stat(sb);
     return -1;
 }
 WEAK int lstat(const char *p, void *sb) {
-    (void)sb;
     if (p && (strcmp(p, "/dev/urandom") == 0 ||
               strcmp(p, "/dev/random") == 0))
-        return 0;
+        return fill_urandom_stat(sb);
     return -1;
 }
-WEAK int fstat(int fd, void *sb) { (void)fd; (void)sb; return 0; }
+WEAK int fstat(int fd, void *sb) {
+    if (fd == URAND_FD)
+        return fill_urandom_stat(sb);
+    ossl_errno_slot = EBADF;
+    return -1;
+}
 WEAK int getpid(void) { return 0; }
 WEAK long syscall(long n, ...) { (void)n; return -1; }
 WEAK int tcgetattr(int fd, void *t) { (void)fd; (void)t; return -1; }

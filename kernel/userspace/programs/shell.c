@@ -69,6 +69,10 @@ static int run_builtin(char **argv, int argc) {
         puts("  history         - Show command history");
         puts("  env             - Show environment");
         puts("  export VAR=val  - Set environment variable");
+        puts("  drivers         - Show automated driver detection & RAM status");
+        puts("  g305            - Inspect Logitech G305 Lightspeed mouse");
+        puts("  f87, aula       - Inspect AULA F87 mechanical keyboard");
+        puts("  cmatrix         - Run Matrix digital rain CLI utility");
         return 0;
     }
     else if (strcmp(argv[0], "cd") == 0) {

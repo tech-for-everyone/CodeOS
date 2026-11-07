@@ -137,23 +137,22 @@ static X509_STORE *s_ca_store = NULL;
 
 static void ossl_dump_errors(const char *tag, int depth);
 
-static void ossl_rand_seed(void) {
-    /* Give OpenSSL's DRBG real starting material from the kernel fast RNG
-     * folded with timer time, rather than a degenerate all-zero state. */
+static int ossl_rand_seed(void) {
     unsigned char e[64];
-    for (int i = 0; i < (int)sizeof(e); i++)
-        e[i] = (unsigned char)(rng_next() & 0xff);
-    unsigned long t = (unsigned long)timer_get_milliseconds();
-    unsigned char tb[8];
-    for (int i = 0; i < 8; i++) tb[i] = (unsigned char)((t >> (8 * i)) & 0xff);
+    if (rng_secure_bytes(e, sizeof(e)) != 0) {
+        kprintf("https[ossl]: hardware entropy unavailable\n");
+        return -1;
+    }
     RAND_seed(e, sizeof(e));
-    RAND_seed(tb, sizeof(tb));
-    /* Force the public DRBG to actually instantiate now (the auto seed source
-     * is unavailable freestanding, so seeding the pool isn't enough: the child
-     * DRBG chain still isn't instantiated until a RAND_bytes call). */
     unsigned char probe[32];
     int rp = RAND_bytes(probe, sizeof(probe));
-    kprintf("https[ossl]: RAND_bytes=%d first=%02x\n", rp, probe[0]);
+    kprintf("https[ossl]: RAND_bytes=%d first=%02x\n", rp,
+            rp == 1 ? probe[0] : 0);
+    if (rp != 1) {
+        ossl_dump_errors("rand", 8);
+        return -1;
+    }
+    return 0;
 }
 
 /* Parse the embedded Mozilla bundle into an X509_STORE.  Mirrors
@@ -219,8 +218,14 @@ static int ossl_global_init(void) {
      * disable auto-provider-loading for a freestanding target, s_ctx_new
      * (SSL_CTX_new) otherwise fails to fetch ciphers/digests from the default
      * provider and returns NULL with ERR_LIB_PROV on the queue. */
-    OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS |
-                     OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
+    if (OPENSSL_init_ssl(OPENSSL_INIT_NO_LOAD_CONFIG |
+                         OPENSSL_INIT_LOAD_SSL_STRINGS |
+                         OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL) != 1) {
+        kprintf("https[ossl]: OpenSSL initialization failed\n");
+        ossl_dump_errors("init", 8);
+        return -1;
+    }
+    SSL_add_ssl_module();
     OSSL_PROVIDER *deflt = OSSL_PROVIDER_load(NULL, "default");
     if (deflt) {
         kprintf("https[ossl]: default provider loaded\n");
@@ -231,7 +236,8 @@ static int ossl_global_init(void) {
         ossl_dump_errors("prov", 4);
         kprintf("https[ossl]: default provider load FAILED\n");
     }
-    ossl_rand_seed();
+    if (ossl_rand_seed() != 0)
+        return -1;
     if (ossl_build_ca_store(&s_ca_store) != 0) return -1;
     s_ossl_up = 1;
     return 0;
@@ -240,17 +246,70 @@ static int ossl_global_init(void) {
 /* ── helpers ───────────────────────────────────────────────────── */
 static void ossl_dump_errors(const char *tag, int depth) {
     for (int i = 0; i < depth; i++) {
-        unsigned long e = ERR_get_error();
+        const char *file = NULL;
+        const char *func = NULL;
+        const char *data = NULL;
+        int line = 0, flags = 0;
+        unsigned long e = ERR_get_error_all(&file, &line, &func, &data, &flags);
         if (e == 0) break;
-        kprintf("https[ossl] %s: code=0x%lx lib=%ld reason=%ld\n", tag, e,
-                (long)ERR_GET_LIB(e), (long)ERR_GET_REASON(e));
+        kprintf("https[ossl] %s: code=0x%lx lib=%ld reason=%ld at %s:%d %s\n",
+                tag, e, (long)ERR_GET_LIB(e), (long)ERR_GET_REASON(e),
+                file ? file : "?", line, func ? func : "?");
+        (void)data;
+        (void)flags;
+    }
+}
+
+static int valid_http_target(const char *host, const char *path) {
+    size_t host_len = 0;
+    while (host[host_len]) {
+        unsigned char c = (unsigned char)host[host_len++];
+        if (host_len > 253 ||
+            !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9') || c == '.' || c == '-'))
+            return 0;
+    }
+
+    if (host_len == 0 || path[0] != '/')
+        return 0;
+    for (size_t i = 0; path[i]; i++) {
+        unsigned char c = (unsigned char)path[i];
+        if (i >= 768 || c < 0x20 || c == 0x7f)
+            return 0;
+    }
+    return 1;
+}
+
+static int is_ipv4_literal(const char *host) {
+    unsigned value = 0;
+    int parts = 0;
+    int digits = 0;
+    for (const char *p = host; ; p++) {
+        if (*p >= '0' && *p <= '9') {
+            value = value * 10u + (unsigned)(*p - '0');
+            if (value > 255) return 0;
+            digits++;
+            continue;
+        }
+        if ((*(p) == '.' || *p == '\0') && digits > 0) {
+            parts++;
+            value = 0;
+            digits = 0;
+            if (*p == '\0') return parts == 4;
+            continue;
+        }
+        return 0;
     }
 }
 
 /* ── TLS handshake + HTTP exchange over a connected fd ─────────── */
 int ossl_https_get(int fd, const char *host, const char *path,
                    void *buf, uint16_t max_len) {
-    if (!host || !path || !buf || fd < 0) return -1;
+    if (!host || !path || !buf || max_len == 0 || fd < 0 ||
+        !valid_http_target(host, path)) {
+        kprintf("https[ossl]: invalid host, path, or response buffer\n");
+        return -1;
+    }
     if (ossl_global_init() != 0) return -1;
 
     const SSL_METHOD *meth = TLS_client_method();
@@ -276,13 +335,41 @@ int ossl_https_get(int fd, const char *host, const char *path,
 
     if (!https_insecure()) {
         SSL_set_verify(ssl, SSL_VERIFY_PEER, NULL);
-        SSL_set0_verify_cert_store(ssl, s_ca_store);
-        SSL_set1_host(ssl, host);         /* hostname check against leaf */
+        if (SSL_set1_verify_cert_store(ssl, s_ca_store) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(ctx);
+            return -1;
+        }
+        X509_VERIFY_PARAM *verify = SSL_get0_param(ssl);
+        int verify_host = is_ipv4_literal(host)
+            ? X509_VERIFY_PARAM_set1_ip_asc(verify, host)
+            : SSL_set1_host(ssl, host);
+        if (verify_host != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(ctx);
+            return -1;
+        }
     }
-    if (SSL_set_tlsext_host_name(ssl, host) != 1)  /* SNI */
+    if (!is_ipv4_literal(host) &&
+        SSL_set_tlsext_host_name(ssl, host) != 1) {
         kprintf("https[ossl]: SNI set failed for %s\n", host);
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        return -1;
+    }
 
-    int cr = SSL_connect(ssl);
+    int cr;
+    unsigned long handshake_start = (unsigned long)timer_get_milliseconds();
+    do {
+        cr = SSL_connect(ssl);
+        if (cr == 1)
+            break;
+        int why = SSL_get_error(ssl, cr);
+        if (why != SSL_ERROR_WANT_READ && why != SSL_ERROR_WANT_WRITE)
+            break;
+        if ((unsigned long)timer_get_milliseconds() - handshake_start > 15000u)
+            break;
+    } while (1);
     if (cr != 1) {
         int why = SSL_get_error(ssl, cr);
         if (why == SSL_ERROR_SSL) {
@@ -302,7 +389,7 @@ int ossl_https_get(int fd, const char *host, const char *path,
             https_insecure() ? " [INSECURE]" : "");
 
     /* Build the HTTP/1.1 request. */
-    char req[1024];
+    char req[1280];
     int pos = 0;
     const char *parts[] = {
         "GET ", path, " HTTP/1.1\r\n",

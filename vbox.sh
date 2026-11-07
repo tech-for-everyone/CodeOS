@@ -19,7 +19,8 @@ set -euo pipefail
 VM="CodeOS"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 ISO="${SRC}/kernel/codeos-1.0.iso"
-DISK="${SRC}/disk.img"
+DISK="${SRC}/kernel/disk.img"
+VDI="${SRC}/kernel/disk.vdi"
 FULL_LOG="/tmp/codeos-vbox-serial.log"
 
 # guest <-> host test endpoints (NAT): guest sees the host as 10.0.2.2.
@@ -31,12 +32,19 @@ die()  { echo "ERROR: $*" >&2; exit 1; }
 
 # ── arch detection for raw disk: VirtualBox needs a converted VDI ----
 need_vdi () {
-    # VirtualBox cannot attach a raw/raw-hdd IMG; convert disk.img -> VDI.
-    [ -f "${DISK}" ] || die "missing ${DISK} (run 'make -C kernel disk.img')"
-    [ -f "${DISK%.img}.vdi" ] || {
-        info "converting ${DISK} -> ${DISK%.img}.vdi"
-        VBoxManage convertfromraw "${DISK}" "${DISK%.img}.vdi" --format VDI
-    }
+    # The kernel Makefile creates the pre-baked image in kernel/, beside the ISO.
+    if [ ! -f "${DISK}" ]; then
+        info "building missing disk image"
+        make -C "${SRC}/kernel" disk.img || die "failed to build ${DISK}"
+    fi
+    [ -f "${DISK}" ] || die "disk image build did not create ${DISK}"
+
+    # Reconvert when the raw image changes so VirtualBox never boots a stale VDI.
+    if [ ! -f "${VDI}" ] || [ "${DISK}" -nt "${VDI}" ]; then
+        info "converting ${DISK} -> ${VDI}"
+        rm -f "${VDI}"
+        VBoxManage convertfromraw "${DISK}" "${VDI}" --format VDI
+    fi
 }
 
 provision () {
@@ -77,13 +85,17 @@ provision () {
 }
 
 attach_media () {
-    [ -f "${ISO}" ] || die "missing ${ISO} (run 'make -C kernel codeos-1.0.iso')"
+    if [ ! -f "${ISO}" ]; then
+        info "building missing ISO and disk image"
+        make -C "${SRC}/kernel" codeos-1.0.iso || die "failed to build ${ISO}"
+    fi
+    [ -f "${ISO}" ] || die "ISO build did not create ${ISO}"
     need_vdi
     VBoxManage storagectl "${VM}" --name "IDE" --add ide --controller PIIX3 >/dev/null 2>&1 || true
     # rootfs MUST be IDE primary master (0:0) — kernel ata_init() probes the
     # master on 0x1F0 (device 0).  Boot CD on the secondary channel (1:0).
     VBoxManage storageattach "${VM}" --storagectl "IDE" --port 0 --device 0 \
-        --type hdd --medium "${DISK%.img}.vdi"
+        --type hdd --medium "${VDI}"
     VBoxManage storageattach "${VM}" --storagectl "IDE" --port 1 --device 0 \
         --type dvddrive --medium "${ISO}"
     info "attached rootfs disk (IDE 0:0 primary master) + ISO (IDE 1:0)"
@@ -91,6 +103,7 @@ attach_media () {
 
 cmd_boot () {
     need_vdi
+    provision
     attach_media
     local headless="${1:-0}"
     if [ "${headless}" = "1" ]; then

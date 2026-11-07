@@ -25,6 +25,7 @@ NETBEAM_KEY_ALIAS    ?= netbeam
 NETBEAM_KEY_PASSWORD ?=
 
 .PHONY: all check jengine-check codec-check codec-fuzz-check kernel iso codeos-1.0.iso clean run run-iso help
+.PHONY: offline-ide offline-ide-package
 .PHONY: ncvm ncvm-build ncvm-run
 .PHONY: netbeam-check netbeam-pkg
 .PHONY: qt6 qt6-build qt6-install qt6-clean
@@ -34,9 +35,11 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
-.PHONY: bas bas-check bas-target-check swift-check vsnprintf-check device-check
+.PHONY: bas bas-check bas-target-check swift-check vsnprintf-check device-check move-on-check
+.PHONY: driver-check python-check cmatrix cmatrix-swift
 
-all: kernel iso
+all: kernel
+	$(MAKE) iso
 	@printf "\n$(CYAN)$(BOLD)Build complete!$(RESET)\n"
 
 check:
@@ -46,11 +49,45 @@ check:
 	$(MAKE) ncvm-check
 	$(MAKE) vsnprintf-check
 	$(MAKE) device-check
+	$(MAKE) driver-check
+	$(MAKE) python-check
+	$(MAKE) move-on-check
 	$(MAKE) codec-check
 	$(MAKE) bas-check
 	$(MAKE) swift-check
 	$(MAKE) bas-target-check
 	$(MAKE) netbeam-check
+
+driver-check:
+	@printf "$(CYAN)$(BOLD)==> Checking automated driver detection & hardware support...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -I include -I kernel/kernel -I kernel/drivers \
+	    -o /tmp/codeos-driver-test kernel/tests/driver_detect_test.c
+	@/tmp/codeos-driver-test
+	@cc -std=c11 -Wall -Wextra -Werror -I include -I kernel/kernel -I kernel/drivers \
+	    -o /tmp/codeos-peripheral-driver-test kernel/tests/peripheral_driver_test.c \
+	    kernel/drivers/mouse_g305.c kernel/drivers/kbd_aula_f87.c
+	@/tmp/codeos-peripheral-driver-test
+	@printf "$(GREEN)driver detection & hardware checks passed$(RESET)\n"
+
+python-check:
+	@printf "$(CYAN)$(BOLD)==> Checking Python CLI utilities & test suite...$(RESET)\n"
+	@python3 tests/test_cmatrix.py
+	@python3 tests/test_driver_subsystem.py
+	@printf "$(GREEN)Python CLI checks passed$(RESET)\n"
+
+cmatrix:
+	@python3 tools/cmatrix.py
+
+cmatrix-swift:
+	@if command -v swiftc >/dev/null 2>&1; then \
+	    swiftc swift/cmatrix.swift -o tools/cmatrix-swift && ./tools/cmatrix-swift; \
+	elif [ -x /usr/bin/swiftc ]; then \
+	    swiftc swift/cmatrix.swift -o tools/cmatrix-swift && ./tools/cmatrix-swift; \
+	elif [ -x "$$HOME/.local/share/swiftly/bin/swiftc" ]; then \
+	    "$$HOME/.local/share/swiftly/bin/swiftc" swift/cmatrix.swift -o tools/cmatrix-swift && ./tools/cmatrix-swift; \
+	else \
+	    printf "$(DIM)cmatrix-swift: swiftc compiler not found; Swift source ready at swift/cmatrix.swift$(RESET)\n"; \
+	fi
 
 # kernel/kernel/device.c is the device table: the phones and tablets the
 # Zircon kernel knows how to drive, and the rules for picking one (an
@@ -60,10 +97,15 @@ check:
 # are covered without a device.
 device-check:
 	@printf "$(CYAN)$(BOLD)==> Checking the device table...$(RESET)\n"
-	@cc -std=c11 -Wall -Wextra -I kernel/kernel -o /tmp/codeos-device-test \
+	@cc -std=c11 -Wall -Wextra -I include -I kernel/kernel -o /tmp/codeos-device-test \
 	    kernel/tests/device_test.c kernel/kernel/device.c
 	@/tmp/codeos-device-test
 	@printf "$(GREEN)device checks passed$(RESET)\n"
+
+move-on-check:
+	@printf "$(CYAN)$(BOLD)==> Checking Move On migration...$(RESET)\n"
+	@PYTHONDONTWRITEBYTECODE=1 python3 Zircon/scripts/test_move_on.py
+	@printf "$(GREEN)Move On checks passed$(RESET)\n"
 
 # kernel/userspace/lib/stdio.c is the freestanding libc every CodeOS
 # userspace program formats through, and its vsnprintf had to be fixed to
@@ -161,25 +203,25 @@ swift-check:
 bas-target-check:
 	@if [ -z "$(strip $(BAS_DIR))" ] || [ ! -f "$(BAS_DIR)/compiler/target/debug/bas" ]; then \
 	    printf "$(DIM)bas-target-check: no bas compiler at '$(BAS_DIR)' (optional); skipping$(RESET)\n"; \
-	    exit 0; \
+	else \
+	    printf "$(CYAN)$(BOLD)==> Cross-building bas programs for CodeOS and Zircon...$(RESET)\n"; \
+	    set -e; for b in pkgs/core/bas/src/*.ba; do \
+	        stem=$$(basename $$b .ba); \
+	        "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
+	            --target codeos --target-dir pkgs/core/bas/sdk/targets \
+	            --sysroot . -o /tmp/codeos-bas-target-$$stem || exit 1; \
+	        "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
+	            --target zircon --target-dir pkgs/core/bas/sdk/targets \
+	            --sysroot . -o /tmp/zircon-bas-target-$$stem || exit 1; \
+	        file /tmp/codeos-bas-target-$$stem | grep -q "ELF 64-bit" || { \
+	            echo "codeos build of $$b is not a 64-bit ELF"; exit 1; }; \
+	        file /tmp/zircon-bas-target-$$stem | grep -q "ELF 64-bit" || { \
+	            echo "zircon build of $$b is not a 64-bit ELF"; exit 1; }; \
+	        echo "  OK  $$stem (codeos, zircon)"; \
+	        rm -f /tmp/codeos-bas-target-$$stem /tmp/zircon-bas-target-$$stem; \
+	    done; \
+	    printf "$(GREEN)bas cross-target checks passed$(RESET)\n"; \
 	fi
-	@printf "$(CYAN)$(BOLD)==> Cross-building bas programs for CodeOS and Zircon...$(RESET)\n"
-	@set -e; for b in pkgs/core/bas/src/*.ba; do \
-	    stem=$$(basename $$b .ba); \
-	    "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
-	        --target codeos --target-dir pkgs/core/bas/sdk/targets \
-	        --sysroot . -o /tmp/codeos-bas-target-$$stem || exit 1; \
-	    "$(BAS_DIR)/compiler/target/debug/bas" build $$b \
-	        --target zircon --target-dir pkgs/core/bas/sdk/targets \
-	        --sysroot . -o /tmp/zircon-bas-target-$$stem || exit 1; \
-	    file /tmp/codeos-bas-target-$$stem | grep -q "ELF 64-bit" || { \
-	        echo "codeos build of $$b is not a 64-bit ELF"; exit 1; }; \
-	    file /tmp/zircon-bas-target-$$stem | grep -q "ELF 64-bit" || { \
-	        echo "zircon build of $$b is not a 64-bit ELF"; exit 1; }; \
-	    echo "  OK  $$stem (codeos, zircon)"; \
-	    rm -f /tmp/codeos-bas-target-$$stem /tmp/zircon-bas-target-$$stem; \
-	done
-	@printf "$(GREEN)bas cross-target checks passed$(RESET)\n"
 
 # Runtime proof. `bas-target-check` only proves the ELF links; this boots the
 # ISO and asserts on what /bin/bas-selftest actually printed (see
@@ -454,6 +496,12 @@ xora-audit:
 xora-all:
 	python3 scripts/build_xora_apps.py
 
+offline-ide:
+	$(MAKE) -C kernel/userspace offline-ide
+
+offline-ide-package: offline-ide
+	python3 scripts/build_xora_apps.py --app offline-ide
+
 # ── Help ─────────────────────────────────────────────────────────
 
 help:
@@ -486,4 +534,5 @@ help:
 	@printf "    make xora-install XORA_ARCHIVE=... XORA_ROOT=...\n"
 	@printf "    make xora-audit XORA_ROOT=... [XORA_REPAIR=1]\n"
 	@printf "    make xora-all       Package all built userspace apps\n"
+	@printf "    make offline-ide-package  Build and package the offline IDE\n"
 	@printf "\n  $(BOLD)Config:$(RESET) ARCH=$(ARCH)\n"

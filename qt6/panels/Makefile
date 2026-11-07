@@ -169,7 +169,8 @@ font_data.o: LiberationSans-Regular.ttf
 ow_html.o: ow_html.c ow_html.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-openweb_core.o: openweb_core.c openweb_core.h ../../pkgs/core/panels/src/ow_http.h ow_html.h
+openweb_core.o: openweb_core.c openweb_core.h ../../pkgs/core/openweb/src/ow_engine.h \
+	../../include/jengine/jengine.h ../../pkgs/core/panels/src/ow_http.h ow_html.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 codeos_font.o: ../fonts/src/codeos_font.c ../fonts/include/codeos_font.h
