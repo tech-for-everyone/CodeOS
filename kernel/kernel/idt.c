@@ -6,6 +6,10 @@
 #include "pmm.h"
 #include "string.h"
 
+extern void sched_dump_trace(void);
+extern char kernel_stack[];
+extern char kernel_stack_top[];
+
 #ifdef __aarch64__
 /* ARM64: interrupt control is done via DAIF and GIC */
 void idt_init(void) {}
@@ -18,6 +22,7 @@ int  idt_enabled(void) {
 }
 void isr_set_handler(int vec, void (*fn)(int_frame_t *)) { (void)vec; (void)fn; kprintf("arm64: stub: isr_set_handler called\n"); }
 void irq_register(int irq, irq_handler_t fn) { (void)irq; (void)fn; kprintf("arm64: stub: irq_register called\n"); }
+void idt_set_ist(int vec, uint8_t ist) { (void)vec; (void)ist; kprintf("arm64: stub: idt_set_ist called\n"); }
 void isr_dispatch_c(int_frame_t *frame) { (void)frame; kprintf("arm64: stub: isr_dispatch_c called\n"); }
 
 #else /* x86 */
@@ -63,6 +68,11 @@ static void idt_set(int vec, uint16_t sel, uint16_t flags) {
     idt[vec].offset_mid = (addr >> 16) & 0xFFFF;
     idt[vec].offset_hi  = (addr >> 32) & 0xFFFFFFFF;
     idt[vec].reserved   = 0;
+}
+
+void idt_set_ist(int vec, uint8_t ist) {
+    if (vec < 0 || vec >= 256) return;
+    idt[vec].flags = (idt[vec].flags & ~0x7u) | (uint16_t)(ist & 0x7u);
 }
 
 void isr_set_handler(int vec, void (*fn)(int_frame_t *)) {
@@ -156,6 +166,10 @@ void isr_dispatch_c(int_frame_t *frame) {
 
             kprintf("\n!!! PF at RIP=0x%lx CR2=0x%lx err=%lu !!!\n",
                     frame->rip, cr2, err);
+            kprintf("  err: P=%lu W/R=%lu U/S=%lu RSVD=%lu I/D=%lu%s\n",
+                    err & 1, (err >> 1) & 1, (err >> 2) & 1,
+                    (err >> 3) & 1, (err >> 4) & 1,
+                    (frame->rip == 0 && cr2 == 0) ? " (null execution)" : "");
             kprintf("cs=0x%lx rfl=0x%lx hw_rsp=0x%lx\n",
                     frame->cs, frame->rflags, frame->rsp);
             kprintf("regs: rax=0x%lx rbx=0x%lx rcx=0x%lx rdx=0x%lx\n",
@@ -167,11 +181,32 @@ void isr_dispatch_c(int_frame_t *frame) {
             kprintf("      r13=0x%lx r14=0x%lx r15=0x%lx\n",
                     frame->r13, frame->r14, frame->r15);
             thread_t *cur = sched_current();
-            if (cur)
-                kprintf("      cur=%s sysstack=[%lx,%lx) rsp=%lx\n",
-                        cur->name,
-                        (uint64_t)cur->syscall_stack_top - 16384UL,
-                        (uint64_t)cur->syscall_stack_top, frame->rsp);
+            if (cur) {
+                uint64_t ktop = (uint64_t)cur->kernel_stack_top;
+                uint64_t stop = (uint64_t)cur->syscall_stack_top;
+                uint64_t kbase = ktop ? ktop - 131072UL : 0;
+                uint64_t sbase = stop ? stop - 16384UL : 0;
+                uint64_t bbase = (uint64_t)kernel_stack;
+                uint64_t btop  = (uint64_t)kernel_stack_top;
+                kprintf("      cur=%s tid=%d proc=%lx saved_sp=%lx\n",
+                        cur->name, cur->tid, (uint64_t)cur->proc, (uint64_t)cur->stack);
+                kprintf("      kstack=[%lx,%lx) sysstack=[%lx,%lx) rsp0=%lx\n",
+                        kbase, ktop, sbase, stop, cur->rsp0_top);
+                kprintf("      rsp_on_kstack=%d rsp_on_sysstack=%d rsp_on_bootstack=%d\n",
+                        ktop && frame->rsp >= kbase && frame->rsp < ktop,
+                        stop && frame->rsp >= sbase && frame->rsp < stop,
+                        frame->rsp >= bbase && frame->rsp < btop);
+                if (!ktop)
+                    kprintf("      bootstack=[%lx,%lx) (no allocated kstack)\n", bbase, btop);
+            }
+            {
+                uint64_t *sp = (uint64_t *)(frame->rsp - 16);
+                kprintf("stack@rsp-16:");
+                for (int i = 0; i < 18; i++)
+                    kprintf(" %lx", sp[i]);
+                kprintf("\n");
+            }
+            sched_dump_trace();
         } else {
             kprintf("\n!!! %s (vec %d) at RIP=0x%lx CS=0x%lx RSP=0x%lx err=%lu !!!\n",
                     vec < 32 ? exc_name[vec] : "???", vec,

@@ -2,6 +2,7 @@
 #include "ps2.h"
 #include "../arch/x86_64/io.h"
 #include "../drivers/timer.h"
+#include "../kernel/kprintf.h"
 
 #define KB_STATUS 0x64
 #define KB_CMD    0x64
@@ -93,9 +94,17 @@ static int mouse_write_cmd(uint8_t cmd) {
 static int mouse_read_ack(void) {
     int timeout = 100000;
     while (--timeout) {
-        if (inb(KB_STATUS) & 0x01) {
-            if (inb(KB_DATA) == MOUSE_ACK) return 1;
-            return 0;
+        uint8_t status = inb(KB_STATUS);
+        if (status & 0x01) {
+            uint8_t data = inb(KB_DATA);
+            /* Mouse command responses arrive with the AUX bit set. */
+            if (status & 0x20) {
+                if (data == MOUSE_ACK) return 1;
+                /* Different AUX byte (stale packet data) — keep waiting. */
+                continue;
+            }
+            /* Non-AUX (keyboard) byte: discard, don't treat as mouse ACK. */
+            continue;
         }
         if (timeout % 100 == 0) asm volatile("pause");
     }
@@ -115,9 +124,13 @@ static int mouse_read_device_id(void) {
 
     int timeout = 100000;
     while (--timeout) {
-        if (inb(KB_STATUS) & 0x01) {
-            return inb(KB_DATA);
+        uint8_t status = inb(KB_STATUS);
+        if (status & 0x01) {
+            uint8_t data = inb(KB_DATA);
+            if (status & 0x20) return (int)data;
+            continue;
         }
+        if (timeout % 100 == 0) asm volatile("pause");
     }
     return -1;
 }
@@ -224,9 +237,13 @@ void mouse_init(void) {
     int w = mouse_enable_wheel();
     mouse_has_wheel_var = w > 0;
     mouse_has_extra_var = (w == 2);
-    if (!mouse_enable_reporting()) return;
+    if (!mouse_enable_reporting()) {
+        kprintf("ps2: mouse enable reporting failed\n");
+        return;
+    }
 
     mouse_exists = 1;
+    kprintf("ps2: mouse ready (wheel=%d)\n", w);
 }
 
 void mouse_reset(void) {
@@ -343,8 +360,22 @@ void mouse_poll(void) {
     }
 }
 
-void mouse_set_pos(int x, int y) { mouse_x = x; mouse_y = y; }
-void mouse_set_bounds(int max_x, int max_y) { mouse_max_x = max_x; mouse_max_y = max_y; }
+void mouse_set_pos(int x, int y) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > mouse_max_x) x = mouse_max_x;
+    if (y > mouse_max_y) y = mouse_max_y;
+    mouse_x = x;
+    mouse_y = y;
+}
+void mouse_set_bounds(int max_x, int max_y) {
+    if (max_x < 0) max_x = 0;
+    if (max_y < 0) max_y = 0;
+    mouse_max_x = max_x;
+    mouse_max_y = max_y;
+    if (mouse_x > mouse_max_x) mouse_x = mouse_max_x;
+    if (mouse_y > mouse_max_y) mouse_y = mouse_max_y;
+}
 void mouse_zero_deltas(void) { mouse_dx = 0; mouse_dy = 0; mouse_wheel_delta = 0; }
 
 int mouse_get_x(void)       { return mouse_x; }

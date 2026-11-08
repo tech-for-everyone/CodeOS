@@ -279,75 +279,44 @@ void QtAppWindow::paintEvent(QPaintEvent *) {
     p.setBrush(QColor(0,0,0,40));
     p.drawRect(m_titleBarRect.x()+cr, m_titleBarRect.bottom(), m_titleBarRect.width()-cr*2, 1);
 
-    /* ── Window controls — LEFT side of the band, macOS order ──
-     * close, minimize, zoom, left to right.  Mirrors draw_window_chrome()
-     * in hyperde exactly: same inset, same 20px pitch, same 12px dots,
-     * same grey-when-unfocused, so the lvgl/Qt and X11 window families are
-     * pixel-identical rather than merely similar.
-     *
-     * The inset is sh+14 and NOT cr+sh+14.  The Rust painter's band starts
-     * at x0 = rx+WIN_SH and puts its close light at x0+14; the rounded
-     * corner radius is applied *inside* the band, not by insetting from it.
-     * Adding cr here pushed these 12px further right than the lights the
-     * compositor actually draws on top, so these rects -- which are what the
-     * click handler hit-tests against -- would not have lined up with the
-     * lights the user can see. */
-    int dotY = sh+(tb-12)/2, gap = 20;
-    int closeX = sh+14;
-    m_closeRect = QRect(closeX-6, dotY, 12, 12);
-    m_minRect   = QRect(closeX-6+gap, dotY, 12, 12);
-    m_maxRect   = QRect(closeX-6+gap*2, dotY, 12, 12);
+    /* ── Window controls — RIGHT side, HyperDE "Signal" style ──
+     * Square glyph slots (□/–/×), not traffic lights. Positions mirror
+     * hyperde_shell draw_window_chrome() and prs_window_at() hit geometry. */
+    int dotY = sh+(tb-12)/2 + 6; /* center y matches prs_window_at */
+    int closeCX = width() - sh - 18;
+    int minCX   = closeCX - 20;
+    int maxCX   = closeCX - 40;
+    m_closeRect = QRect(closeCX-9, dotY-9, 18, 18);
+    m_minRect   = QRect(minCX-9,   dotY-9, 18, 18);
+    m_maxRect   = QRect(maxCX-9,   dotY-9, 18, 18);
     p.setPen(Qt::NoPen);
-    /* Traffic lights: grey when the window is not focused, vivid when it is
-     * (macOS keeps the colour as the "this window is live" cue). */
     bool focused = isActiveWindow();
-    QColor dc(0x5A,0x5A,0x5E), dm(0x5A,0x5A,0x5E), dx(0x5A,0x5A,0x5E);
-    if (focused) {
-        dc = QColor(0xFF,0x5F,0x57);
-        dm = QColor(0xFF,0xBD,0x2E);
-        dx = QColor(0x28,0xC8,0x40);
-    }
-    /* Check hover for each button */
     QPoint gp = mapFromGlobal(cursor().pos());
     bool closeHover = m_closeRect.contains(gp);
     bool minHover   = m_minRect.contains(gp);
     bool maxHover   = m_maxRect.contains(gp);
-    /* Outer glow when hovered */
-    if (focused && closeHover) { p.setBrush(QColor(0xFF,0x5F,0x57,40)); p.drawEllipse(m_closeRect.adjusted(-4,-4,4,4)); }
-    if (focused && minHover)   { p.setBrush(QColor(0xFE,0xBC,0x2E,40)); p.drawEllipse(m_minRect.adjusted(-4,-4,4,4)); }
-    if (focused && maxHover)   { p.setBrush(QColor(0x28,0xC8,0x40,40)); p.drawEllipse(m_maxRect.adjusted(-4,-4,4,4)); }
-    /* Button bodies */
-    p.setBrush(dc); p.drawEllipse(m_closeRect);
-    p.setBrush(dm); p.drawEllipse(m_minRect);
-    p.setBrush(dx); p.drawEllipse(m_maxRect);
-    /* Inner specular highlight on each dot */
-    p.setBrush(QColor(255,255,255, focused ? 50 : 15));
-    p.drawEllipse(m_closeRect.adjusted(1,1,-2,-2));
-    p.drawEllipse(m_minRect.adjusted(1,1,-2,-2));
-    p.drawEllipse(m_maxRect.adjusted(1,1,-2,-2));
-    /* Hover glyphs (shown when hovered, as macOS does) */
-    if (focused) {
-        QFont sym("monospace"); sym.setPixelSize(9); sym.setBold(true); p.setFont(sym);
-        if (closeHover) {
-            p.setPen(QColor(0x80,0x20,0x20));
-            p.drawText(m_closeRect, Qt::AlignCenter, QString::fromUtf8("\xC3\x97")); /* × */
-        }
-        if (minHover) {
-            p.setPen(QColor(0x80,0x60,0x10));
-            p.drawText(m_minRect, Qt::AlignCenter, QString::fromUtf8("\xE2\x80\x93")); /* – */
-        }
-        if (maxHover) {
-            p.setPen(QColor(0x10,0x70,0x20));
-            p.drawText(m_maxRect, Qt::AlignCenter, QString::fromUtf8("+"));
-        }
-    }
+    QColor accent(0x7C,0xFF,0xB2), muted(0x38,0x44,0x52), glyph(focused?0xE8:0x87, focused?0xEC:0x92, focused?0xF1:0x9D);
+    auto drawSlot = [&](const QRect &r, bool hover, int kind, QColor ac){
+        QColor bc = focused ? ac : muted;
+        p.setPen(QPen(bc, 1));
+        p.setBrush(hover && focused ? QColor(ac.red(),ac.green(),ac.blue(),30) : Qt::NoBrush);
+        p.drawRect(r.adjusted(1,1,-1,-1));
+        p.setPen(QPen(glyph, 1));
+        int cx=r.center().x(), cy=r.center().y();
+        if (kind==1) { p.drawLine(cx-4,cy-4,cx+4,cy+4); p.drawLine(cx-4,cy+4,cx+4,cy-4); }
+        else if (kind==2) { p.drawLine(cx-4,cy,cx+4,cy); }
+        else { p.drawRect(cx-3,cy-3,6,6); }
+    };
+    drawSlot(m_maxRect,  maxHover,  3, accent);
+    drawSlot(m_minRect,  minHover,  2, accent);
+    drawSlot(m_closeRect,closeHover,1, focused ? QColor(0xFF,0x6B,0x7A) : muted);
 
     /* ── Title text — left-aligned just past the lights, as macOS does ── */
     QFont f = font(); f.setPointSize(11); f.setBold(true); p.setFont(f);
     p.setPen(c_text);
     QFontMetrics fm(f);
     int tw = fm.horizontalAdvance(m_title);
-    int titleX = m_maxRect.right() + 16;
+    int titleX = sh + 12;
 
     /* Small icon to the left of the title */
     QRect titleIconR(titleX, sh+(tb-14)/2, 14, 14);
@@ -355,7 +324,7 @@ void QtAppWindow::paintEvent(QPaintEvent *) {
 
     /* Elide rather than overflow the band, and drop the title entirely
      * once there is no room left for it. */
-    int room = width()-sh-cr-titleX;
+    int room = m_maxRect.left() - 10 - titleX;
     QString shown = m_title;
     if (room < tw) {
         if (room < 40) shown.clear();

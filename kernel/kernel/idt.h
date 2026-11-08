@@ -25,6 +25,10 @@ void irq_register(int irq, irq_handler_t fn);
 
 void isr_set_handler(int vec, void (*fn)(int_frame_t *));
 
+/* x86: set an Interrupt Stack Table index (1-7, 0 = current stack) for a gate.
+ * Used to keep device IRQ delivery off thread stacks (avoids red-zone clobber). */
+void idt_set_ist(int vec, uint8_t ist);
+
 /* default exception handlers */
 void isr_divide_error(int_frame_t *);
 void isr_debug(int_frame_t *);

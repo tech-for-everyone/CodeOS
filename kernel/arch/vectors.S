@@ -40,6 +40,24 @@ isr_common:
     push rbx
     push rax
 
+    /* Relocate the 22-qword interrupt frame (176 bytes: rax..r15, vec, err,
+     * rip, cs, rflags, rsp, ss) from the current stack (IST landing pad for
+     * IRQs 32-47, or the thread stack for exceptions) to
+     *   [interrupted_rsp - 128 - 176]  (16-byte aligned)
+     * on the interrupted thread's stack, below the 128-byte SysV red zone.
+     * This preserves the red zone when delivery used IST (CPU would otherwise
+     * have clobbered it) and keeps the frame on the thread stack so the
+     * timer's yield-from-IRQ / ctx_switch path works. Safe as a no-op-style
+     * move for thread-stack deliveries. */
+    mov rbx, [rsp + 160]        /* interrupted thread RSP (frame->rsp) */
+    lea rdi, [rbx - 304]        /* 128 (red zone) + 176 (frame) */
+    and rdi, -16
+    mov rsi, rsp
+    mov rcx, 22
+    cld
+    rep movsq
+    lea rsp, [rdi - 176]        /* rdi advanced by 176; point at copied frame */
+
     mov rdi, rsp
     call isr_dispatch_c
 

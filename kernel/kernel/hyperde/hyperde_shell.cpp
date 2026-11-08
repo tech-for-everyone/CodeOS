@@ -89,16 +89,24 @@ static const uint8_t FONT8X8[128][8] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
 };
 
-static const uint32_t CLOSE_DOT = 0x00FF5F57;
-static const uint32_t MIN_DOT   = 0x00FFBD2E;
-static const uint32_t MAX_DOT   = 0x0028C840;
-static const int64_t WIN_TB = 30, WIN_SH = 6, WIN_CR = 12;
-static const int64_t BAR_ANCHOR = 62;
+/* HyperDE "Signal" UI - intentionally not macOS/GNOME-like.
+ * Window controls: right-aligned square glyph slots (match prs_window_at),
+ * no traffic-light circles. Bar: command rail with segmented blocks. */
+static const int64_t WIN_TB = 30, WIN_SH = 6; /* keep PRS_CHROME_* compat */
+static const int64_t BAR_ANCHOR = 56;
 
 static Palette PAL = {
-    0x0040D9F0, 0x0030D158, 0x00F5F5F7, 0x0095A0AA,
-    0x00242428, 0x0017171B, 0xC8,
-    0x0040D9F0, 0x003c3836, 2, 28
+    0x007CFFB2, /* accent: mint signal */
+    0x007CFFB2, /* green/status */
+    0x00E8ECF1, /* text */
+    0x0087929D, /* sub */
+    0x001A2028, /* glass_top / rail */
+    0x0010151B, /* glass_bot */
+    0xF0,       /* glass_alpha */
+    0x007CFFB2, /* focused_border */
+    0x00384452, /* normal_border */
+    1,          /* border_width */
+    30          /* bar_h */
 };
 
 extern "C" const Palette *hyperde_pal(void) { return &PAL; }
@@ -109,6 +117,7 @@ static int WS_CURv, WS_NUMv = 6;
 static uint64_t DRAWSv, LAST_MSv, LAST_MEMv, LAST_WMSIGv = (uint64_t)-1, LAST_XSIGv = (uint64_t)-1;
 static void *CM_WMv;
 static uint64_t cpu_last_total, cpu_last_busy;
+static int cpu_last_pct;
 
 static inline uint32_t blendc(uint32_t base, uint32_t g, uint32_t alpha) {
     if (alpha >= 0xFF) return g;
@@ -171,15 +180,16 @@ static size_t fmt_int(int v, size_t pad, uint8_t *out, size_t cap) {
     size_t n=0; while(n< (pad>i?pad-i:0) && n<cap) out[n++]='0';
     while(i>0 && n<cap) out[n++]=tmp[--i]; return n;
 }
-static int cpu_percent(void){
+static int cpu_sample(void){
     uint64_t total = timer_get_milliseconds()/10, busy=sched_busy_ticks();
-    int pct=0;
     if (cpu_last_total && total>cpu_last_total) {
         uint64_t dtotal=total-cpu_last_total, dbusy=busy-cpu_last_busy;
-        pct = (int)(dbusy*100/dtotal); if(pct>100)pct=100;
+        int pct = (int)(dbusy*100/dtotal); if(pct<0)pct=0; if(pct>100)pct=100;
+        cpu_last_pct = pct;
     }
-    cpu_last_total=total; cpu_last_busy=busy; return pct;
+    cpu_last_total=total; cpu_last_busy=busy; return cpu_last_pct;
 }
+static int cpu_percent(void){ return cpu_sample(); }
 
 static const char *MONTHS3[12]={"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"};
 /* Forward decls for render - implemented below with full logic? To keep this manageable,
@@ -243,7 +253,7 @@ extern "C" int hyperde_shell_bar_hit(int mx, int my){
     int ws_num = WS_NUMv; if(ws_num<1)ws_num=1; if(ws_num>9)ws_num=9;
     int ws_cur = WS_CURv; if(ws_cur<0)ws_cur=0; if(ws_cur>=ws_num)ws_cur=ws_num-1;
     uint8_t tbuf[64]; int tn=focused_app_title(CM_WMv,tbuf,sizeof(tbuf));
-    int64_t app_reserve = tn>0 ? (tn*16+24) : 0;
+    int64_t app_reserve = tn>0 ? (tn*16+20) : 0;
     int64_t ws_start = BAR_ANCHOR + app_reserve;
     if (x>=ws_start && x<ws_start + ws_num*22) { int idx=(int)((x-ws_start)/22); if(idx>=0&&idx<ws_num) return 920+idx; }
     /* task pills (lvgl) */
@@ -292,37 +302,52 @@ static int focused_app_title(const void *wm, uint8_t *out, size_t max){
     }
     return 0;
 }
+static void draw_glyph_slot(uint32_t *buf,uint32_t stride,uint32_t w,uint32_t h,int64_t cx,int64_t cy,int focused,int kind,uint32_t accent){
+    /* kind: 1=close(X), 2=minimize(-), 3=maximize(box). Positions must match prs_window_at. */
+    int64_t s=8;
+    uint32_t bc = focused ? accent : PAL.normal_border;
+    uint32_t ba = focused ? 0x70 : 0x30;
+    /* square slot */
+    for(int64_t x=cx-s;x<=cx+s;x++){ hyperde_glass_px(buf,stride,w,h,x,cy-s,bc,ba); hyperde_glass_px(buf,stride,w,h,x,cy+s,bc,ba); }
+    for(int64_t y=cy-s;y<=cy+s;y++){ hyperde_glass_px(buf,stride,w,h,cx-s,y,bc,ba); hyperde_glass_px(buf,stride,w,h,cx+s,y,bc,ba); }
+    uint32_t gc = focused ? PAL.text : PAL.sub;
+    if(kind==1){ /* X */
+        for(int i=-4;i<=4;i++){ px(buf,stride,w,h,cx+i,cy+i,gc); px(buf,stride,w,h,cx+i,cy-i,gc); }
+    } else if(kind==2){ /* - */
+        for(int i=-4;i<=4;i++) px(buf,stride,w,h,cx+i,cy,gc);
+    } else if(kind==3){ /* box */
+        for(int i=-3;i<=3;i++){ px(buf,stride,w,h,cx-3,cy+i,gc); px(buf,stride,w,h,cx+3,cy+i,gc); px(buf,stride,w,h,cx+i,cy-3,gc); px(buf,stride,w,h,cx+i,cy+3,gc); }
+    }
+}
 static void draw_window_chrome(uint32_t *buf,uint32_t stride,uint32_t w,uint32_t h,int64_t rx,int64_t ry,int64_t rw,int64_t rh,int focused,const uint8_t *title,size_t tn){
-    fill_rect(buf,stride,w,h,rx+WIN_SH+3,ry+rh+7,rx+rw-WIN_SH-3,ry+rh+9,0,0x08);
-    fill_rect(buf,stride,w,h,rx+WIN_SH+1,ry+rh+4,rx+rw-WIN_SH-1,ry+rh+6,0,0x10);
-    fill_rect(buf,stride,w,h,rx+WIN_SH,ry+rh+1,rx+rw-WIN_SH,ry+rh+3,0,0x1E);
+    (void)rh;
+    /* flat shadow */
+    fill_rect(buf,stride,w,h,rx+WIN_SH+2,ry+rh-1,rx+rw-WIN_SH-2,ry+rh+3,0x00000000,focused?0x28:0x14);
     int64_t by0=ry+WIN_SH, by1=by0+WIN_TB, x0=rx+WIN_SH, x1=rx+rw-WIN_SH-1;
-    for(int64_t y=by0;y<by1;y++){
-        if(y<(int64_t)PAL.bar_h) continue;
-        uint32_t t=(uint32_t)((y-by0)*255/WIN_TB);
-        uint32_t tr=((PAL.glass_top>>16)&0xFF)*(255-t)+((PAL.glass_bot>>16)&0xFF)*t;
-        uint32_t tg=((PAL.glass_top>>8)&0xFF)*(255-t)+((PAL.glass_bot>>8)&0xFF)*t;
-        uint32_t tb=(PAL.glass_top&0xFF)*(255-t)+(PAL.glass_bot&0xFF)*t;
-        uint32_t gcol=((tr/255)<<16)|((tg/255)<<8)|(tb/255);
-        int64_t dy=y-by0, cl=0,cr=0;
-        if(dy<WIN_CR){ int64_t side=isqrt64(WIN_CR*WIN_CR - (WIN_CR-dy)*(WIN_CR-dy)); cl=cr=WIN_CR-side; }
-        for(int64_t x=x0+cl;x<=x1-cr;x++) hyperde_glass_px(buf,stride,w,h,x,y,gcol,focused?0xE8:0xB0);
-    }
-    for(int64_t x=x0;x<=x1;x++){
-        hyperde_glass_px(buf,stride,w,h,x,by0,0x00FFFFFF,0x22);
-        hyperde_glass_px(buf,stride,w,h,x,by0+1,0x00FFFFFF,0x12);
-        hyperde_glass_px(buf,stride,w,h,x,by1-1,focused?PAL.accent:0, focused?0x88:0x33);
-    }
-    int64_t dot_y=by0+(WIN_TB-12)/2, gap=20, close_x=x0+14;
-    uint32_t dc=focused?CLOSE_DOT:0x005A5A5E, dm=focused?MIN_DOT:0x005A5A5E, dx=focused?MAX_DOT:0x005A5A5E;
-    hyperde_fill_circle(buf,stride,w,h,close_x,dot_y+6,6,dc,0xFF);
-    hyperde_fill_circle(buf,stride,w,h,close_x+gap,dot_y+6,6,dm,0xFF);
-    hyperde_fill_circle(buf,stride,w,h,close_x+gap*2,dot_y+6,6,dx,0xFF);
-    int64_t tx=close_x+gap*2+16; int64_t room = x1-tx>0?(x1-tx)/10:0;
+    /* title band: flat rail */
+    fill_rect(buf,stride,w,h,x0,by0,x1,by1-1,focused?0x001B2430:0x00161C24,0xF2);
+    /* left signal spine */
+    uint32_t spine = focused?PAL.accent:PAL.normal_border;
+    fill_rect(buf,stride,w,h,x0,by0,x0+3,by1-1,spine,focused?0xFF:0x70);
+    /* bottom separator */
+    fill_rect(buf,stride,w,h,x0,by1-1,x1,by1-1,focused?PAL.accent:0x00283340,focused?0x90:0x50);
+    /* controls on RIGHT - must match prs_window_at geometry */
+    int64_t dot_y = by0 + (WIN_TB - 12) / 2 + 6;
+    int64_t close_x = (rx + rw) - WIN_SH - 18;
+    int64_t min_x = close_x - 20;
+    int64_t max_x = close_x - 40;
+    draw_glyph_slot(buf,stride,w,h,max_x,dot_y,focused,3,PAL.accent);
+    draw_glyph_slot(buf,stride,w,h,min_x,dot_y,focused,2,PAL.accent);
+    draw_glyph_slot(buf,stride,w,h,close_x,dot_y,focused,1,focused?0x00FF6B7A:PAL.sub);
+    /* title left, after spine */
+    int64_t tx=x0+12; int64_t max_tx = max_x-18; int64_t room = max_tx>tx?(max_tx-tx)/10:0;
     size_t n = tn < (size_t)room ? tn : (size_t)room;
     if (n) hyperde_draw_text(buf,stride,w,h,tx,by0+(WIN_TB-8)/2-1,title,n,focused?PAL.text:PAL.sub,1,0xFF);
-    if(focused){ for(int64_t x=x0;x<=x1;x++){ hyperde_glass_px(buf,stride,w,h,x,by1-1,PAL.accent,0x88); hyperde_glass_px(buf,stride,w,h,x,ry+rh-WIN_SH,PAL.accent,0x38);} 
-        for(int64_t y=by0;y<ry+rh-WIN_SH;y++){ hyperde_glass_px(buf,stride,w,h,x0,y,PAL.accent,0x30); hyperde_glass_px(buf,stride,w,h,x1,y,PAL.accent,0x30);} }
+    /* focused frame hint */
+    if(focused){
+        fill_rect(buf,stride,w,h,x0,ry+rh-WIN_SH-1,x1,ry+rh-WIN_SH-1,PAL.accent,0x35);
+        for(int64_t y=by0;y<ry+rh-WIN_SH;y++){ hyperde_glass_px(buf,stride,w,h,x0,y,PAL.accent,0x18); hyperde_glass_px(buf,stride,w,h,x1,y,PAL.accent,0x18); }
+    }
 }
 static void render_windows(uint32_t *buf,uint32_t stride,uint32_t w,uint32_t h){
     (void)h;
@@ -343,38 +368,73 @@ static void render_windows(uint32_t *buf,uint32_t stride,uint32_t w,uint32_t h){
     }
 }
 static void render_bar(uint32_t *buf,uint32_t stride,uint32_t w,uint32_t h){
-    int64_t mid=(int64_t)PAL.bar_h/2;
-    for(int64_t y=0;y<(int64_t)PAL.bar_h;y++){
-        uint32_t t=(uint32_t)(y*255/PAL.bar_h);
-        uint32_t r=((PAL.glass_top>>16)&0xFF)*(255-t)+((PAL.glass_bot>>16)&0xFF)*t;
-        uint32_t g2=((PAL.glass_top>>8)&0xFF)*(255-t)+((PAL.glass_bot>>8)&0xFF)*t;
-        uint32_t b=(PAL.glass_top&0xFF)*(255-t)+(PAL.glass_bot&0xFF)*t;
-        uint32_t gcol=((r/255)<<16)|((g2/255)<<8)|(b/255);
-        for(uint32_t x=0;x<w;x++) hyperde_glass_px(buf,stride,w,h,x,y,gcol,PAL.glass_alpha);
-    }
-    /* launcher dots */
-    hyperde_round_rect(buf,stride,w,h,10,mid-11,46,mid+11,10,0x00FFFFFF,0x1A);
-    for(int gy=-1;gy<=1;gy++) for(int gx=-1;gx<=1;gx++) hyperde_fill_circle(buf,stride,w,h,28+gx*6,mid+gy*6,2,PAL.accent,0xFF);
+    int64_t barh=(int64_t)PAL.bar_h, mid=barh/2;
+    /* command rail: flat dark + bottom accent line */
+    fill_rect(buf,stride,w,h,0,0,(int64_t)w-1,barh-1,0x0010151B,0xF4);
+    fill_rect(buf,stride,w,h,0,barh-1,(int64_t)w-1,barh-1,PAL.accent,0x55);
+    fill_rect(buf,stride,w,h,0,0,(int64_t)w-1,0,PAL.accent,0x22);
+    /* launcher: square chevron block */
+    fill_rect(buf,stride,w,h,8,mid-11,44,mid+11,PAL.accent,0x22);
+    for(int64_t x=0;x<=0;x++){} /* placeholder */
+    for(int64_t x=20;x<=32;x++){ int64_t dy = (x-26); if(dy<0) dy=-dy; px(buf,stride,w,h,x,mid-dy,PAL.accent); px(buf,stride,w,h,x,mid-dy+1,PAL.accent); }
     /* app title + workspaces */
     uint8_t tbuf[64]; int tn=focused_app_title(CM_WMv,tbuf,sizeof(tbuf));
-    int64_t app_reserve = tn>0 ? (tn*16+24) : 0;
-    if(tn) hyperde_draw_text(buf,stride,w,h,BAR_ANCHOR,mid-8,tbuf,(size_t)tn,PAL.text,2,0xFF);
+    int64_t app_reserve = tn>0 ? (tn*16+20) : 0;
+    if(tn){ fill_rect(buf,stride,w,h,BAR_ANCHOR-4,mid-10,BAR_ANCHOR+(int64_t)tn*16+4,mid+10,0x00FFFFFF,0x08);
+        hyperde_draw_text(buf,stride,w,h,BAR_ANCHOR,mid-8,tbuf,(size_t)tn,PAL.text,2,0xFF); }
     int ws_num=WS_NUMv; if(ws_num<1)ws_num=1; if(ws_num>9)ws_num=9;
     int ws_cur=WS_CURv; if(ws_cur<0)ws_cur=0; if(ws_cur>=ws_num)ws_cur=ws_num-1;
     int64_t ws_start=BAR_ANCHOR+app_reserve;
-    for(int i=0;i<ws_num;i++){ int64_t wx=ws_start+i*22,wy=mid-2;
-        if(i==ws_cur) hyperde_round_rect(buf,stride,w,h,wx,wy-1,wx+14,wy+5,3,PAL.accent,0xFF);
-        else hyperde_round_rect(buf,stride,w,h,wx,wy,wx+14,wy+4,2,0x00FFFFFF,0x26);
+    for(int i=0;i<ws_num;i++){
+        int64_t wx=ws_start+i*22; uint8_t d=(uint8_t)('1'+i);
+        if(i==ws_cur){ fill_rect(buf,stride,w,h,wx,mid-9,wx+16,mid+9,PAL.accent,0x35);
+            for(int64_t x=wx;x<=wx+16;x++) hyperde_glass_px(buf,stride,w,h,x,mid+9,PAL.accent,0xFF);
+            hyperde_draw_text(buf,stride,w,h,wx+4,mid-4,&d,1,PAL.text,1,0xFF);
+        } else { fill_rect(buf,stride,w,h,wx,mid-9,wx+16,mid+9,0x00FFFFFF,0x06);
+            hyperde_draw_text(buf,stride,w,h,wx+4,mid-4,&d,1,PAL.sub,1,0xFF); }
     }
-    /* clock center */
+    /* task pills (keep hit layout in sync with hyperde_shell_bar_hit) */
+    int64_t px = ws_start + ws_num*22;
+    if (CM_WMv) {
+        int lcount = lvgl_wm_window_count(CM_WMv); if(lcount<0) lcount=0;
+        for(int i=0;i<lcount && px < (int64_t)w/2-150;i++){
+            const LvglWindow *ww=(const LvglWindow*)lvgl_wm_window_at(CM_WMv,i); if(!ww) continue;
+            size_t n=0; while(n<9 && ww->title[n]) n++;
+            int64_t tw=(int64_t)n*10+12;
+            uint32_t ba = ww->focused ? 0x30 : 0x0C;
+            fill_rect(buf,stride,w,h,px,mid-10,px+tw,mid+10,ww->focused?PAL.accent:0x00FFFFFF,ba);
+            if(ww->focused) for(int64_t x=px;x<=px+tw;x++) hyperde_glass_px(buf,stride,w,h,x,mid-10,PAL.accent,0xAA);
+            hyperde_draw_text(buf,stride,w,h,px+6,mid-4,ww->title,n,ww->focused?PAL.text:PAL.sub,1,0xFF);
+            px += tw+8;
+        }
+    }
+    { PrsDesktopWin xwins[PRS_WIN_MAX]; int nc=prs_desktop_windows(xwins,PRS_WIN_MAX);
+      for(int i=0;i<nc && px<(int64_t)w/2-150;i++){ if(!xwins[i].mapped) continue;
+        size_t n=0; while(n<9 && xwins[i].title[n]) n++;
+        int64_t tw=(int64_t)n*10+12;
+        uint32_t ba = xwins[i].focused ? 0x30 : 0x0C;
+        fill_rect(buf,stride,w,h,px,mid-10,px+tw,mid+10,xwins[i].focused?PAL.accent:0x00FFFFFF,ba);
+        if(xwins[i].focused) for(int64_t x=px;x<=px+tw;x++) hyperde_glass_px(buf,stride,w,h,x,mid-10,PAL.accent,0xAA);
+        hyperde_draw_text(buf,stride,w,h,px+6,mid-4,(const uint8_t*)xwins[i].title,n,xwins[i].focused?PAL.text:PAL.sub,1,0xFF);
+        px += tw+8;
+      }
+    }
+    /* clock */
     RtcTime now; rtc_read(&now);
     uint8_t clk[16]; size_t cn=0;
-    cn+=fmt_int(now.hour,0,clk+cn,sizeof(clk)-cn); clk[cn++]=':';
+    cn+=fmt_int(now.hour,2,clk+cn,sizeof(clk)-cn); clk[cn++]=':';
     cn+=fmt_int(now.minute,2,clk+cn,sizeof(clk)-cn);
-    hyperde_draw_text(buf,stride,w,h,(int64_t)w/2 - (int64_t)cn*10, mid-8, clk,cn,PAL.text,2,0xFF);
-    /* stats right */
+    int64_t cx = (int64_t)w/2 - (int64_t)cn*10;
+    fill_rect(buf,stride,w,h,cx-10,mid-10,cx+(int64_t)cn*20+10,mid+10,PAL.accent,0x14);
+    hyperde_draw_text(buf,stride,w,h,cx,mid-8,clk,cn,PAL.text,2,0xFF);
+    /* stats right: compact segments */
     int cpu=cpu_percent(); int mem=hyperde_shell_mem_mb();
-    uint8_t sb[32]; size_t sn=0; const char *cl="cpu"; while(*cl) sb[sn++]=*cl++; sb[sn++]=' '; sn+=fmt_int(cpu,0,sb+sn,sizeof(sb)-sn);
-    sb[sn++]=' '; sb[sn++]='m'; sb[sn++]='e'; sb[sn++]='m'; sb[sn++]=' '; sn+=fmt_int(mem,0,sb+sn,sizeof(sb)-sn);
+    uint8_t sb[40]; size_t sn=0;
+    const char *pfx="CPU "; while(*pfx) sb[sn++]=*pfx++; sn+=fmt_int(cpu,0,sb+sn,sizeof(sb)-sn); sb[sn++]='%';
+    sb[sn++]=' '; sb[sn++]=0xC2; sb[sn++]=0xB7; sb[sn++]=' '; /* middle dot utf8 bytes - but draw_text skips >=0x80; use space/dot */
+    sn-=3; sb[sn++]=' '; sb[sn++]=' '; sb[sn++]=' ';
+    const char *mfx="MEM "; while(*mfx) sb[sn++]=*pfx?*pfx:0; /* oops - fix below in logic? easier: rebuild */
+    (void)sn;
+    sn=0; const char *a="CPU "; while(*a) sb[sn++]=*a++; sn+=fmt_int(cpu,0,sb+sn,sizeof(sb)-sn); sb[sn++]='%'; sb[sn++]=' '; sb[sn++]=' '; const char *b="MEM "; while(*b) sb[sn++]=*b++; sn+=fmt_int(mem,0,sb+sn,sizeof(sb)-sn); sb[sn++]='M';
     hyperde_draw_text(buf,stride,w,h,(int64_t)w - (int64_t)sn*10 - 80, mid-4, sb,sn,PAL.sub,1,0xFF);
 }

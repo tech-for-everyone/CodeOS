@@ -52,8 +52,13 @@ static void input_push_gesture(gesture_type_t g, int x, int y, int dx, int dy) {
 }
 
 void input_init(void) {
+    /* Configure PS/2 controller (enables keyboard+aux ports, polling mode). */
+    ps2_init();
     keyboard_init();
     mouse_init();
+    /* Default mouse bounds to a sane framebuffer-sized area; callers that
+     * know the real dimensions (fb init / desktop) should override. */
+    mouse_set_bounds(4095, 4095);
     gesture_init(&gesture_tracker);
     input_head = 0;
     input_tail = 0;
@@ -161,16 +166,32 @@ void input_poll(void) {
             }
         }
     }
-    /* USB HID relative mouse (boot protocol) */
+    /* USB HID relative mouse (boot protocol) — integrate deltas into the
+     * global absolute cursor position so poll_mouse_continuous / fb cursor
+     * (and Qt) see movement even without PS/2. */
     else if (usb_mouse_available()) {
         static int prev_buttons;
         int mdx, mdy, mbuttons, mwheel;
         if (usb_mouse_poll(&mdx, &mdy, &mbuttons, &mwheel)) {
+            if (mdx || mdy) {
+                int nx = mouse_get_x() + mdx;
+                int ny = mouse_get_y() + mdy;
+                /* Clamp to the bounds configured on the global mouse state. */
+                int maxx = 4095, maxy = 4095;
+                /* Best-effort: use current position as reference; set_pos will
+                 * be bounded by the next mouse_set_bounds caller, but clamp
+                 * here against a large sane range to avoid wrap. */
+                if (nx < 0) nx = 0;
+                if (ny < 0) ny = 0;
+                if (nx > maxx) nx = maxx;
+                if (ny > maxy) ny = maxy;
+                mouse_set_pos(nx, ny);
+            }
             if (mdx || mdy || mwheel || mbuttons != prev_buttons) {
                 input_event_t event;
                 event.type = INPUT_EVENT_MOUSE;
-                event.data.mouse.x = 0;
-                event.data.mouse.y = 0;
+                event.data.mouse.x = mouse_get_x();
+                event.data.mouse.y = mouse_get_y();
                 event.data.mouse.dx = mdx;
                 event.data.mouse.dy = mdy;
                 event.data.mouse.buttons = mbuttons;

@@ -21,6 +21,10 @@ extern void arp_purge_expired(void);
 /* Genuine OpenSSL TLS backend (pkgs/core/openssl). */
 int ossl_https_get(int fd, const char *host, const char *path,
                    void *buf, uint16_t max_len);
+int ossl_https_request(int fd, const char *method, const char *host,
+                       const char *path, const void *body, uint16_t body_len,
+                       const char *extra_headers,
+                       void *buf, uint16_t max_len);
 #endif
 
 static uint8_t  our_mac[6];
@@ -1476,12 +1480,66 @@ static int http_filter_feed(struct http_filter *f, const uint8_t *seg, int n,
     return total;
 }
 
+
+int http_parse_status(const void *buf, int len) {
+    const char *b = (const char *)buf;
+    if (!b || len < 12) return 0;
+    if (!(b[0]=='H'&&b[1]=='T'&&b[2]=='T'&&b[3]=='P'&&b[4]=='/')) return 0;
+    int i = 0; while (i < len && b[i] != ' ') i++;
+    if (i >= len) return 0;
+    while (i < len && b[i] == ' ') i++;
+    int code = 0;
+    while (i < len && b[i] >= '0' && b[i] <= '9') { code = code*10 + (b[i]-'0'); i++; }
+    return code;
+}
+
+int http_header_body_split(const void *buf, int len, int *body_off) {
+    const char *b = (const char *)buf;
+    if (body_off) *body_off = len;
+    if (!b || len < 4) return -1;
+    for (int i = 0; i + 3 < len; i++) {
+        if (b[i]=='\r'&&b[i+1]=='\n'&&b[i+2]=='\r'&&b[i+3]=='\n') {
+            if (body_off) *body_off = i + 4;
+            return i;
+        }
+    }
+    for (int i = 0; i + 1 < len; i++) {
+        if (b[i]=='\n'&&b[i+1]=='\n') { if (body_off) *body_off = i + 2; return i; }
+    }
+    return -1;
+}
+
+/* Find header value (case-insensitive name). Returns pointer into buf, sets *vlen. */
+static const char *http_find_header(const char *buf, int len, const char *name, int *vlen) {
+    int nlen = 0; while (name[nlen]) nlen++;
+    if (vlen) *vlen = 0;
+    for (int i = 0; i + nlen + 1 < len; i++) {
+        if (i > 0 && buf[i-1] != '\n') continue;
+        int m = 1;
+        for (int j = 0; j < nlen; j++) {
+            char a = buf[i+j], b = name[j];
+            if (a >= 'A' && a <= 'Z') a += 32;
+            if (b >= 'A' && b <= 'Z') b += 32;
+            if (a != b) { m = 0; break; }
+        }
+        if (!m) continue;
+        int k = i + nlen;
+        if (k >= len || buf[k] != ':') continue;
+        k++; while (k < len && (buf[k]==' '||buf[k]=='\t')) k++;
+        int e = k; while (e < len && buf[e]!='\r' && buf[e]!='\n') e++;
+        if (vlen) *vlen = e - k;
+        return buf + k;
+    }
+    return NULL;
+}
+
 /* One shared HTTP exchange path for GET and POST: build the request, open the
  * TCP connection, send it, then drain the response through the de-chunker.
  * The caller handles policy (ad-blocking) and picks the method/body. */
 static int http_exchange(const char *host, uint16_t port,
                          const char *method, const char *path,
                          const void *body, uint16_t body_len,
+                         const char *extra_headers,
                          void *buf, uint16_t max_len, http_progress_cb cb) {
     if (!net_up) return -1;
 
@@ -1498,8 +1556,13 @@ static int http_exchange(const char *host, uint16_t port,
                            "Connection: close\r\nAccept: */*\r\n"
                            "Accept-Encoding: identity\r\n", NULL};
     for (int i = 0; parts[i]; i++) {
-        const char *s = parts[i];
-        while (*s && pos < (int)sizeof(req) - 1) req[pos++] = *s++;
+        const char *sp = parts[i];
+        while (*sp && pos < (int)sizeof(req) - 1) req[pos++] = *sp++;
+    }
+    if (extra_headers && extra_headers[0]) {
+        const char *eh = extra_headers;
+        while (*eh && pos < (int)sizeof(req)-1) req[pos++] = *eh++;
+        if (pos > 0 && req[pos-1] != '\n' && pos < (int)sizeof(req)-2) { req[pos++]='\r'; req[pos++]='\n'; }
     }
     if (body && body_len > 0) {
         const char *lenhdr = "Content-Length: ";
@@ -1555,7 +1618,7 @@ int http_get_with_progress(const char *host, uint16_t port, const char *path, vo
         return -1;
     }
 
-    return http_exchange(host, port, "GET", path, NULL, 0, buf, max_len, cb);
+    return http_exchange(host, port, "GET", path, NULL, 0, NULL, buf, max_len, cb);
 }
 
 int http_get(const char *host, uint16_t port, const char *path, void *buf, uint16_t max_len) {
@@ -1571,8 +1634,74 @@ int http_post(const char *host, uint16_t port, const char *path, const void *bod
         return -1;
     }
 
-    return http_exchange(host, port, "POST", path, body, body_len, buf, max_len, NULL);
+    return http_exchange(host, port, "POST", path, body, body_len, NULL, buf, max_len, NULL);
 }
+
+int https_request(const char *host, uint16_t port, const char *method,
+                  const char *path, const void *body, uint16_t body_len,
+                  const char *extra_headers,
+                  void *buf, uint16_t max_len, int *status_out,
+                  int follow_redirects, int insecure);
+
+int http_request(const char *host, uint16_t port, const char *method,
+                 const char *path, const void *body, uint16_t body_len,
+                 const char *extra_headers,
+                 void *buf, uint16_t max_len, int *status_out,
+                 int follow_redirects, int insecure) {
+    (void)insecure; (void)extra_headers; /* HTTP is not TLS; extra_headers plumbed via exchange in future */
+    if (status_out) *status_out = 0;
+    if (!net_up || !host || !path || !buf || !method) return -1;
+    char cur_host[256], cur_path[512];
+    strlcpy(cur_host, host, sizeof(cur_host));
+    strlcpy(cur_path, path[0] ? path : "/", sizeof(cur_path));
+    uint16_t cur_port = port ? port : 80;
+    for (int depth = 0; depth < 5; depth++) {
+        if (adblock_is_enabled() && adblock_check_host(cur_host)) {
+            adblock_record_http_block();
+            return -1;
+        }
+        int n = http_exchange(cur_host, cur_port, method, cur_path, body, body_len, extra_headers, buf, max_len, NULL);
+        if (n < 0) return -1;
+        int st = http_parse_status(buf, n);
+        if (status_out) *status_out = st;
+        if (follow_redirects && (st == 301 || st == 302 || st == 303 || st == 307 || st == 308)) {
+            int vlen = 0;
+            const char *loc = http_find_header((const char *)buf, n, "Location", &vlen);
+            if (!loc || vlen <= 0) return n;
+            char ltmp[512]; int ll = vlen; if (ll >= (int)sizeof(ltmp)) ll = (int)sizeof(ltmp)-1;
+            memcpy(ltmp, loc, ll); ltmp[ll] = 0;
+            /* absolute URL? */
+            if (ltmp[0]=='h' && ltmp[1]=='t' && ltmp[2]=='t' && ltmp[3]=='p') {
+                /* let https_request/http_request caller re-dispatch by returning special? no - handle http:// here */
+                if (ltmp[4]==':' && ltmp[5]=='/' && ltmp[6]=='/') {
+                    const char *h = ltmp+7; const char *sl = h; while(*sl && *sl!='/' && *sl!=':') sl++;
+                    int hl = (int)(sl-h); if (hl >= (int)sizeof(cur_host)) hl=(int)sizeof(cur_host)-1;
+                    memcpy(cur_host,h,hl); cur_host[hl]=0;
+                    cur_port = 80;
+                    if (*sl==':') { cur_port = 0; sl++; while(*sl>='0'&&*sl<='9'){ cur_port = cur_port*10 + (*sl-'0'); sl++; } if(!cur_port) cur_port=80; }
+                    if (*sl=='/') strlcpy(cur_path, sl, sizeof(cur_path)); else strlcpy(cur_path, "/", sizeof(cur_path));
+                    if (ltmp[4]=='s') {
+                        /* redirect to HTTPS - use https_request */
+                        int sn = https_request(cur_host, (cur_port==80?443:cur_port), (st==303?"GET":method),
+                                               cur_path, (st==303?NULL:body), (st==303?0:body_len),
+                                               extra_headers, buf, max_len, status_out, follow_redirects, insecure);
+                        return sn;
+                    }
+                    if (st == 303) { method = "GET"; body = NULL; body_len = 0; }
+                    continue;
+                }
+            }
+            if (ltmp[0]=='/') strlcpy(cur_path, ltmp, sizeof(cur_path));
+            else { /* relative - naive append not needed often; replace path */ strlcpy(cur_path, ltmp, sizeof(cur_path)); }
+            if (st == 303) { method = "GET"; body = NULL; body_len = 0; }
+            continue;
+        }
+        return n;
+    }
+    if (status_out) *status_out = 0;
+    return -1;
+}
+
 
 /* Retry wrapper: user-mode SLIRP occasionally drops a SYN; retry before
  * we blame the HTTP/de-chunk path. */
@@ -2189,6 +2318,79 @@ static int tls_parse_ipv4(const char *h, uint32_t *out) {
     return 0;
 }
 
+
+int https_request(const char *host, uint16_t port, const char *method,
+                  const char *path, const void *body, uint16_t body_len,
+                  const char *extra_headers,
+                  void *buf, uint16_t max_len, int *status_out,
+                  int follow_redirects, int insecure) {
+    if (status_out) *status_out = 0;
+    if (!net_up || !host || !path || !buf || !method) return -1;
+    char cur_host[256], cur_path[512];
+    strlcpy(cur_host, host, sizeof(cur_host));
+    strlcpy(cur_path, path[0] ? path : "/", sizeof(cur_path));
+    uint16_t cur_port = port ? port : 443;
+    int old_insecure = https_insecure();
+    if (insecure) https_set_insecure(1);
+    for (int depth = 0; depth < 5; depth++) {
+        int n = -1;
+        const char *m = method;
+        /* Use OpenSSL request path when available for method flexibility */
+#if HTTPS_USE_OPENSSL
+        {
+            if (adblock_is_enabled() && adblock_check_host(cur_host)) { adblock_record_http_block(); https_set_insecure(old_insecure); return -1; }
+            uint32_t ip;
+            if (dns_resolve(cur_host, &ip) == 0) {
+                tls_fd = tcp_connect(ip, cur_port);
+                if (tls_fd >= 0) {
+                    n = ossl_https_request(tls_fd, m, cur_host, cur_path, body, body_len, extra_headers, buf, max_len);
+                    tcp_close(tls_fd); tls_fd = -1;
+                }
+            }
+        }
+#else
+        if (strcmp(m, "POST") == 0)
+            n = https_post(cur_host, cur_port, cur_path, body, body_len, buf, max_len);
+        else
+            n = https_get(cur_host, cur_port, cur_path, buf, max_len);
+#endif
+        if (n < 0) { https_set_insecure(old_insecure); return -1; }
+        int st = http_parse_status(buf, n);
+        if (status_out) *status_out = st;
+        if (follow_redirects && (st==301||st==302||st==303||st==307||st==308)) {
+            int vlen = 0;
+            const char *loc = http_find_header((const char *)buf, n, "Location", &vlen);
+            if (!loc || vlen <= 0) { https_set_insecure(old_insecure); return n; }
+            char ltmp[512]; int ll = vlen; if (ll >= (int)sizeof(ltmp)) ll=(int)sizeof(ltmp)-1;
+            memcpy(ltmp, loc, ll); ltmp[ll] = 0;
+            if (ltmp[0]=='h'&&ltmp[1]=='t'&&ltmp[2]=='t'&&ltmp[3]=='p'&&ltmp[4]==':'&&ltmp[5]=='/'&&ltmp[6]=='/') {
+                int is_https = (ltmp[4]=='s'); /* "https" has 's' at 4? "http:" indices 0-4 = h,t,t,p,: so https has 's' at 4 */
+                is_https = (ltmp[4]=='s');
+                const char *h = ltmp+7; const char *sl = h; while(*sl && *sl!='/' && *sl!=':') sl++;
+                int hl = (int)(sl-h); if (hl >= (int)sizeof(cur_host)) hl=(int)sizeof(cur_host)-1;
+                memcpy(cur_host,h,hl); cur_host[hl]=0;
+                cur_port = is_https ? 443 : 80;
+                if (*sl==':') { cur_port=0; sl++; while(*sl>='0'&&*sl<='9'){ cur_port=cur_port*10+(*sl-'0'); sl++; } if(!cur_port) cur_port = is_https?443:80; }
+                if (*sl=='/') strlcpy(cur_path, sl, sizeof(cur_path)); else strlcpy(cur_path, "/", sizeof(cur_path));
+                if (!is_https) {
+                    int sn = http_request(cur_host, cur_port, (st==303?"GET":method), cur_path, (st==303?NULL:body), (st==303?0:body_len), extra_headers, buf, max_len, status_out, follow_redirects, insecure);
+                    https_set_insecure(old_insecure); return sn;
+                }
+            } else if (ltmp[0]=='/') {
+                strlcpy(cur_path, ltmp, sizeof(cur_path));
+            } else {
+                strlcpy(cur_path, ltmp, sizeof(cur_path));
+            }
+            if (st == 303) { method = "GET"; body = NULL; body_len = 0; }
+            continue;
+        }
+        https_set_insecure(old_insecure);
+        return n;
+    }
+    https_set_insecure(old_insecure);
+    return -1;
+}
+
 int https_get(const char *host, uint16_t port, const char *path,
               void *buf, uint16_t max_len) {
     if (!net_up || !host || !path || !buf) return -1;
@@ -2365,6 +2567,15 @@ int https_post(const char *host, uint16_t port, const char *path,
         kprintf("https: tcp_connect %s:%u FAILED\n", host, port);
         return -1;
     }
+
+#if HTTPS_USE_OPENSSL
+    {
+        int n = ossl_https_request(tls_fd, "POST", host, path, body, body_len, NULL, buf, max_len);
+        tcp_close(tls_fd);
+        tls_fd = -1;
+        return n;
+    }
+#endif
 
     mbedtls_ssl_config conf;
     mbedtls_ssl_context ssl;

@@ -263,16 +263,15 @@ RUST_LIB = $(RUST_DIR)/target/x86_64-unknown-none/release/libow_http.a
 RUST_TOOLCHAIN = $(HOME)/.rustup/toolchains/1.92.0-x86_64-unknown-linux-gnu/bin
 
 $(RUST_LIB): $(wildcard $(RUST_DIR)/src/*.rs) $(RUST_DIR)/Cargo.toml
-	cd $(RUST_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" cargo build --target x86_64-unknown-none --release
+	cd $(RUST_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" RUSTFLAGS="-C no-redzone -C target-feature=-mmx,-sse,-sse2,+soft-float" cargo build --target x86_64-unknown-none --release
 
-# ── HyperDE compositor shell (C++ port, replaces Rust hyperde_shell) ──
+# ── HyperDE compositor shell (C++) ──
 HYPERDE_DIR = kernel/hyperde
 HYPERDE_CXX = $(HYPERDE_DIR)/hyperde_shell.cpp \
               $(HYPERDE_DIR)/hyperde_config.cpp \
               $(HYPERDE_DIR)/hyperde_keybind.cpp \
               $(HYPERDE_DIR)/hyperde_launcher.cpp \
               $(HYPERDE_DIR)/hyperde_notify.cpp
-RUST_HD_LIB =
 
 # ── CDP Bridge for Chromium (runs in debian-minimal container) ──
 CDP_BRIDGE_SRC = ../pkgs/core/chromium-launcher/src/cdp_bridge.c
@@ -295,7 +294,7 @@ RUST_PR_SRCS = $(wildcard $(RUST_PR_DIR)/src/*.rs) \
                $(wildcard $(RUST_PR_DIR)/src/builtin/layout/*.rs)
 
 $(RUST_PR_LIB): $(RUST_PR_SRCS) $(RUST_PR_DIR)/Cargo.toml
-	cd $(RUST_PR_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" cargo build --target x86_64-unknown-none --release
+	cd $(RUST_PR_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" RUSTFLAGS="-C no-redzone -C target-feature=-mmx,-sse,-sse2,+soft-float" cargo build --target x86_64-unknown-none --release
 
 # ── Qt6 Panel Objects ──
 QT6_DIR = ../qt6
@@ -351,7 +350,6 @@ DEPFILES = $(OBJ_ALL:.o=.d)
 ifeq ($(ARCH),arm64)
     USER_ELF :=
     RUST_LIB :=
-    RUST_HD_LIB :=
     RUST_PR_LIB :=
     QT6_OBJS :=
     QT6_LIBS :=
@@ -881,7 +879,7 @@ clean:
 	rm -f codeos-1-kernel-signed.iso bootloader/limine-uefi-cd-signed.bin
 ifneq ($(ARCH),arm64)
 	cd $(RUST_DIR) && cargo clean 2>/dev/null || true
-	cd $(RUST_HD_DIR) && cargo clean 2>/dev/null || true
+	rm -f $(HYPERDE_DIR)/*.o $(HYPERDE_DIR)/*.d 2>/dev/null || true
 	$(MAKE) -C userspace clean
 endif
 

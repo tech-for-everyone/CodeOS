@@ -890,6 +890,14 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         extern void user_wm_init(void);
         user_wm_init();
     }
+    if (has_fb) {
+        /* Match mouse coordinate space to the active framebuffer. */
+        mouse_set_bounds((int)fb_getwidth() - 1, (int)fb_getheight() - 1);
+        if (mouse_get_x() == 0 && mouse_get_y() == 0)
+            mouse_set_pos((int)fb_getwidth() / 2, (int)fb_getheight() / 2);
+        /* Cursor is drawn/moved by the desktop/platform input loop. */
+        fb_cursor_init();
+    }
     if (boot_no_desktop && has_fb) {
         /* Clear the splash so the shell has the framebuffer to itself. */
         bootsplash_finish();

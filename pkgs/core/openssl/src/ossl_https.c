@@ -303,9 +303,12 @@ static int is_ipv4_literal(const char *host) {
 }
 
 /* ── TLS handshake + HTTP exchange over a connected fd ─────────── */
-int ossl_https_get(int fd, const char *host, const char *path,
-                   void *buf, uint16_t max_len) {
-    if (!host || !path || !buf || max_len == 0 || fd < 0 ||
+/* General HTTPS exchange over an already-connected tcp.c fd. */
+int ossl_https_request(int fd, const char *method, const char *host,
+                       const char *path, const void *body, uint16_t body_len,
+                       const char *extra_headers,
+                       void *buf, uint16_t max_len) {
+    if (!host || !path || !buf || max_len == 0 || fd < 0 || !method ||
         !valid_http_target(host, path)) {
         kprintf("https[ossl]: invalid host, path, or response buffer\n");
         return -1;
@@ -316,7 +319,6 @@ int ossl_https_get(int fd, const char *host, const char *path,
     SSL_CTX *ctx = SSL_CTX_new(meth);
     if (!ctx) { ossl_dump_errors("ctx", 8); return -1; }
 
-    /* Policy is bound per-handshake below; start lenient for ctx reuse. */
     if (!https_insecure())
         SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
 
@@ -331,44 +333,32 @@ int ossl_https_get(int fd, const char *host, const char *path,
     if (!bio) { free(c); SSL_free(ssl); SSL_CTX_free(ctx); return -1; }
     BIO_set_data(bio, c);
     BIO_set_shutdown(bio, BIO_CLOSE);
-    SSL_set_bio(ssl, bio, bio);          /* same BIO for read and write */
+    SSL_set_bio(ssl, bio, bio);
 
     if (!https_insecure()) {
         SSL_set_verify(ssl, SSL_VERIFY_PEER, NULL);
         if (SSL_set1_verify_cert_store(ssl, s_ca_store) != 1) {
-            SSL_free(ssl);
-            SSL_CTX_free(ctx);
-            return -1;
+            SSL_free(ssl); SSL_CTX_free(ctx); return -1;
         }
         X509_VERIFY_PARAM *verify = SSL_get0_param(ssl);
         int verify_host = is_ipv4_literal(host)
             ? X509_VERIFY_PARAM_set1_ip_asc(verify, host)
             : SSL_set1_host(ssl, host);
-        if (verify_host != 1) {
-            SSL_free(ssl);
-            SSL_CTX_free(ctx);
-            return -1;
-        }
+        if (verify_host != 1) { SSL_free(ssl); SSL_CTX_free(ctx); return -1; }
     }
-    if (!is_ipv4_literal(host) &&
-        SSL_set_tlsext_host_name(ssl, host) != 1) {
+    if (!is_ipv4_literal(host) && SSL_set_tlsext_host_name(ssl, host) != 1) {
         kprintf("https[ossl]: SNI set failed for %s\n", host);
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        return -1;
+        SSL_free(ssl); SSL_CTX_free(ctx); return -1;
     }
 
     int cr;
     unsigned long handshake_start = (unsigned long)timer_get_milliseconds();
     do {
         cr = SSL_connect(ssl);
-        if (cr == 1)
-            break;
+        if (cr == 1) break;
         int why = SSL_get_error(ssl, cr);
-        if (why != SSL_ERROR_WANT_READ && why != SSL_ERROR_WANT_WRITE)
-            break;
-        if ((unsigned long)timer_get_milliseconds() - handshake_start > 15000u)
-            break;
+        if (why != SSL_ERROR_WANT_READ && why != SSL_ERROR_WANT_WRITE) break;
+        if ((unsigned long)timer_get_milliseconds() - handshake_start > 15000u) break;
     } while (1);
     if (cr != 1) {
         int why = SSL_get_error(ssl, cr);
@@ -379,28 +369,41 @@ int ossl_https_get(int fd, const char *host, const char *path,
         } else {
             kprintf("https[ossl]: handshake FAILED err=%d\n", why);
         }
-        SSL_free(ssl);
-        SSL_CTX_free(ctx);
-        return -1;
+        SSL_free(ssl); SSL_CTX_free(ctx); return -1;
     }
 
-    kprintf("https[ossl]: %s cipher=%s%s\n", host,
+    kprintf("https[ossl]: %s %s cipher=%s%s\n", method, host,
             SSL_get_cipher(ssl) ? SSL_get_cipher(ssl) : "?",
             https_insecure() ? " [INSECURE]" : "");
 
-    /* Build the HTTP/1.1 request. */
-    char req[1280];
+    char req[2048];
     int pos = 0;
     const char *parts[] = {
-        "GET ", path, " HTTP/1.1\r\n",
+        method, " ", path, " HTTP/1.1\r\n",
         "Host: ", host, "\r\n",
         "User-Agent: codeos-kernel/ossl/1.0\r\n",
-        "Connection: close\r\nAccept: */*\r\n\r\n", NULL
+        "Connection: close\r\nAccept: */*\r\nAccept-Encoding: identity\r\n", NULL
     };
     for (int i = 0; parts[i]; i++) {
-        const char *s = parts[i];
-        while (*s && pos < (int)sizeof(req) - 1) req[pos++] = *s++;
+        const char *sp = parts[i];
+        while (*sp && pos < (int)sizeof(req) - 1) req[pos++] = *sp++;
     }
+    if (extra_headers && extra_headers[0]) {
+        const char *eh = extra_headers;
+        while (*eh && pos < (int)sizeof(req) - 1) req[pos++] = *eh++;
+        if (pos > 0 && req[pos-1] != '\n' && pos < (int)sizeof(req)-2) { req[pos++]='\r'; req[pos++]='\n'; }
+    }
+    if (body && body_len > 0) {
+        const char *cl = "Content-Length: ";
+        while (*cl && pos < (int)sizeof(req)-1) req[pos++] = *cl++;
+        char digits[10]; int nd = 0; unsigned int v = body_len;
+        do { digits[nd++] = (char)('0'+(v%10)); v/=10; } while(v && nd<10);
+        while (nd>0 && pos < (int)sizeof(req)-1) req[pos++] = digits[--nd];
+        if (pos < (int)sizeof(req)-1) req[pos++]='\r';
+        if (pos < (int)sizeof(req)-1) req[pos++]='\n';
+    }
+    if (pos < (int)sizeof(req)-1) req[pos++]='\r';
+    if (pos < (int)sizeof(req)-1) req[pos++]='\n';
     req[pos] = '\0';
 
     size_t woff = 0;
@@ -411,7 +414,18 @@ int ossl_https_get(int fd, const char *host, const char *path,
         if (n <= 0) { SSL_free(ssl); SSL_CTX_free(ctx); return -1; }
         woff += (size_t)n;
     }
+    if (body && body_len > 0) {
+        woff = 0;
+        while (woff < body_len) {
+            int n = SSL_write(ssl, (const unsigned char *)body + woff, (int)(body_len - woff));
+            int why = SSL_get_error(ssl, n);
+            if (why == SSL_ERROR_WANT_READ || why == SSL_ERROR_WANT_WRITE) continue;
+            if (n <= 0) { SSL_free(ssl); SSL_CTX_free(ctx); return -1; }
+            woff += (size_t)n;
+        }
+    }
 
+    /* Read raw response, then de-chunk in place if needed. */
     int total = 0;
     unsigned long stall0 = (unsigned long)timer_get_milliseconds();
     for (;;) {
@@ -423,7 +437,7 @@ int ossl_https_get(int fd, const char *host, const char *path,
             continue;
         }
         int why = SSL_get_error(ssl, n);
-        if (why == SSL_ERROR_ZERO_RETURN) break;              /* clean close */
+        if (why == SSL_ERROR_ZERO_RETURN) break;
         if (why == SSL_ERROR_WANT_READ || why == SSL_ERROR_WANT_WRITE) {
             if ((unsigned long)timer_get_milliseconds() - stall0 > 15000u) {
                 kprintf("https[ossl]: read timed out\n");
@@ -434,8 +448,46 @@ int ossl_https_get(int fd, const char *host, const char *path,
         if (why == SSL_ERROR_SSL) break;
         break;
     }
-
+    {
+        unsigned char *b = (unsigned char *)buf;
+        int hend = -1, chunked = 0;
+        for (int i = 0; i + 3 < total; i++) {
+            if (b[i]=='\r'&&b[i+1]=='\n'&&b[i+2]=='\r'&&b[i+3]=='\n') { hend = i+4; break; }
+        }
+        if (hend > 0) {
+            for (int i = 0; i + 6 < hend; i++) {
+                unsigned char *p = b+i;
+                if ((p[0]|32)=='c'&&(p[1]|32)=='h'&&(p[2]|32)=='u'&&(p[3]|32)=='n'&&(p[4]|32)=='k'&&(p[5]|32)=='e'&&(p[6]|32)=='d') { chunked = 1; break; }
+            }
+        }
+        if (chunked && hend > 0) {
+            int r = hend, w = hend;
+            while (r < total) {
+                long sz = 0; int ok = 0;
+                while (r < total) {
+                    unsigned char c = b[r];
+                    if (c=='\r') { r++; if (r<total && b[r]=='\n') r++; ok=1; break; }
+                    if (c=='\n') { r++; ok=1; break; }
+                    int v = (c>='0'&&c<='9')?c-'0':(c>='a'&&c<='f')?c-'a'+10:(c>='A'&&c<='F')?c-'A'+10:-1;
+                    if (v < 0) break;
+                    sz = sz*16 + v; r++;
+                }
+                if (!ok || sz <= 0) break;
+                if (r + sz > total) sz = total - r;
+                if (w != r) memmove(b+w, b+r, (size_t)sz);
+                w += (int)sz; r += (int)sz;
+                if (r+1 < total && b[r]=='\r' && b[r+1]=='\n') r += 2;
+                else if (r < total && b[r]=='\n') r++;
+            }
+            total = w;
+        }
+    }
     SSL_free(ssl);
     SSL_CTX_free(ctx);
     return total;
+}
+
+int ossl_https_get(int fd, const char *host, const char *path,
+                   void *buf, uint16_t max_len) {
+    return ossl_https_request(fd, "GET", host, path, NULL, 0, NULL, buf, max_len);
 }

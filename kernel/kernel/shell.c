@@ -1436,6 +1436,130 @@ static void cmd_catrust(int argc, char **argv) {
     kprintf("catrust: trusted %d pem bytes\n", n);
 }
 
+/* ---------- curl ---------- */
+
+static int curl_parse_url(const char *url, char *scheme, int smax,
+                          char *host, int hmax, uint16_t *port, char *path, int pmax) {
+    scheme[0]=host[0]=path[0]=0; *port=0;
+    const char *p = url;
+    if (!strncmp(p, "https://", 8)) { strlcpy(scheme, "https", smax); p += 8; *port=443; }
+    else if (!strncmp(p, "http://", 7)) { strlcpy(scheme, "http", smax); p += 7; *port=80; }
+    else { strlcpy(scheme, "http", smax); *port=80; }
+    const char *sl = p; while (*sl && *sl!='/' && *sl!='?' && *sl!=':') sl++;
+    int hl = (int)(sl-p); if (hl <= 0 || hl >= hmax) return -1;
+    memcpy(host,p,hl); host[hl]=0;
+    if (*sl==':') { sl++; uint16_t pr=0; while(*sl>='0'&&*sl<='9'){ pr=pr*10+(*sl-'0'); sl++; } if(pr) *port=pr; }
+    if (*sl=='/') strlcpy(path, sl, pmax);
+    else if (*sl=='?') { path[0]='/'; strlcpy(path+1, sl, pmax-1); }
+    else strlcpy(path, "/", pmax);
+    return 0;
+}
+
+static void cmd_curl(int argc, char **argv) {
+    int opt_s=0, opt_S=0, opt_I=0, opt_L=0, opt_k=0, opt_i=0;
+    const char *url=NULL, *out_path=NULL, *data=NULL, *method=NULL;
+    static char xhdr[512]; xhdr[0]=0;
+    for (int i=1; i<argc; i++) {
+        const char *a = argv[i];
+        if (!a) continue;
+        if (strcmp(a, "-s")==0 || strcmp(a, "--silent")==0) opt_s=1;
+        else if (strcmp(a, "-S")==0 || strcmp(a, "--show-error")==0) opt_S=1;
+        else if (strcmp(a, "-I")==0 || strcmp(a, "--head")==0) opt_I=1;
+        else if (strcmp(a, "-i")==0 || strcmp(a, "--include")==0) opt_i=1;
+        else if (strcmp(a, "-L")==0 || strcmp(a, "--location")==0) opt_L=1;
+        else if (strcmp(a, "-k")==0 || strcmp(a, "--insecure")==0) opt_k=1;
+        else if (strcmp(a, "-o")==0 || strcmp(a, "--output")==0) { if (i+1<argc) out_path=argv[++i]; }
+        else if (strcmp(a, "-d")==0 || strcmp(a, "--data")==0 || strcmp(a, "--data-raw")==0) { if (i+1<argc) data=argv[++i]; }
+        else if (strcmp(a, "-X")==0 || strcmp(a, "--request")==0) { if (i+1<argc) method=argv[++i]; }
+        else if (strcmp(a, "-H")==0 || strcmp(a, "--header")==0) {
+            if (i+1<argc) {
+                const char *h=argv[++i]; int hl=strlen(h);
+                int cur=strlen(xhdr);
+                if (cur+hl+3 < (int)sizeof(xhdr)) { memcpy(xhdr+cur,h,hl); cur+=hl; xhdr[cur++]='\r'; xhdr[cur++]='\n'; xhdr[cur]=0; }
+            }
+        }
+        else if (strcmp(a, "-h")==0 || strcmp(a, "--help")==0) {
+            kprintf("usage: curl [options] <url>\n");
+            kprintf("  -s, --silent        Silent mode\n");
+            kprintf("  -S, --show-error    Show error when -s is used\n");
+            kprintf("  -I, --head          Show headers (HEAD)\n");
+            kprintf("  -i, --include       Include response headers\n");
+            kprintf("  -L, --location      Follow redirects\n");
+            kprintf("  -o, --output FILE   Write output to FILE\n");
+            kprintf("  -k, --insecure      Skip TLS certificate verification\n");
+            kprintf("  -d, --data DATA     HTTP POST data\n");
+            kprintf("  -X, --request METH  Request method (GET, POST, HEAD, ...)\n");
+            kprintf("  -H, --header HDR    Add header (e.g. -H \"Accept: text/plain\")\n");
+            return;
+        }
+        else if (a[0]=='-' && a[1]!=0) {
+            /* combined short flags like -sSL */
+            for (int j=1; a[j]; j++) {
+                if (a[j]=='s') opt_s=1;
+                else if (a[j]=='S') opt_S=1;
+                else if (a[j]=='I') opt_I=1;
+                else if (a[j]=='i') opt_i=1;
+                else if (a[j]=='L') opt_L=1;
+                else if (a[j]=='k') opt_k=1;
+            }
+        }
+        else if (!url) url = a;
+    }
+    if (!url) { kprintf("curl: no URL specified (try curl --help)\n"); return; }
+    if (!method) method = opt_I ? "HEAD" : (data ? "POST" : "GET");
+
+    char scheme[8], host[256], path[512]; uint16_t port=0;
+    if (curl_parse_url(url, scheme, sizeof(scheme), host, sizeof(host), &port, path, sizeof(path)) < 0) {
+        if (!opt_s || opt_S) kprintf("curl: invalid URL: %s\n", url);
+        return;
+    }
+
+    static char buf[65536];
+    int status = 0, n = -1;
+    uint16_t blen = (uint16_t)strlen(data ? data : "");
+    if (!strcmp(scheme, "https")) {
+        n = https_request(host, port, method, path, data, blen, xhdr[0]?xhdr:NULL,
+                          buf, (uint16_t)(sizeof(buf)-1), &status, opt_L, opt_k);
+    } else {
+        n = http_request(host, port, method, path, data, blen, xhdr[0]?xhdr:NULL,
+                         buf, (uint16_t)(sizeof(buf)-1), &status, opt_L, opt_k);
+    }
+    if (n < 0) {
+        if (!opt_s || opt_S) kprintf("curl: (7) failed to connect/fetch %s://%s%s\n", scheme, host, path);
+        return;
+    }
+    if (n >= (int)sizeof(buf)) n = (int)sizeof(buf)-1;
+    buf[n] = 0;
+
+    int body_off = 0;
+    http_header_body_split(buf, n, &body_off);
+    const char *out_ptr = buf;
+    int out_len = n;
+    if (opt_I) { out_ptr = buf; out_len = body_off > 0 ? body_off : n; }
+    else if (!opt_i) { out_ptr = buf + body_off; out_len = n - body_off; if (out_len < 0) out_len = 0; }
+
+    if (out_path && strcmp(out_path, "-") != 0) {
+        /* write body (or headers if -I) to file */
+        int wr = fs_path_write(out_path, out_ptr, out_len);
+        if (wr < 0) {
+            /* try ext2 path as fallback */
+            wr = ext2_write_file_path(out_path, out_ptr, out_len);
+        }
+        if (!opt_s) kprintf("  %% Total    %% Received\n  100 %d  100 %d  curl -> %s (HTTP %d)\n", out_len, out_len, out_path, status);
+        (void)wr;
+    } else {
+        /* print to console; ensure NUL termination for headers, raw-ish for body */
+        if (opt_I || opt_i) {
+            /* headers may contain NUL? unlikely; print as text up to out_len */
+            for (int i=0; i<out_len; i++) kprintf("%c", out_ptr[i]);
+            if (out_len == 0 || out_ptr[out_len-1] != '\n') kprintf("\n");
+        } else {
+            for (int i=0; i<out_len; i++) kprintf("%c", out_ptr[i]);
+            if (out_len > 0 && out_ptr[out_len-1] != '\n') kprintf("\n");
+        }
+    }
+}
+
 /* ---------- new commands ---------- */
 
 static int str_to_int(const char *s) {
@@ -4420,6 +4544,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "download") == 0) cmd_download(argc, argv);
     else if (strcmp(cmd, "post") == 0) cmd_post(argc, argv);
     else if (strcmp(cmd, "https") == 0) cmd_https(argc, argv);
+    else if (strcmp(cmd, "curl") == 0) cmd_curl(argc, argv);
     else if (strcmp(cmd, "tlsinsecure") == 0) cmd_tlsinsecure(argc, argv);
     else if (strcmp(cmd, "catrust") == 0) cmd_catrust(argc, argv);
     else if (strcmp(cmd, "desktop") == 0) cmd_desktop();

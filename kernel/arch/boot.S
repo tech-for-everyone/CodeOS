@@ -79,6 +79,8 @@ _start_limine:
 /* ── BSS: stacks ── */
 .section .bss
 .align 4096
+.globl kernel_stack
+.globl kernel_stack_top
 kernel_stack:
     .skip 1048576
 kernel_stack_top:

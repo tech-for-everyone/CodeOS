@@ -1,4 +1,5 @@
 #include "gdt.h"
+#include "idt.h"
 #include "kprintf.h"
 #include "pmm.h"
 #include "string.h"
@@ -68,6 +69,30 @@ void gdt_tss_init(void) {
     memset(tss_entry, 0, 4096);
 
     tss_entry->rsp[0] = 0;
+    /* IST1: dedicated stack for IRQ14/15 (IDE). CPU interrupt delivery pushes
+     * SS/RSP/RFLAGS/CS/RIP below the interrupted RSP; on the current-stack
+     * model that clobbers any red-zone live data. IDE handlers don't use the
+     * yield-from-IRQ thread-frame trick, so an IST stack is safe and prevents
+     * delivery-time corruption of thread stacks (the proven RIP=0 null-ret
+     * cause). 8KB is ample for the exception frame + ATA handler. */
+    {
+        uint64_t ist1 = 0, prev = 0;
+        int contiguous = 1;
+        for (int i = 0; i < 2; i++) {
+            uint64_t p = pmm_alloc_page();
+            if (i == 0) ist1 = p;
+            else if (p != prev + 4096) contiguous = 0;
+            prev = p;
+            vmm_map_page(phys_to_virt(p), p, PAGE_PRESENT | PAGE_WRITE);
+        }
+        /* Use a contiguous virtual top if pages happened to be contiguous;
+         * otherwise the two pages still back the mapped range in practice is
+         * not guaranteed — fall back to a single-page top (sufficient). */
+        if (contiguous && ist1)
+            tss_entry->ist[0] = phys_to_virt(ist1) + 8192;
+        else if (ist1)
+            tss_entry->ist[0] = phys_to_virt(ist1) + 4096;
+    }
     tss_entry->iomap_base = sizeof(struct tss);
 
     gdt_set_tss((uint64_t)tss_entry, sizeof(struct tss) - 1);
@@ -80,7 +105,18 @@ void gdt_tss_init(void) {
     uint16_t tss_sel = GDT_TSS;
     __asm__ volatile("ltr %0" : : "r"(tss_sel));
 
-    kprintf("GDT/TSS: initialized (tss=0x%lx)\n", (uint64_t)tss_entry);
+    /* All hardware IRQs (vectors 32-47) → IST1. CPU delivery pushes 5 qwords
+     * below the interrupted RSP, clobbering the 128-byte SysV red zone —
+     * prebuilt components (e.g. Qt libs) may use it. isr_common relocates the
+     * full interrupt frame from IST to [interrupted_rsp - 128 - 176] on the
+     * thread stack (below the red zone) so the red zone is preserved and the
+     * timer's yield-from-IRQ / ctx_switch path still operates on the thread
+     * stack. */
+    for (int v = 32; v <= 47; v++)
+        idt_set_ist(v, 1);
+
+    kprintf("GDT/TSS: initialized (tss=0x%lx ist1=%lx irq32-47->IST1)\n",
+            (uint64_t)tss_entry, tss_entry->ist[0]);
 }
 
 void syscall_msr_init(void *handler_entry) {

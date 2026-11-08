@@ -140,4 +140,19 @@ int  tcp_sock_send(tcp_sock_t *s, const void *data, int len);
 int  tcp_sock_recv(tcp_sock_t *s, void *buf, int max_len, int timeout_ms);
 void tcp_sock_close(tcp_sock_t *s);
 
+
+/* Extended HTTP(S) helpers (ABI-preserving additions) */
+int  http_request(const char *host, uint16_t port, const char *method,
+                  const char *path, const void *body, uint16_t body_len,
+                  const char *extra_headers,
+                  void *buf, uint16_t max_len, int *status_out,
+                  int follow_redirects, int insecure);
+int  https_request(const char *host, uint16_t port, const char *method,
+                   const char *path, const void *body, uint16_t body_len,
+                   const char *extra_headers,
+                   void *buf, uint16_t max_len, int *status_out,
+                   int follow_redirects, int insecure);
+int  http_parse_status(const void *buf, int len);
+int  http_header_body_split(const void *buf, int len, int *body_off);
+
 #endif

@@ -21,6 +21,41 @@ static int sched_in_yield;
 static spinlock_t sched_lock = SPINLOCK_INIT;
 volatile int need_resched;
 
+extern char kernel_stack[];
+extern char kernel_stack_top[];
+
+/* Ring buffer of recent context switches, dumped by the PF handler to
+ * identify the execution path immediately before a fault. */
+#define SCHED_TRACE_MAX 32
+typedef struct {
+    const char *prev_name;
+    const char *next_name;
+    int prev_tid;
+    int next_tid;
+    uint64_t prev_sp_before;
+    uint64_t prev_sp_after; /* value saved for prev */
+    uint64_t next_sp;       /* value loaded for next */
+    uint64_t next_retaddr;  /* next_sp[15], what ctx_switch will ret to */
+    uint64_t cur_rsp;       /* approximate RSP at log point */
+} sched_trace_t;
+static sched_trace_t sched_trace[SCHED_TRACE_MAX];
+static volatile unsigned sched_trace_head;
+
+void sched_dump_trace(void) {
+    unsigned head = sched_trace_head;
+    kprintf("sched trace (last %d, newest first):\n", SCHED_TRACE_MAX);
+    for (unsigned n = 0; n < SCHED_TRACE_MAX; n++) {
+        unsigned i = (head + SCHED_TRACE_MAX - 1 - n) % SCHED_TRACE_MAX;
+        sched_trace_t *e = &sched_trace[i];
+        if (!e->prev_name && !e->next_name) continue;
+        kprintf("  %s[%d] sp'=%lx->%lx => %s[%d] sp=%lx ret=%lx @rsp~%lx\n",
+                e->prev_name ? e->prev_name : "?", e->prev_tid,
+                e->prev_sp_before, e->prev_sp_after,
+                e->next_name ? e->next_name : "?", e->next_tid,
+                e->next_sp, e->next_retaddr, e->cur_rsp);
+    }
+}
+
 static void fpu_reset_image(char *img);
 
 void sched_preempt_disable(void) { preemption_enabled = 0; }
@@ -107,13 +142,23 @@ static uint64_t *alloc_syscall_stack(void) {
 void sched_init(void) {
     memset(threads, 0, sizeof(threads));
     /* Every thread needs a valid FPU image, not an all-zero one -- see
-     * fpu_reset_image().  The idle thread is never created through
-     * sched_create_thread_prio(), so initialise all slots here. */
+     * fpu_reset_image().  Slots 0 (idle) and 1 (boot) are never created
+     * through sched_create_thread_prio(), so initialise all slots here. */
     for (int i = 0; i < THREAD_MAX; i++)
         fpu_reset_image(threads[i].fpu_state);
     for (int i = 0; i < SCHED_PRIO_COUNT; i++)
         ready_head[i] = ready_tail[i] = 0;
 
+    /* Slot 0: the real idle thread. It runs idle_thread_entry() on its own
+     * allocated kernel stack and is the scheduler sentinel/fallback. It is
+     * NOT the initial current_thread: the CPU is still executing kernel init
+     * on the static boot stack (boot.S BSS). Making that boot execution be
+     * "idle" caused the first ctx_switch away from it to overwrite
+     * idle_thread->stack with a boot-stack RSP, so idle's saved context and
+     * kstack/sysstack metadata no longer described the stack actually in use;
+     * corruption of that boot-stack frame then surfaced as `ret` to 0
+     * (RIP=CR2=0, err=16, I/D instruction fetch, cur=idle, RSP outside both
+     * declared stacks). Keep idle on its own kstack so its context is isolated. */
     idle_thread = &threads[0];
     idle_thread->state = THREAD_READY;
     idle_thread->tid = 0;
@@ -127,17 +172,49 @@ void sched_init(void) {
     idle_thread->next = idle_thread;
     strlcpy(idle_thread->name, "idle", sizeof(idle_thread->name));
 
-    /* Set up idle thread's stack with proper entry point */
     uint64_t *sp = idle_thread->kernel_stack_top;
     sp--; *sp = (uint64_t)idle_thread_entry;
     for (int i = 0; i < 15; i++) { sp--; *sp = 0; }
     idle_thread->stack = sp;
 
-    current_thread = idle_thread;
-    thread_count = 1;
+    /* Slot 1: the boot/init thread. This represents the CPU's current
+     * execution continuing main() on the boot BSS stack. It owns no allocated
+     * kernel stack (kernel_stack_top stays 0 so reap_zombies never frees the
+     * static boot stack); ctx_switch saves its live RSP here on the first
+     * switch away. A syscall stack is allocated so syscall_kernel_rsp and
+     * syscall-entry paths have a valid target if this context is resumed. */
+    thread_t *boot_thread = &threads[1];
+    boot_thread->state = THREAD_RUNNING;
+    boot_thread->tid = next_tid++;
+    boot_thread->priority = SCHED_PRIO_NORMAL;
+    boot_thread->kernel_stack_top = 0;
+    boot_thread->syscall_stack_top = alloc_syscall_stack();
+    if (!boot_thread->syscall_stack_top) {
+        kprintf("sched: FATAL: cannot allocate boot syscall stack\n");
+        while (1) asm volatile("cli; hlt");
+    }
+    strlcpy(boot_thread->name, "kboot", sizeof(boot_thread->name));
+    boot_thread->next = idle_thread->next;
+    idle_thread->next = boot_thread;
+
+    current_thread = boot_thread;
+    thread_count = 2;
     preemption_enabled = 1;
     sched_in_yield = 0;
 
+    kprintf("sched: idle tid=%d entry=%lx kstack=[%lx,%lx) sysstack=[%lx,%lx) saved_sp=%lx\n",
+            idle_thread->tid, (uint64_t)idle_thread_entry,
+            (uint64_t)idle_thread->kernel_stack_top - STACK_SIZE,
+            (uint64_t)idle_thread->kernel_stack_top,
+            (uint64_t)idle_thread->syscall_stack_top - SYSCALL_STACK_SIZE,
+            (uint64_t)idle_thread->syscall_stack_top,
+            (uint64_t)idle_thread->stack);
+    kprintf("sched: kboot tid=%d cont=main kstack=[%lx,%lx) sysstack=[%lx,%lx) cur_rsp~%lx\n",
+            boot_thread->tid,
+            (uint64_t)kernel_stack, (uint64_t)kernel_stack_top,
+            (uint64_t)boot_thread->syscall_stack_top - SYSCALL_STACK_SIZE,
+            (uint64_t)boot_thread->syscall_stack_top,
+            (uint64_t)__builtin_frame_address(0));
     /* Scheduler initialized */
 }
 
@@ -400,10 +477,51 @@ void sched_yield(void) {
 
             if (fpu_initialized) fpu_restore(next);
 
+            uint64_t next_retaddr = 0;
+            if (next->stack)
+                next_retaddr = ((uint64_t *)next->stack)[15];
+            {
+                unsigned si = sched_trace_head % SCHED_TRACE_MAX;
+                uint64_t rsp_now;
+                __asm__ volatile("mov %%rsp, %0" : "=r"(rsp_now));
+                sched_trace[si].prev_name = prev->name;
+                sched_trace[si].next_name = next->name;
+                sched_trace[si].prev_tid = prev->tid;
+                sched_trace[si].next_tid = next->tid;
+                sched_trace[si].prev_sp_before = (uint64_t)prev->stack;
+                sched_trace[si].prev_sp_after = 0; /* filled by context meaningfully on resume; see dump */
+                sched_trace[si].next_sp = (uint64_t)next->stack;
+                sched_trace[si].next_retaddr = next_retaddr;
+                sched_trace[si].cur_rsp = rsp_now;
+                sched_trace_head++;
+            }
+            if (!next->stack || next_retaddr < 0xffffffff80000000ULL) {
+                kprintf("\n!!! SCHED: ctx_switch to %s tid=%d invalid context !!!\n",
+                        next->name, next->tid);
+                kprintf("  prev=%s tid=%d prev_sp=%lx next_sp=%lx next_ret=%lx proc=%lx\n",
+                        prev->name, prev->tid, (uint64_t)prev->stack,
+                        (uint64_t)next->stack, next_retaddr, (uint64_t)next->proc);
+                kprintf("  next kstack=[%lx,%lx) sysstack=[%lx,%lx) rsp0=%lx\n",
+                        (uint64_t)next->kernel_stack_top - 131072UL,
+                        (uint64_t)next->kernel_stack_top,
+                        (uint64_t)next->syscall_stack_top - 16384UL,
+                        (uint64_t)next->syscall_stack_top, next->rsp0_top);
+                if (next->stack) {
+                    uint64_t *sp = (uint64_t *)next->stack;
+                    kprintf("  next saved:");
+                    for (int i = 0; i < 18; i++) kprintf(" %lx", sp[i]);
+                    kprintf("\n");
+                }
+                sched_dump_trace();
+                for (;;) __asm__ volatile("cli; hlt");
+            }
             ctx_switch(&prev->stack, next->stack);
 
-            /* Resumed here when this thread is scheduled again. The lock was
-             * released before the switch; just fall through to the cleanup. */
+            /* Resumed here when this thread is scheduled again. The scheduler
+             * lock was released on the switching-out path before ctx_switch,
+             * so it is not held now. */
+            __asm__ volatile("sti" : : : "memory");
+            return;
         }
     }
 

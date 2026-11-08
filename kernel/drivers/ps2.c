@@ -57,14 +57,25 @@ void ps2_flush(void) {
 }
 
 void ps2_init(void) {
+    /* Drain any stale bytes from both PS/2 ports before configuration. */
     ps2_flush();
-    ps2_send_command(PS2_COMMAND_PORT, 0xA8);
-    ps2_send_command(PS2_COMMAND_PORT, 0x20);
 
+    /* Enable the auxiliary (mouse) port. 0xAE enables the keyboard port;
+     * keep both ports active for polling-based drivers. */
+    ps2_send_command(PS2_COMMAND_PORT, 0xAE);
+    ps2_send_command(PS2_COMMAND_PORT, 0xA8);
+
+    /* Read controller config, disable IRQ1/IRQ12 (bits 0,1) for polling
+     * (keyboard/mouse are polled by input_poll/mouse_poll; no IRQ handlers
+     * are registered for PS/2, so leaving IRQs enabled can cause unhandled
+     * interrupts / lost data). Enable translation (bit 6) is preserved. */
+    ps2_send_command(PS2_COMMAND_PORT, 0x20);
     if (ps2_wait_input_ready(100000)) {
         uint8_t status = ps2_read_data();
-        status |= 0x02;
+        status &= (uint8_t)~0x03; /* no IRQ1, no IRQ12 — polling mode */
         ps2_send_command(PS2_COMMAND_PORT, 0x60);
         ps2_send_data(status);
     }
+
+    ps2_flush();
 }
