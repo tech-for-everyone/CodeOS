@@ -1,5 +1,4 @@
 # CodeOS
-[![yay](https://img.shields.io/aur/version/yay?color=1793d1&label=yay&logo=arch-linux&style=for-the-badge)](https://aur.archlinux.org/packages/yay/)
 A from-scratch hobby operating system with its own kernel, desktop GUI, package
 layout, and **ZircApp** app toolkit. Built for people who want to see how an OS
 works — not a bajillion distros, one approachable system.
