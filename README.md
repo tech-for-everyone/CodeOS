@@ -174,14 +174,6 @@ CodeOS/
 ├── run.sh            # QEMU launch script
 └── Makefile          # Root build targets
 ```
-
-## Roadmap
-
-1. More packages (including Flatpak-style containers later)
-2. Broader Linux / Zircon app compatibility
-3. Wine-like Windows app translator
-4. Stronger desktop polish (macOS Big Sur / ThormiumOS-inspired GUI)
-5. Make CodeOS for mobile named Zircon
 ## Goals
 
 An OS whose code is approachable for non-experts and gamers alike — one clear
