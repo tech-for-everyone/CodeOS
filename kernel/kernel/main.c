@@ -907,7 +907,9 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         qt_desktop_run();
     }
 
-    /* Fallback: kernel console shell */
+    /* Fallback: kernel console shell — show the framebuffer cursor. */
+    if (has_fb)
+        fb_cursor_show();
     shell_init();
     shell_run();
 

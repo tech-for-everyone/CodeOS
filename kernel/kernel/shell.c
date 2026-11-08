@@ -115,7 +115,7 @@ static int input_getchar(void) {
             return serial_readchar();
         if (input_get_event(&ev) && ev.type == INPUT_EVENT_KEY) {
             if (mouse_available())
-                fb_cursor_hide();
+                fb_cursor_invalidate();
             return ev.data.key.key;
         }
         if (++spins > 1000) {
@@ -158,7 +158,7 @@ int shell_kbhit(void) {
     if (serial_available()) return serial_readchar();
     input_event_t ev;
     if (input_get_event(&ev) && ev.type == INPUT_EVENT_KEY) {
-        if (mouse_available()) fb_cursor_hide();
+        if (mouse_available()) fb_cursor_invalidate();
         return ev.data.key.key;
     }
     return 0;

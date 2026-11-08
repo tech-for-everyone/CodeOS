@@ -785,6 +785,7 @@ static void cursor_restore_bg(void);
 static void cursor_draw(void);
 
 void fb_cursor_show(void) {
+    if (cursor_visible) return;
     cursor_visible = 1;
     cursor_save_bg();
     cursor_draw();
