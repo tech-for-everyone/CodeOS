@@ -1,0 +1,11 @@
+{
+  "name": "wine-runner",
+  "version": "1.0.0",
+  "description": "Wine compatibility runner for Windows applications",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/wine-runner"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "make",
+  "version": "4.3",
+  "description": "Build automation tool",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://ftp.gnu.org/gnu/make/make-4.3.tar.gz",
+  "size": 524288,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/make.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

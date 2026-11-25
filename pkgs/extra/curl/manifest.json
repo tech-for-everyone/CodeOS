@@ -1,0 +1,13 @@
+{
+  "name": "curl",
+  "version": "7.85.0",
+  "description": "Data transfer tool",
+  "type": "prebuilt",
+  "category": "Network",
+  "dependencies": [],
+  "source": "https://curl.se/download/curl-7.85.0.tar.gz",
+  "size": 786432,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from extra/curl.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

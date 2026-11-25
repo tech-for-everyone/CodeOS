@@ -311,10 +311,21 @@ int cgroup_create(const char *name, int parent_id) {
     return cg->id;
 }
 
+/* IDs are allocated from cg_next_id and slot 1 gets id 2 (slot 0 is the
+ * root with id 1), so an ID is not a slot index.  Look it up by value,
+ * exactly like namespace IDs; indexing cgroups[id] silently operated on
+ * the wrong cgroup or nothing at all for every cgroup_create() result. */
+static int find_cg_slot_by_id(int id) {
+    if (id <= 0) return -1;
+    for (int i = 0; i < CGROUP_MAX; i++)
+        if (cgroups[i].id == id) return i;
+    return -1;
+}
+
 int cgroup_destroy(int id) {
-    if (id <= 0 || id >= CGROUP_MAX) return -1;
-    cgroup_t *cg = &cgroups[id];
-    if (cg->id == 0) return -1;
+    int slot = find_cg_slot_by_id(id);
+    if (slot < 0) return -1;
+    cgroup_t *cg = &cgroups[slot];
     int saved = cg->id;
     memset(cg, 0, sizeof(cgroup_t));
     kprintf("ns: destroyed cgroup id=%d\n", saved);
@@ -345,8 +356,8 @@ int cgroup_remove_proc(int cg_id, int pid) {
 }
 
 cgroup_t *cgroup_get(int id) {
-    if (id <= 0 || id >= CGROUP_MAX) return 0;
-    return cgroups[id].id > 0 ? &cgroups[id] : 0;
+    int slot = find_cg_slot_by_id(id);
+    return slot < 0 ? 0 : &cgroups[slot];
 }
 
 cgroup_t *cgroup_find(const char *name) {

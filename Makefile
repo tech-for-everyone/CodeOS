@@ -6,6 +6,16 @@ export ARCH
 # Version info
 -include version
 
+# Parallel build jobs.  nproc is GNU/Linux-only; macOS and Termux provide
+# getconf, and every platform has a single-CPU fallback.  Override with
+# `make JOBS=2` on a constrained machine.
+JOBS ?= $(shell (nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2))
+
+# Rust tools: PATH first, then the standard rustup shim directory.  Nightly on
+# an aarch64 host is a normal supported setup; no x86_64 toolchain path here.
+RUSTC ?= $(shell command -v rustc 2>/dev/null || printf '%s' "$(HOME)/.cargo/bin/rustc")
+CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$(HOME)/.cargo/bin/cargo")
+
 # Color output
 CYAN  := \033[0;36m
 GREEN := \033[0;32m
@@ -35,8 +45,9 @@ NETBEAM_KEY_PASSWORD ?=
 .PHONY: sdl3 sdl3-build sdl3-install sdl3-clean sdl3-demo sdl3-desktop
 .PHONY: gtk6 gtk6-glib gtk6-check gtk6-clean
 .PHONY: gtk6-all gtk6-gtk4 gtk6-gtk4-check
-.PHONY: bas bas-check bas-target-check swift-check vsnprintf-check device-check move-on-check
-.PHONY: driver-check python-check cmatrix cmatrix-swift
+.PHONY: bas bas-check bas-target-check swift-check vsnprintf-check device-check hid-parser-check xhci-trb-check rtl8139-rx-check rtl8169-desc-check move-on-check apk-parser-check openweb-check
+.PHONY: ace-check ace-boot-check
+.PHONY: driver-check python-check rust-fallback-check rust-target-check compositor-check cmatrix cmatrix-swift linker-check
 
 all: kernel
 	$(MAKE) iso
@@ -45,18 +56,33 @@ all: kernel
 check:
 	@printf "$(CYAN)$(BOLD)==> Checking build environment...$(RESET)\n"
 	$(MAKE) -C kernel check
+	$(MAKE) -C kernel ace-check
+	$(MAKE) linker-check
 	$(MAKE) jengine-check
 	$(MAKE) ncvm-check
 	$(MAKE) vsnprintf-check
 	$(MAKE) device-check
+	$(MAKE) hid-parser-check
+	$(MAKE) xhci-trb-check
+	$(MAKE) rtl8139-rx-check
+	$(MAKE) rtl8169-desc-check
+	$(MAKE) rust-fallback-check
+	$(MAKE) rust-target-check
+	$(MAKE) compositor-check
 	$(MAKE) driver-check
 	$(MAKE) python-check
 	$(MAKE) move-on-check
 	$(MAKE) codec-check
+	$(MAKE) apk-parser-check
 	$(MAKE) bas-check
 	$(MAKE) swift-check
 	$(MAKE) bas-target-check
 	$(MAKE) netbeam-check
+	$(MAKE) openweb-check
+
+linker-check:
+	@printf "$(CYAN)$(BOLD)==> Checking x86_64 linker discovery...$(RESET)\n"
+	@python3 scripts/linker_check.py
 
 driver-check:
 	@printf "$(CYAN)$(BOLD)==> Checking automated driver detection & hardware support...$(RESET)\n"
@@ -102,10 +128,131 @@ device-check:
 	@/tmp/codeos-device-test
 	@printf "$(GREEN)device checks passed$(RESET)\n"
 
+# The HID report-descriptor parser used to compare a 4-bit bTag against the
+# full HID_TAG_* item prefixes, so every real descriptor produced zero fields.
+# This compiles the REAL kernel/drivers/hid_parser.c against real descriptor
+# bytes: reverting just the `>> 4` on the case labels fails 9 assertions.
+hid-parser-check:
+	@printf "$(CYAN)$(BOLD)==> Checking the HID report parser...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -I kernel/drivers -I kernel/kernel \
+	    -o /tmp/codeos-hid-parser-test \
+	    kernel/tests/hid_parser_test.c kernel/drivers/hid_parser.c
+	@/tmp/codeos-hid-parser-test
+	@printf "$(GREEN)HID parser checks passed$(RESET)\n"
+
+# The xHCI TRB layout bugs (length in DW1 instead of DW2, missing TRT,
+# unreachable Link TRB slot, cycle bit forced on, wheel gated on a status
+# return) are only observable in the bytes the driver hands the controller.
+# This harness compiles the REAL driver source with the x86 port-I/O headers
+# replaced by empty files, then checks those bytes.  A mechanically reverted
+# copy must fail the same assertions -- otherwise the check proves nothing.
+xhci-trb-check:
+	@printf "$(CYAN)$(BOLD)==> Checking xHCI TRB encoding...$(RESET)\n"
+	@H=/tmp/codeos-xhci-harness; \
+	 rm -rf $$H; \
+	 mkdir -p $$H/arch/x86_64 $$H/kernel $$H/drivers; \
+	 : > $$H/arch/x86_64/io.h; \
+	 : > $$H/arch/x86_64/pci.h; \
+	 : > $$H/kernel/kprintf.h; \
+	 : > $$H/kernel/string.h; \
+	 : > $$H/kernel/vmm.h; \
+	 : > $$H/kernel/pmm.h; \
+	 cp kernel/drivers/usb_xhci.h kernel/drivers/usb_ehci.h kernel/drivers/mouse.h \
+	    kernel/drivers/keyboard.h kernel/drivers/hid_keys.h $$H/drivers/; \
+	 cp kernel/drivers/usb_xhci.c $$H/drivers/usb_xhci_under_test.c; \
+	 sed -i 's/asm volatile("pause")/(void)0/g' $$H/drivers/usb_xhci_under_test.c; \
+	 cc -std=gnu11 -Wall -Wextra -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-xhci-trb-test kernel/tests/xhci_trb_test.c; \
+	 /tmp/codeos-xhci-trb-test || exit 1; \
+	 python3 kernel/tests/xhci_revert.py kernel/drivers/usb_xhci.c \
+	    $$H/drivers/usb_xhci_under_test.c; \
+	 sed -i 's/asm volatile("pause")/(void)0/g' $$H/drivers/usb_xhci_under_test.c; \
+	 cc -std=gnu11 -w -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-xhci-trb-buggy kernel/tests/xhci_trb_test.c; \
+	 if /tmp/codeos-xhci-trb-buggy >/tmp/codeos-xhci-buggy.log 2>&1; then \
+	   echo "FAIL: negative control passed -- assertions are not sensitive" >&2; \
+	   exit 1; \
+	 fi; \
+	 echo "negative control: reverted driver fails $$(grep -c '^FAIL:' /tmp/codeos-xhci-buggy.log) assertions (expected)"
+	@printf "$(GREEN)xHCI TRB checks passed$(RESET)\n"
+
+# RTL8139 RX ring bugs: a 4112-byte ring allocated from one page, and a
+# cursor advanced by the clamped copy length (so the next read re-read the
+# same frame).  The harness compiles the REAL driver with in-memory port I/O
+# and checks CAPR plus the cursor after each frame, with a reverted control.
+rtl8139-rx-check:
+	@printf "$(CYAN)$(BOLD)==> Checking RTL8139 RX ring...$(RESET)\n"
+	@H=/tmp/codeos-rtl8139-harness; \
+	 rm -rf $$H; \
+	 mkdir -p $$H/arch/x86_64 $$H/kernel $$H/drivers; \
+	 : > $$H/arch/x86_64/io.h; \
+	 : > $$H/arch/x86_64/pci.h; \
+	 : > $$H/kernel/kprintf.h; \
+	 : > $$H/kernel/string.h; \
+	 : > $$H/kernel/vmm.h; \
+	 : > $$H/kernel/pmm.h; \
+	 cp kernel/drivers/rtl8139.h kernel/drivers/nic.h $$H/drivers/; \
+	 cp kernel/drivers/rtl8139.c $$H/drivers/rtl8139_under_test.c; \
+	 cc -std=gnu11 -Wall -Wextra -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-rtl8139-rx-test kernel/tests/rtl8139_rx_test.c; \
+	 /tmp/codeos-rtl8139-rx-test || exit 1; \
+	 python3 kernel/tests/rtl8139_revert.py kernel/drivers/rtl8139.c \
+	    $$H/drivers/rtl8139_under_test.c; \
+	 cc -std=gnu11 -w -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-rtl8139-rx-buggy kernel/tests/rtl8139_rx_test.c; \
+	 if /tmp/codeos-rtl8139-rx-buggy >/tmp/codeos-rtl8139-buggy.log 2>&1; then \
+	   echo "FAIL: negative control passed -- assertions are not sensitive" >&2; \
+	   exit 1; \
+	 fi; \
+	 echo "negative control: reverted driver fails $$(grep -c '^FAIL:' /tmp/codeos-rtl8139-buggy.log) assertions (expected)"
+	@printf "$(GREEN)RTL8139 RX checks passed$(RESET)\n"
+
+# RTL8169: the driver used RTL8139-era register offsets and omitted the RX
+# buffer-size field / TX End-of-Ring bit.  The harness backs MMIO with memory
+# so every write is checked at its literal address, with a reverted control.
+rtl8169-desc-check:
+	@printf "$(CYAN)$(BOLD)==> Checking RTL8169 register map and descriptors...$(RESET)\n"
+	@H=/tmp/codeos-rtl8169-harness; \
+	 rm -rf $$H; \
+	 mkdir -p $$H/arch/x86_64 $$H/kernel $$H/drivers; \
+	 : > $$H/arch/x86_64/io.h; \
+	 : > $$H/arch/x86_64/pci.h; \
+	 : > $$H/kernel/kprintf.h; \
+	 : > $$H/kernel/string.h; \
+	 : > $$H/kernel/vmm.h; \
+	 : > $$H/kernel/pmm.h; \
+	 cp kernel/drivers/rtl8169.h kernel/drivers/nic.h $$H/drivers/; \
+	 cp kernel/drivers/rtl8169.c $$H/drivers/rtl8169_under_test.c; \
+	 cc -std=gnu11 -Wall -Wextra -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-rtl8169-desc-test kernel/tests/rtl8169_desc_test.c; \
+	 /tmp/codeos-rtl8169-desc-test || exit 1; \
+	 python3 kernel/tests/rtl8169_revert.py kernel/drivers/rtl8169.c \
+	    kernel/drivers/rtl8169.h $$H/drivers/rtl8169_under_test.c $$H/drivers/rtl8169.h; \
+	 cc -std=gnu11 -w -fno-stack-protector -I$$H/drivers -I kernel/kernel \
+	    -o /tmp/codeos-rtl8169-desc-buggy kernel/tests/rtl8169_desc_test.c; \
+	 if /tmp/codeos-rtl8169-desc-buggy >/tmp/codeos-rtl8169-buggy.log 2>&1; then \
+	   echo "FAIL: negative control passed -- assertions are not sensitive" >&2; \
+	   exit 1; \
+	 fi; \
+	 echo "negative control: reverted driver fails $$(grep -c '^FAIL:' /tmp/codeos-rtl8169-buggy.log) assertions (expected)"
+	@printf "$(GREEN)RTL8169 descriptor checks passed$(RESET)\n"
+
 move-on-check:
 	@printf "$(CYAN)$(BOLD)==> Checking Move On migration...$(RESET)\n"
 	@PYTHONDONTWRITEBYTECODE=1 python3 Zircon/scripts/test_move_on.py
 	@printf "$(GREEN)Move On checks passed$(RESET)\n"
+
+# ArkUI/ACE is a real runtime component: ace-host compiles the OpenHarmony
+# engine into a CodeOS ELF, kernel/Makefile embeds it, and ace_probe.c runs it
+# at boot.  The host check proves the payload exists; the boot check proves the
+# kernel loaded it and the engine's own layout assertions passed.
+ace-check:
+	@printf "$(CYAN)$(BOLD)==> Checking ArkUI/ACE engine payload...$(RESET)\n"
+	$(MAKE) -C kernel ace-check
+
+ace-boot-check:
+	@printf "$(CYAN)$(BOLD)==> Checking ArkUI/ACE at boot...$(RESET)\n"
+	@python3 kernel/scripts/ace_boot_check.py
 
 # kernel/userspace/lib/stdio.c is the freestanding libc every CodeOS
 # userspace program formats through, and its vsnprintf had to be fixed to
@@ -127,7 +274,99 @@ jengine-check:
 	@cc -std=c11 -Wall -Wextra -Werror -Iinclude src/jengine.c tests/jengine_test.c \
 		-o /tmp/codeos-jengine-test
 	@/tmp/codeos-jengine-test
-	@printf "$(GREEN)Jengine checks passed$(RESET)\n"
+	@printf "$(CYAN)$(BOLD)==> Checking jengine freestanding build...$(RESET)\n"
+	@clang -ffreestanding -nostdlib -nodefaultlibs -fno-stack-protector \
+		-Wall -Wextra -Werror -Iinclude -c src/jengine.c \
+		-o /tmp/codeos-jengine-freestanding.o
+	@unks=$$(nm -u /tmp/codeos-jengine-freestanding.o | awk '{print $$2}' | grep -v '^memcpy$$' || true); \
+		if [ -n "$$unks" ]; then \
+			printf "unexpected external symbols in freestanding jengine: %s\n" "$$unks" >&2; \
+			exit 1; \
+		fi
+	@printf "$(GREEN)Jengine checks passed (host + freestanding)$(RESET)\n"
+
+# OpenWeb: URL joining in the tty browser, the live Rust renderer's table /
+# entity / wrap behaviour, the canonical adblock matcher behind native fetch
+# enforcement, and the PWA asset/script contract. The browser UI is plain
+# static files, so a missing app.js is invisible to every other check in this
+# tree until a user clicks a dead button.
+OPENWEB_CC ?= clang
+openweb-check:
+	@printf "$(CYAN)$(BOLD)==> Checking OpenWeb...$(RESET)\n"
+	@$(OPENWEB_CC) -std=c99 -Wall -Wextra -Werror -g \
+	    -o /tmp/codeos-openweb-url-test pkgs/core/openweb/tests/ow_url_test.c
+	@/tmp/codeos-openweb-url-test
+	@$(OPENWEB_CC) -std=c99 -Wall -Wextra -Werror -g -Ikernel/kernel \
+	    -o /tmp/codeos-ad-block-test kernel/tests/ad_block_test.c
+	@/tmp/codeos-ad-block-test
+	@if command -v $(RUSTC) >/dev/null 2>&1; then \
+	    $(RUSTC) --edition 2021 -Awarnings \
+	        -o /tmp/codeos-openweb-render-test \
+	        pkgs/core/openweb/tests/ow_render_fixture.rs && \
+	    /tmp/codeos-openweb-render-test; \
+	else \
+	    printf "rustc not found; skipping OpenWeb renderer fixture\n"; \
+	fi
+	@python3 scripts/openweb_ui_check.py
+	@printf "$(GREEN)OpenWeb checks passed$(RESET)\n"
+
+# The x86_64 image links a C fallback when the x86_64-unknown-none Rust target
+# is unavailable.  This compiles the REAL fallback against the REAL public
+# headers, drives all 27 exported entry points, and then breaks tab accounting
+# and compositor framing in copied sources to prove the assertions are
+# sensitive.
+rust-fallback-check:
+	@printf "$(CYAN)$(BOLD)==> Checking the Rust-free fallback...$(RESET)\n"
+	@cc -std=c11 -Wall -Wextra -Werror -I qt6/panels -I pkgs/core/panels/src \
+	    -I kernel/kernel -I include \
+	    -o /tmp/codeos-rust-fallback-test \
+	    kernel/tests/rust_fallback_test.c kernel/rust_fallback.c
+	@/tmp/codeos-rust-fallback-test
+	@python3 kernel/tests/rust_fallback_revert.py kernel/rust_fallback.c \
+	    /tmp/codeos-rust-fallback-buggy.c
+	@cc -std=c11 -w -I qt6/panels -I pkgs/core/panels/src \
+	    -I kernel/kernel -I include \
+	    -o /tmp/codeos-rust-fallback-buggy \
+	    kernel/tests/rust_fallback_test.c /tmp/codeos-rust-fallback-buggy.c
+	@if /tmp/codeos-rust-fallback-buggy >/tmp/codeos-rust-fallback-buggy.log 2>&1; then \
+	    echo "FAIL: negative control passed -- assertions are not sensitive" >&2; \
+	    exit 1; \
+	 fi; \
+	 echo "negative control: broken fallback tab accounting fails $$(grep -c '^FAIL:' /tmp/codeos-rust-fallback-buggy.log) assertions (expected)"
+	@python3 kernel/tests/rust_fallback_revert_frame.py kernel/rust_fallback.c \
+	    /tmp/codeos-rust-fallback-nopresent.c
+	@cc -std=c11 -w -I qt6/panels -I pkgs/core/panels/src \
+	    -I kernel/kernel -I include \
+	    -o /tmp/codeos-rust-fallback-nopresent \
+	    kernel/tests/rust_fallback_test.c /tmp/codeos-rust-fallback-nopresent.c
+	@if /tmp/codeos-rust-fallback-nopresent >/tmp/codeos-rust-fallback-nopresent.log 2>&1; then \
+	    echo "FAIL: compositor-frame negative control passed -- assertions are not sensitive" >&2; \
+	    exit 1; \
+	 fi; \
+	 echo "negative control: skipped compositor frame fails $$(grep -c '^FAIL:' /tmp/codeos-rust-fallback-nopresent.log) assertions (expected)"
+	@printf "$(GREEN)Rust-free fallback checks passed$(RESET)\n"
+
+# Both no-std Rust crates must compile for the x86_64 and aarch64 kernel
+# triples with the nightly/rustup install on an aarch64 host. The script also
+# reverts the architecture guard and the toolchain detection in copies to show
+# the assertions fail.
+rust-target-check:
+	@printf "$(CYAN)$(BOLD)==> Checking Rust target support...$(RESET)\n"
+	@python3 kernel/scripts/rust_target_check.py
+	@printf "$(GREEN)Rust target checks passed$(RESET)\n"
+
+# Windowland must be the only per-frame presentation entry point. Pin the
+# Rust bridge, C fallback and Qt call site together, then remove the chrome
+# stage from a checked copy to prove the wiring assertions are sensitive.
+compositor-check:
+	@printf "$(CYAN)$(BOLD)==> Checking compositor wiring...$(RESET)\n"
+	@python3 kernel/scripts/compositor_check.py
+	@python3 kernel/scripts/compositor_check.py --negative
+	@printf "$(GREEN)Compositor wiring checks passed$(RESET)\n"
+
+apk-parser-check:
+	@printf "$(CYAN)$(BOLD)==> Checking the APK parser...$(RESET)\n"
+	$(MAKE) -C kernel/userspace apk-parser-check
 
 # pkgs/core/ncvm/src/ncvm.c reaches the kernel through inline `int $0x80`
 # stubs, so the only way to test it on the host is to shadow unistd.h with
@@ -342,7 +581,7 @@ qt6-build:
 	mkdir -p qt6/support-build
 	cd qt6/support-build && cmake .. -DCMAKE_BUILD_TYPE=Release \
 		-DCMAKE_TOOLCHAIN_FILE=../cmake/codeos-toolchain.cmake
-	cd qt6/support-build && $(MAKE) -j$$(nproc)
+	cd qt6/support-build && $(MAKE) -j$(JOBS)
 	@printf "$(GREEN)Qt6 support libraries ready$(RESET)\n"
 
 qt6-install: qt6-build
@@ -436,14 +675,14 @@ sdl3-demo: sdl3-install
 	@printf "$(CYAN)$(BOLD)==> Building SDL3 demo...$(RESET)\n"
 	mkdir -p qt6/sdl3-demo-build
 	cd qt6/sdl3-demo-build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/codeos-toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-	cd qt6/sdl3-demo-build && $(MAKE) -j$$(nproc)
+	cd qt6/sdl3-demo-build && $(MAKE) -j$(JOBS)
 	@printf "$(GREEN)SDL3 demo built$(RESET)\n"
 
 sdl3-desktop: sdl3-install
 	@printf "$(CYAN)$(BOLD)==> Building SDL3 desktop...$(RESET)\n"
 	mkdir -p qt6/sdl3-desktop-build
 	cd qt6/sdl3-desktop-build && cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/codeos-toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-	cd qt6/sdl3-desktop-build && $(MAKE) -j$$(nproc)
+	cd qt6/sdl3-desktop-build && $(MAKE) -j$(JOBS)
 	@printf "$(GREEN)SDL3 desktop built$(RESET)\n"
 
 sdl3-clean:

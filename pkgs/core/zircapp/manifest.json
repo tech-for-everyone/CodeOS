@@ -1,0 +1,11 @@
+{
+  "name": "zircapp",
+  "version": "1.0.0",
+  "description": "Windowed host for the ZircApp framework with a Home screen and app registry",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/zircapp"
+}

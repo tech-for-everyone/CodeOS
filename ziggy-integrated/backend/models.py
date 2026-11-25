@@ -20,7 +20,6 @@ NOTAND = "NOTAND"
 
 # Persona configurations
 PERSONAS = {
-    "freecode": "FreeCode",
     "ziggy": "Ziggy",
 }
 

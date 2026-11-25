@@ -29,7 +29,7 @@ const QColor c_golden  = QColor(0xE8, 0x8A, 0x1A);
 /* ── App icon color mapping ── */
 QColor appIconColor(const QString &name) {
     if (name == "Terminal")    return QColor(0x00, 0x7A, 0xCC);
-    if (name == "OpenWeb")     return QColor(0xFF, 0x95, 0x00);
+    if (name == "OpenWeb")     return QColor(0x35, 0xE0, 0xCF);
     if (name == "Settings")    return QColor(0x5E, 0x5C, 0xE6);
     if (name == "Calc")        return QColor(0x34, 0xC7, 0x59);
     if (name == "About")       return QColor(0xAF, 0x52, 0xDE);

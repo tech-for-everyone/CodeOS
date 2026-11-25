@@ -1,0 +1,14 @@
+{
+  "name": "OpenWeb",
+  "displayName": "OpenWeb Browser",
+  "shortName": "OpenWeb",
+  "tagline": "Your web, shaped by you.",
+  "description": "OpenWeb Browser for CodeOS - your web, shaped by you",
+  "mark": "/static/openweb-mark.svg",
+  "palette": {
+    "background": "#050817",
+    "surface": "#0b1430",
+    "accent": "#35e0cf",
+    "accent2": "#9b7bff"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "android-calculator",
+  "version": "1.0.0",
+  "description": "Android compatibility calculator app",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/android-calculator"
+}

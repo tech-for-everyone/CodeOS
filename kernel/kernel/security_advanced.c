@@ -283,7 +283,9 @@ uintptr_t shadow_stack_pop(shadow_stack_t *ss) {
 }
 
 int shadow_stack_verify(shadow_stack_t *ss, uintptr_t expected_ret) {
-    if (!ss || !ss->active) return -1;
+    /* An enabled but empty stack must be rejected before indexing
+     * stack[top - 1]: a push/pop pair (or just enable()) left top == 0. */
+    if (!ss || !ss->active || ss->top <= 0) return -1;
     return (ss->stack[ss->top - 1] == expected_ret) ? 0 : -1;
 }
 
@@ -321,10 +323,13 @@ int secure_boot_hash(const void *data, size_t len, uint8_t *hash_out) {
 
 int secure_boot_verify(const void *image, size_t size, const uint8_t *expected_hash) {
     if (!image || !expected_hash) return -1;
-    uint8_t actual_hash[16];
-    secure_boot_hash(image, size, actual_hash);
+    /* secure_boot_hash() produces 4 bytes (FNV-1a in a uint32_t).  The old
+     * 16-byte array left 12 bytes of stack garbage in every comparison, so
+     * verification succeeded or failed depending on unrelated stack state. */
+    uint8_t actual_hash[4] = { 0, 0, 0, 0 };
+    if (secure_boot_hash(image, size, actual_hash) < 0) return -1;
     if (size > 0) {
-        return (memcmp(actual_hash, expected_hash, 16) == 0) ? 0 : -1;
+        return (memcmp(actual_hash, expected_hash, sizeof(actual_hash)) == 0) ? 0 : -1;
     }
     return 0;
 }
@@ -397,13 +402,11 @@ void sec_advanced_init(void) {
 
 int sec_strcmp(const char *a, const char *b) {
     if (!a || !b) return -1;
-    int result = 0;
-    while (*a && *b) {
-        result |= (*a ^ *b);
-        a++;
-        b++;
-    }
-    return (int)result;
+    /* The old loop stopped when either string reached NUL and returned the
+     * XOR accumulated so far, so "abc" and "abcd" compared equal.  After
+     * the common prefix, compare the remaining bytes (including NUL). */
+    while (*a && *a == *b) { a++; b++; }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
 }
 
 /* ========================================================================

@@ -10,28 +10,33 @@
 #define RTL8169_DEV_8101 0x8101
 #define RTL8169_DEV_8125 0x8125
 
-/* MMIO register offsets */
+/* MMIO register offsets.  These are the RTL8168/8169 values from Linux's
+ * enum rtl_registers -- NOT the RTL8139 map this file originally used.
+ * 0x40 is TxConfig on a gigabyte part, not the RX descriptor pointer. */
 #define RTL_GIG_REG_IDR0      0x00
 #define RTL_GIG_REG_IDR4      0x04
 #define RTL_GIG_REG_TXSTATUS  0x10
-#define RTL_GIG_REG_TXADDR    0x20
+#define RTL_GIG_REG_TXADDR    0x20   /* TxDescStartAddrLow */
 #define RTL_GIG_REG_RXSTATUS  0x30
-#define RTL_GIG_REG_RBSTART   0x40
-#define RTL_GIG_REG_CMD       0x48
-#define RTL_GIG_REG_IMR       0x50
-#define RTL_GIG_REG_ISR       0x52
-#define RTL_GIG_REG_TCR       0x60
-#define RTL_GIG_REG_RCR       0x68
-#define RTL_GIG_REG_CONFIG1   0x7C
-#define RTL_GIG_REG_CONFIG3   0x7E
-#define RTL_GIG_REG_CONFIG5   0x82
+#define RTL_GIG_REG_RBSTART   0xE4   /* RxDescAddrLow */
+#define RTL_GIG_REG_CMD       0x37   /* ChipCmd */
+#define RTL_GIG_REG_IMR       0x3C   /* IntrMask */
+#define RTL_GIG_REG_ISR       0x3E   /* IntrStatus */
+#define RTL_GIG_REG_TCR       0x40   /* TxConfig */
+#define RTL_GIG_REG_RCR       0x44   /* RxConfig */
+#define RTL_GIG_REG_CONFIG1   0x52
+#define RTL_GIG_REG_CONFIG3   0x54
+#define RTL_GIG_REG_CONFIG5   0x56
 #define RTL_GIG_REG_PMCH      0x8C
-#define RTL_GIG_REG_CPLUS_CMD 0x88
+#define RTL_GIG_REG_CPLUS_CMD 0xE0
 #define RTL_GIG_REG_INTR_MIT  0xE2
 #define RTL_GIG_REG_RX_CONFIG 0xD0
 #define RTL_GIG_REG_TX_CONFIG 0xD4
 #define RTL_GIG_REG_EPHY_TX   0xA0
 #define RTL_GIG_REG_EPHY_RX   0xA4
+
+#define RTL_GIG_REG_CFG9346   0x50   /* config-register unlock key */
+#define RTL_GIG_CFG9346_UNLOCK 0xC0
 
 #define RTL_GIG_CMD_RESET   0x10
 #define RTL_GIG_CMD_RE      0x08

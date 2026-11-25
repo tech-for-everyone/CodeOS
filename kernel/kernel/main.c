@@ -809,6 +809,26 @@ void kernel_main(uint32_t magic __attribute__((unused)),
         }
     }
 
+    /* ArkUI/ACE: run the real engine ELF that ace-host built from arkui/.
+     * This is the live caller that keeps the engine in the linked image and
+     * proves the embedded /bin/ace-layout works on this kernel.  As with bas,
+     * the probe is compiled unconditionally and reports its own absence: a
+     * conditional define would leave stale code in the image after cmake or
+     * the arkui submodule appears. */
+    {
+        extern int ace_probe_run(void);
+        extern int ace_probe_finished(void);
+        ace_probe_run();
+        {
+            uint64_t ac_start = timer_get_milliseconds();
+            while (!ace_probe_finished() &&
+                   timer_get_milliseconds() - ac_start < 5000)
+                sched_yield();
+            if (!ace_probe_finished())
+                kprintf("ACE: layout probe timed out; continuing boot\n");
+        }
+    }
+
     /* ZircApp: the Zircon application framework ported onto CodeOS.
      * Loads /bin/zircapp --selftest, which registers the framework and
      * dispatches events to the ten Zircon apps without needing a

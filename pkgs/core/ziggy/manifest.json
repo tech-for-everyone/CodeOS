@@ -1,0 +1,11 @@
+{
+  "name": "ziggy",
+  "version": "1.0.0",
+  "description": "CodeOS Ziggy app — system information and splash display",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": ["lib-c"],
+  "install_path": "/bin/ziggy",
+  "source": "src/"
+}

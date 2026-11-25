@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include "kprintf.h"
+#include "ad_block.h"
 
 static int g_initialized;
 
@@ -125,7 +126,7 @@ void ow_core_render_active(void) {
     index = ow_get_tab_active();
     tabs = ow_get_tabs();
     if (tabs && index >= 0 && index < ow_get_tab_count() &&
-        tabs[index].content_len > 0 && tabs[index].content_len < OW_CONTENT_MAX)
+        tabs[index].content_len > 0 && tabs[index].content_len <= OW_CONTENT_MAX)
         ow_render_rs(tabs[index].content, tabs[index].content_len);
 }
 
@@ -134,6 +135,17 @@ int ow_core_tab_count(void) { return g_initialized ? ow_get_tab_count() : 0; }
 int ow_core_active_tab(void) { return g_initialized ? ow_get_tab_active() : -1; }
 int ow_core_used_tab_count(void) { return g_initialized ? ow_tab_used_count() : 0; }
 int ow_core_load_progress(void) { return g_initialized ? ow_get_load_progress() : 0; }
+
+int ow_core_adblock_status(ow_core_adblock_info_t *info) {
+    if (!info) return -1;
+    info->enabled = adblock_is_enabled() ? 1 : 0;
+    info->domains = adblock_domain_count();
+    return 0;
+}
+
+int ow_core_adblock_set(int enabled) {
+    return enabled ? adblock_enable() : adblock_disable();
+}
 
 int ow_core_engine_select(int backend) {
     ow_core_init();

@@ -1,0 +1,13 @@
+{
+  "name": "binutils",
+  "version": "2.39",
+  "description": "Binary utilities",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://ftp.gnu.org/gnu/binutils/binutils-2.39.tar.xz",
+  "size": 3932160,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/binutils.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

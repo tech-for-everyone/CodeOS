@@ -1,0 +1,11 @@
+{
+  "name": "android-launcher",
+  "version": "1.0.0",
+  "description": "Android compatibility home launcher app",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/android-launcher"
+}

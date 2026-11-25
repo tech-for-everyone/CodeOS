@@ -241,12 +241,21 @@ static void cmd_push(uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3) {
     cmd_ring[cmd_enq_idx].params[1] = p1;
     cmd_ring[cmd_enq_idx].params[2] = p2;
     cmd_ring[cmd_enq_idx].params[3] = p3 | cmd_cycle;
-    cmd_enq_idx = (cmd_enq_idx + 1) % (TRB_RING_SIZE - 1);
+    /* Slots 0..TRB_RING_SIZE-2 hold data TRBs; the last slot is the Link
+     * TRB.  The old `% (TRB_RING_SIZE - 1)` followed by a test for
+     * `== TRB_RING_SIZE - 1` could never equal the Link slot, so the Link
+     * TRB was never written and the producer cycle never toggled: after
+     * 63 commands the ring silently overwrote slot 0 with a stale cycle. */
+    cmd_enq_idx++;
     if (cmd_enq_idx == TRB_RING_SIZE - 1) {
         cmd_ring[cmd_enq_idx].params[0] = (uint32_t)(cmd_ring_paddr & 0xFFFFFFFF);
         cmd_ring[cmd_enq_idx].params[1] = (uint32_t)((cmd_ring_paddr >> 32) & 0xFFFFFFFF);
         cmd_ring[cmd_enq_idx].params[2] = 0;
-        cmd_ring[cmd_enq_idx].params[3] = (TRB_LINK << 10) | TRB_CYCLE | cmd_cycle;
+        /* TRB_CYCLE is already bit 0; OR-ing it in made the Link TRB's
+         * cycle bit unconditionally 1 and stalled the ring on the second
+         * wrap.  TC tells the controller to toggle its consumer cycle. */
+        cmd_ring[cmd_enq_idx].params[3] =
+            (TRB_LINK << 10) | TRB_TOGGLE | cmd_cycle;
         cmd_enq_idx = 0;
         cmd_cycle ^= 1;
     }
@@ -292,7 +301,9 @@ static void tpush(int sid, uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3) {
     ring[idx].params[1] = p1;
     ring[idx].params[2] = p2;
     ring[idx].params[3] = p3 | dev_transfer_cycle[sid];
-    idx = (idx + 1) % (TRB_RING_SIZE - 1);
+    /* Same unreachable-wrap bug as the command ring: modulo N-1 followed
+     * by a test for N-1.  Advance plainly and wrap at the Link slot. */
+    idx++;
     if (idx == TRB_RING_SIZE - 1) {
         ring[TRB_RING_SIZE - 1].params[0] =
             (uint32_t)(dev_transfer_paddrs[sid] & 0xFFFFFFFF);
@@ -300,7 +311,7 @@ static void tpush(int sid, uint32_t p0, uint32_t p1, uint32_t p2, uint32_t p3) {
             (uint32_t)((dev_transfer_paddrs[sid] >> 32) & 0xFFFFFFFF);
         ring[TRB_RING_SIZE - 1].params[2] = 0;
         ring[TRB_RING_SIZE - 1].params[3] =
-            (TRB_LINK << 10) | TRB_CHAIN | TRB_CYCLE | dev_transfer_cycle[sid];
+            (TRB_LINK << 10) | TRB_TOGGLE | dev_transfer_cycle[sid];
         idx = 0;
         dev_transfer_cycle[sid] ^= 1;
     }
@@ -349,19 +360,26 @@ int xhci_control_transfer(struct usb_dev *dev, int dir_in,
     /* Data direction for data stage */
     int data_dir = (dir_in && wLength > 0) ? 1 : 0;
 
-    /* Setup stage: encode 8 bytes directly in TRB (IDT=1) */
-    tpush(sid, s0, s1 | (8 << 16), 0, (TRB_SETUP << 10) | TRB_IDT);
+    /* Setup stage: with IDT=1 the 8-byte setup packet is stored verbatim
+     * in DW0/DW1 -- there is no length field.  The old `s1 | (8 << 16)`
+     * overwrote the low byte of wLength.  TRT (DW3 bits 16-17) tells the
+     * controller whether a data stage follows: 3=IN, 2=OUT, 0=none. */
+    int trt = (wLength > 0) ? (dir_in ? 3 : 2) : 0;
+    tpush(sid, s0, s1, 0,
+          (TRB_SETUP << 10) | TRB_IDT | ((uint32_t)trt << 16));
 
     /* Data stage (if wLength > 0) */
     if (wLength > 0 && data) {
         if (wLength > 512) wLength = 512;
         if (!dir_in)
             memcpy(xfer_buf, data, wLength);
+        /* Transfer length belongs in DW2, not in DW1 with the high
+         * address.  A single data TRB is its own TD, so no CHAIN bit. */
         tpush(sid,
               (uint32_t)(xfer_buf_paddr & 0xFFFFFFFF),
-              ((uint32_t)((xfer_buf_paddr >> 32) & 0xFFFFFFFF)) | ((uint32_t)wLength << 17),
-              0,
-              (TRB_DATA << 10) | (data_dir << 16) | TRB_CHAIN);
+              (uint32_t)((xfer_buf_paddr >> 32) & 0xFFFFFFFF),
+              wLength,
+              (TRB_DATA << 10) | (data_dir << 16));
     }
 
     /* Status stage: direction opposite of data */
@@ -406,11 +424,12 @@ int xhci_bulk_transfer(struct usb_dev *dev, int endpoint,
     if (!dir_in)
         memcpy(xfer_buf, data, xfer_len);
 
-    /* Normal TRB */
+    /* Normal TRB: DW0/DW1 are the full 64-bit pointer, DW2 is the
+     * transfer length. */
     tpush(sid,
           (uint32_t)(xfer_buf_paddr & 0xFFFFFFFF),
-          (uint32_t)((xfer_buf_paddr >> 32) & 0xFFFFFFFF) | ((uint32_t)xfer_len << 17),
-          0,
+          (uint32_t)((xfer_buf_paddr >> 32) & 0xFFFFFFFF),
+          (uint32_t)xfer_len,
           (TRB_NORMAL << 10) | TRB_IOC);
 
     doorbell_ring(sid, ep_num);
@@ -544,6 +563,10 @@ int xhci_mouse_poll(int *dx, int *dy, int *buttons, int *wheel) {
     struct usb_dev *dev = &dev_states[xhci_mouse_dev_idx].dev;
 
     uint8_t report[8];
+    /* xhci_control_transfer() returns 0 on success, never the byte
+     * count.  Clearing the buffer makes a device that omits the optional
+     * wheel byte report 0 instead of stale stack data. */
+    memset(report, 0, sizeof(report));
     int ret = xhci_control_transfer(dev, 1, 0xA1, 0x01,
                                     0x0100, 0, sizeof(report), report);
     if (ret < 0) {
@@ -557,7 +580,7 @@ int xhci_mouse_poll(int *dx, int *dy, int *buttons, int *wheel) {
     *buttons = report[0] & 0x07;
     if (report[0] & 0x10) *buttons |= MOUSE_X1;
     if (report[0] & 0x20) *buttons |= MOUSE_X2;
-    *wheel = (ret > 3) ? (int)(int8_t)report[3] : 0;
+    *wheel = (int)(int8_t)report[3];
 
     return 1;
 }
@@ -666,8 +689,10 @@ static void enumerate_port(int port) {
     st->input_ctx->slot.dw[0] =
         (((xh_r32(xhci_port_base, port * 0x10) >> 10) & 0xF) << 20) |
         (1U << 27);
+    /* Slot Context DW1 bits 19:16 are the root hub port number.  The
+     * old unconditional `= 0` immediately after wiped it out, so every
+     * Address Device command targeted port 0. */
     st->input_ctx->slot.dw[1] = (uint32_t)(port + 1) << 16;
-    st->input_ctx->slot.dw[1] = 0;
     st->input_ctx->slot.dw[2] = 0;
     st->input_ctx->slot.dw[3] = 0;
     st->input_ctx->ep[0].dw[1] = (3U << 1) | (4U << 3) |

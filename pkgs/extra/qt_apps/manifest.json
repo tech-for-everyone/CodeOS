@@ -1,0 +1,10 @@
+{
+  "name": "qt_apps",
+  "version": "1.0.0",
+  "description": "Qt-based desktop applications (explorer, terminal, settings, clock, calculator and more)",
+  "license": "MIT",
+  "type": "source",
+  "category": "Graphics",
+  "dependencies": [],
+  "source": "."
+}

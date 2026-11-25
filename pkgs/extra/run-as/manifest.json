@@ -1,0 +1,11 @@
+{
+  "name": "run-as",
+  "version": "1.0.0",
+  "description": "Android container init / run-as app launcher shim",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/run-as"
+}

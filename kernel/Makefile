@@ -2,6 +2,22 @@
 ARCH ?= x86_64
 export ARCH
 
+# Rust tools: prefer whatever is on PATH (a rustup proxy, a system cargo, or
+# an explicit `make RUSTC=... CARGO=...`), then fall back to the standard
+# rustup shim directory.  The old hard-coded 1.92.0-x86_64 toolchain path broke
+# every aarch64 host, including nightly rustup installs where the proxies are
+# only in ~/.cargo/bin.
+RUSTC ?= $(shell command -v rustc 2>/dev/null || printf '%s' "$(HOME)/.cargo/bin/rustc")
+CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$(HOME)/.cargo/bin/cargo")
+export RUSTC CARGO
+
+# ARM64 image flavour:
+#   codeos  - default.  CodeOS ARM64 shell/desktop, the path toward ARM laptops.
+#   zircon  - the standalone Zircon mobile UI (phone demo from the QEMU virt port).
+# Override with `make ARCH=arm64 ARM64_UI=zircon all` or `run.sh -a arm64 -z`.
+ARM64_UI ?= codeos
+export ARM64_UI
+
 ifeq ($(ARCH),arm64)
     QEMU = qemu-system-aarch64
     QEMU_MEM = -m 512M
@@ -22,6 +38,16 @@ ifeq ($(ARCH),arm64)
     USER_LDFLAGS =
     USER_ELF =
 
+    # Choose the ARM64 entry point and UI.  Only one kernel_main() and one
+    # event loop may be linked, so the two flavours are mutually exclusive.
+    ifeq ($(ARM64_UI),zircon)
+        ARM64_MAIN = arch/arm64/kernel_main.c arch/arm64/ui.c
+        TARGET = codeos-1-kernel-arm64-zircon.bin
+    else
+        ARM64_MAIN = arch/arm64/codeos_main.c arch/arm64/codeos_ui.c
+        TARGET = codeos-1-kernel-arm64.bin
+    endif
+
     # ARM64: only compile the minimal set of ARM64-compatible sources
     SRC_C = arch/arm64/serial.c \
             arch/arm64/fb.c \
@@ -29,12 +55,12 @@ ifeq ($(ARCH),arm64)
             arch/arm64/display.c \
             arch/arm64/pci.c \
             arch/arm64/rtc.c \
-            arch/arm64/kernel_main.c \
             arch/arm64/handlers.c \
-            arch/arm64/string.c
+            arch/arm64/input.c \
+            arch/arm64/string.c \
+            $(ARM64_MAIN)
     SRC_CXX =
     SRC_ASM = $(wildcard arch/arm64/*.S)
-    TARGET = codeos-1-kernel-arm64.bin
     LDSCRIPT = linker.arm64.ld
     EMBED_OBJ =
     STAGE1_TARGET =
@@ -58,16 +84,31 @@ else
     QEMU_DISK ?= -hda $(LEGACY_DISK_IMG)
     QEMU_FULL_DISK ?= -drive file=$(LEGACY_DISK_IMG),format=raw,if=ide
     # LLVM toolchain: clang for C, clang++ for C++.  The final link prefers
-    # the GNU cross linker (x86_64-elf-ld), falling back to the host GNU ld
-    # when the cross binutils are not installed.  The prebuilt Qt static
+    # the GNU cross linker (x86_64-elf-ld), then lld (PATH or rustup), and
+    # only then the host GNU ld -- which cannot emit x86_64 ELF on an aarch64
+    # host.  The prebuilt Qt static
     # archives are built with the large code model, whose TLS access sequence
     # (movabs $__tls_get_addr@PLTOFF64 + indirect call) ld.lld cannot relax
     # from local-dynamic to local-exec; GNU ld can.  Override any of these on
     # the command line to build with another toolchain, e.g.:
     #   make CC=gcc CXX=g++ LD=x86_64-elf-ld AS=as all
+    # Cross-host builds: clang targets the host by default.  On an aarch64
+    # Linux phone, Apple Silicon Mac or Termux, that makes every x86_64 flag
+    # below fail ("unsupported option '-mno-mmx' for target 'aarch64-...'").
+    # Pin the target explicitly when the host is not x86_64; on a native
+    # x86_64 host the empty value keeps the existing behaviour byte-for-byte.
+    HOST_ARCH := $(shell uname -m)
+    ifneq ($(filter x86_64 amd64,$(HOST_ARCH)),)
+        X86_TARGET :=
+    else
+        X86_TARGET := --target=x86_64-linux-gnu
+    endif
     CC := clang
     CXX := clang++
-    LD := $(shell command -v x86_64-elf-ld >/dev/null 2>&1 && echo x86_64-elf-ld || echo ld)
+    LD := $(shell ../scripts/find_x86_64_ld.sh)
+    ifeq ($(strip $(LD)),)
+        $(error No linker can emit x86_64 ELF; install ld.lld or x86_64-elf-binutils)
+    endif
     AS := clang
     OBJCOPY ?= objcopy
     # Name the emulation explicitly for the raw-binary embed rules below.
@@ -111,7 +152,7 @@ else
     # below: -O3, -ffunction-sections/-fdata-sections (with the link's
     # --gc-sections), -fomit-frame-pointer, -fno-semantic-interposition and
     # -fno-math-errno.
-    CFLAGS = -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse \
+    CFLAGS = $(X86_TARGET) -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse \
              -mno-sse2 -nostdlib -nostartfiles -nodefaultlibs \
              -fno-stack-protector -fno-PIC \
              -Wall -Wextra -O3 -g -MMD -MP -ffunction-sections -fdata-sections \
@@ -253,17 +294,69 @@ BAS_SRC = ../pkgs/core/bas/src
 BAS_PROGS = $(if $(wildcard $(BAS_DIR)/compiler/Cargo.toml),\
              $(addprefix bas-,$(notdir $(basename $(wildcard $(BAS_SRC)/*.ba)))))
 
-USER_PROGS = init shell csh zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher offline-ide $(BAS_PROGS)
+# ArkUI/ACE: the real OpenHarmony layout engine, built by ace-host/CMakeLists.
+#
+# This is not a comment-only dependency.  When the engine can be built, its
+# raw-syscall ELF is copied into userspace/, embedded in the initramfs and the
+# disk image, and run by ace_probe.c on every boot.  `ace` in the shell runs the
+# same binary, so the engine is reachable by users as well as by boot checks.
+#
+# The build is auto-enabled only where it is known to work: a native x86_64
+# host, with cmake and the arkui submodule present.  A cross-host build needs an
+# x86_64 libstdc++ archive, which is not available in the common Linux/macOS/
+# Termux cross toolchains; pass ACE_BUILD=1 with a matching toolchain there.
+# ARM64 kernels never embed a x86_64 ELF.  Skipping is reported by ace-check,
+# not silently treated as success.
+ACE_BUILD ?= auto
+ifeq ($(ARCH),arm64)
+    ACE_BUILD := 0
+else ifeq ($(ACE_BUILD),auto)
+    ACE_BUILD := $(if $(and $(filter x86_64 amd64,$(HOST_ARCH)),\
+                            $(wildcard ../arkui/frameworks/base),\
+                            $(shell command -v cmake 2>/dev/null)),1,0)
+endif
+ACE_HOST_DIR ?= ../ace-host
+ACE_BUILD_DIR ?= $(ACE_HOST_DIR)/build-codeos
+ACE_ELF = $(ACE_BUILD_DIR)/ace_codeos_elf
+ACE_PROGS = $(if $(filter 1,$(ACE_BUILD)),ace-layout)
+ACE_ELF_COPY = $(addprefix userspace/,$(ACE_PROGS))
+
+USER_PROGS = init shell csh zircapp zircon-notify zircon-clock zircon-info apk-parser android-container android-apps code-music audio-demo linux-runner crosvm-launcher ncvm ld-codeos terminal syscall_test openweb wineserver wine-runner linux-probe run-as dnslookup leveltest netbeam android-launcher android-clock android-calculator android-settings android-dialer android-music android-browser android-camera android-calendar android-keyboard chromium-launcher offline-ide $(BAS_PROGS) $(ACE_PROGS)
 USER_ELF = $(addprefix userspace/,$(USER_PROGS))
 BAS_ELF = $(addprefix userspace/,$(BAS_PROGS))
 
-# ── Rust backend (ow_http) ──
-RUST_DIR = kernel/rust_ow
-RUST_LIB = $(RUST_DIR)/target/x86_64-unknown-none/release/libow_http.a
-RUST_TOOLCHAIN = $(HOME)/.rustup/toolchains/1.92.0-x86_64-unknown-linux-gnu/bin
+# ── Rust backends (optional) ──
+# OpenWeb's HTTP/render backend and the Windowland compositor are Rust static
+# archives.  The no-std target follows the kernel architecture: x86_64 images
+# need x86_64-unknown-none, arm64 images need aarch64-unknown-none.  A host
+# without that target falls back to rust_fallback.c, which supplies the same
+# C ABI with reduced behaviour and still boots.  The aarch64 nightly rustup
+# install works as-is: no x86_64 toolchain path and no x86 target features are
+# baked into the aarch64 recipe.  USE_RUST=1/0 overrides detection.
+RUST_ALL_TARGETS = x86_64-unknown-none aarch64-unknown-none
+ifeq ($(ARCH),arm64)
+RUST_TARGET ?= aarch64-unknown-none
+else
+RUST_TARGET ?= x86_64-unknown-none
+endif
+RUST_TARGET_LIBDIR := $(shell $(RUSTC) --print target-libdir --target $(RUST_TARGET) 2>/dev/null)
+RUST_AVAILABLE := $(if $(and $(CARGO),$(RUSTC),$(wildcard $(RUST_TARGET_LIBDIR)/libcore*)),1,0)
+USE_RUST ?= $(RUST_AVAILABLE)
 
+RUSTFLAGS = -C no-redzone
+ifeq ($(RUST_TARGET),x86_64-unknown-none)
+# Match the kernel's -mno-mmx/-mno-sse/-mno-sse2.  These flags are invalid on
+# aarch64 (and neon must stay enabled there), so they are target-gated.
+RUSTFLAGS += -C target-feature=-mmx,-sse,-sse2,+soft-float
+endif
+
+RUST_DIR = kernel/rust_ow
+RUST_LIB = $(RUST_DIR)/target/$(RUST_TARGET)/release/libow_http.a
+
+ifeq ($(USE_RUST),1)
 $(RUST_LIB): $(wildcard $(RUST_DIR)/src/*.rs) $(RUST_DIR)/Cargo.toml
-	cd $(RUST_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" RUSTFLAGS="-C no-redzone -C target-feature=-mmx,-sse,-sse2,+soft-float" cargo build --target x86_64-unknown-none --release
+	cd $(RUST_DIR) && RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build --target $(RUST_TARGET) --release
+endif
 
 # ── HyperDE compositor shell (C++) ──
 HYPERDE_DIR = kernel/hyperde
@@ -276,15 +369,22 @@ HYPERDE_CXX = $(HYPERDE_DIR)/hyperde_shell.cpp \
 # ── CDP Bridge for Chromium (runs in debian-minimal container) ──
 CDP_BRIDGE_SRC = ../pkgs/core/chromium-launcher/src/cdp_bridge.c
 CDP_BRIDGE_BIN = disk/usr/local/bin/cdp_bridge
+# The bridge is a Linux ELF executed inside the debian-minimal container.
+# Debian/Ubuntu spell the cross compiler x86_64-linux-gnu-gcc; elsewhere fall
+# back to the host C compiler so the image still builds.  Override with
+# `make CDP_CC=...` when a specific Linux cross toolchain is required.
+CDP_CC ?= $(shell command -v x86_64-linux-gnu-gcc 2>/dev/null || \
+                   command -v gcc 2>/dev/null || \
+                   command -v cc 2>/dev/null || echo cc)
 
 $(CDP_BRIDGE_BIN): $(CDP_BRIDGE_SRC)
-	@echo "Building CDP bridge for container..."
+	@echo "Building CDP bridge for container with $(CDP_CC)..."
 	mkdir -p $(dir $@)
-	x86_64-linux-gnu-gcc -O2 -Wall -Wextra -std=c11 -D_GNU_SOURCE -o $@ $(CDP_BRIDGE_SRC) -lpthread
+	$(CDP_CC) -O2 -Wall -Wextra -std=c11 -D_GNU_SOURCE -o $@ $(CDP_BRIDGE_SRC) -lpthread
 
 # ── Rust tiling window manager (Windowland, formerly Penrose) ──
 RUST_PR_DIR = kernel/rust_penrose
-RUST_PR_LIB = $(RUST_PR_DIR)/target/x86_64-unknown-none/release/libwindowland.a
+RUST_PR_LIB = $(RUST_PR_DIR)/target/$(RUST_TARGET)/release/libwindowland.a
 
 RUST_PR_SRCS = $(wildcard $(RUST_PR_DIR)/src/*.rs) \
                $(wildcard $(RUST_PR_DIR)/src/core/*.rs) \
@@ -293,8 +393,10 @@ RUST_PR_SRCS = $(wildcard $(RUST_PR_DIR)/src/*.rs) \
                $(wildcard $(RUST_PR_DIR)/src/builtin/*.rs) \
                $(wildcard $(RUST_PR_DIR)/src/builtin/layout/*.rs)
 
+ifeq ($(USE_RUST),1)
 $(RUST_PR_LIB): $(RUST_PR_SRCS) $(RUST_PR_DIR)/Cargo.toml
-	cd $(RUST_PR_DIR) && PATH="$(RUST_TOOLCHAIN):$$PATH" RUSTFLAGS="-C no-redzone -C target-feature=-mmx,-sse,-sse2,+soft-float" cargo build --target x86_64-unknown-none --release
+	cd $(RUST_PR_DIR) && RUSTFLAGS="$(RUSTFLAGS)" $(CARGO) build --target $(RUST_TARGET) --release
+endif
 
 # ── Qt6 Panel Objects ──
 QT6_DIR = ../qt6
@@ -349,30 +451,72 @@ DEPFILES = $(OBJ_ALL:.o=.d)
 # ── ARM64 overrides: nullify x86_64-only build dependencies ──
 ifeq ($(ARCH),arm64)
     USER_ELF :=
-    RUST_LIB :=
-    RUST_PR_LIB :=
     QT6_OBJS :=
     QT6_LIBS :=
-    # Sources shared with the x86_64 build (kernel/kprintf.c, ../src/jengine.c)
-    # are compiled under per-arch object names: this tree holds both archs'
-    # artifacts side by side, and a stale cross-arch .o would otherwise get
-    # linked into the arm64 image ("file in wrong format"). Each per-arch
-    # object comes with its own -MMD dependency file via OBJ_ALL/DEPFILES.
+    # The stamp's only consumer is $(TARGET)'s prerequisite list.  Without
+    # this, an ARM64 build still invokes the x86-64-only Qt panels sub-make
+    # (which needs moc, a Qt sysroot and host libstdc++) for no reason.
+    QT6_PANELS_STAMP :=
+    # pkgs/core/openssl/lib/*.a are prebuilt x86_64 archives.  ld.lld rejects
+    # them with "incompatible with elf64-littleaarch64"; the ARM64 source list
+    # has no HTTPS caller, so they are neither needed nor usable here.
+    OPENSSL_LIBS :=
+    OPENSSL_LDLIBS :=
+    OPENSSL_CFLAGS :=
+    # Sources shared with the x86_64 build (kernel/kprintf.c, ../src/jengine.c
+    # and ../pkgs/core/openweb/src/ow_engine.c) are compiled under per-arch
+    # object names: this tree holds both archs' artifacts side by side, and a
+    # stale cross-arch .o would otherwise get linked into the arm64 image
+    # ("file in wrong format"). Their -MMD depfiles are included below because
+    # the DEPFILES include above is expanded before these overrides exist.
     KPRINTF_OBJ = kernel/kprintf-arm64.o
     JENGINE_OBJ = ../src/jengine-arm64.o
-    OBJ_ALL  := $(filter-out ../src/jengine.o,$(SRC_C:.c=.o)) \
+    OW_ENGINE_OBJ = ../pkgs/core/openweb/src/ow_engine-arm64.o
+    OBJ_ALL  := $(filter-out ../src/jengine.o ../pkgs/core/openweb/src/ow_engine.o,$(SRC_C:.c=.o)) \
                 $(SRC_CXX:.cpp=.o) $(SRC_ASM:.S=.o) \
-                $(KPRINTF_OBJ) $(JENGINE_OBJ)
+                $(KPRINTF_OBJ) $(JENGINE_OBJ) $(OW_ENGINE_OBJ)
 
 $(KPRINTF_OBJ): kernel/kprintf.c
 	$(CC) $(CFLAGS) -std=gnu23 -c $< -o $@
 
 $(JENGINE_OBJ): ../src/jengine.c
 	$(CC) $(CFLAGS) -std=gnu23 -c $< -o $@
+
+$(OW_ENGINE_OBJ): ../pkgs/core/openweb/src/ow_engine.c
+	$(CC) $(CFLAGS) -std=gnu23 -c $< -o $@
+
+-include $(wildcard $(KPRINTF_OBJ:.o=.d) $(JENGINE_OBJ:.o=.d) $(OW_ENGINE_OBJ:.o=.d))
 endif
 
-.PHONY: all clean check run run-qemu iso arm64 arm64-run arm64-run-nographic sign-efi signed-iso run-sb sb-vars install-image install install-device run-installed
-.PHONY: codec-check codec-fuzz-check apk-parser-check ncvm-check jengine-check cursor-check
+# ── Rust backend selection ──
+# Both architectures link the two Rust archives when USE_RUST=1.  On x86_64 the
+# desktop actually calls the exported windowland_* / penrose_* symbols; on
+# arm64 the same aarch64-unknown-none archives are available to any code that
+# references them, while the current arm64 shell does not.  A Rust-less x86_64
+# image links rust_fallback.o so the same C ABI still builds and boots; arm64
+# has no OpenWeb/Windowland callers and therefore needs no fallback.
+RUST_FALLBACK_OBJ = rust_fallback.o
+RUST_FALLBACK_DEP = rust_fallback.d
+ifeq ($(USE_RUST),1)
+RUST_LINK = $(RUST_LIB) $(RUST_PR_LIB)
+else ifeq ($(ARCH),x86_64)
+# Kept out of SRC_C/PHASE1_OBJ so the object is not listed twice on the link
+# line (ld would then see every global definition twice).  The generic
+# %.o: %.c rule builds it as a prerequisite of the two link targets below.
+RUST_LINK = $(RUST_FALLBACK_OBJ)
+else
+RUST_LINK =
+endif
+
+# The generic object rule emits rust_fallback.d via -MMD; include it here as
+# well so a header change rebuilds the fallback.  The main DEPFILES include
+# above is expanded before RUST_LINK is known.
+ifneq ($(filter $(RUST_FALLBACK_OBJ),$(RUST_LINK)),)
+-include $(RUST_FALLBACK_DEP)
+endif
+
+.PHONY: all clean check run run-qemu iso arm64 arm64-run arm64-run-nographic arm64-run-display arm64-run-input sign-efi signed-iso run-sb sb-vars install-image install install-device run-installed
+.PHONY: codec-check codec-fuzz-check apk-parser-check ncvm-check jengine-check cursor-check rust-target-check
 
 all: $(USER_ELF) $(TARGET) $(FLAT_BIN)
 
@@ -382,10 +526,42 @@ all: $(USER_ELF) $(TARGET) $(FLAT_BIN)
 check:
 	@command -v $(CC) >/dev/null || { echo "error: compiler not found: $(CC)" >&2; exit 1; }
 	@command -v $(CXX) >/dev/null || { echo "error: C++ compiler not found: $(CXX)" >&2; exit 1; }
-	@command -v $(LD) >/dev/null || { echo "error: linker not found: $(LD)" >&2; exit 1; }
+	@command -v $(firstword $(LD)) >/dev/null || { echo "error: linker not found: $(LD)" >&2; exit 1; }
 	@command -v python3 >/dev/null || { echo "error: python3 not found" >&2; exit 1; }
-	@command -v cargo >/dev/null || { echo "error: cargo not found (required for OpenWeb)" >&2; exit 1; }
+ifeq ($(USE_RUST),1)
+	@command -v $(CARGO) >/dev/null || { echo "error: cargo not found (required for the Rust backends)" >&2; exit 1; }
+	@echo "note: Rust backends enabled ($(RUST_TARGET))"
+else
+ifeq ($(ARCH),x86_64)
+	@echo "note: Rust backend disabled (USE_RUST=0, target $(RUST_TARGET) unavailable); using C fallback"
+else
+	@echo "note: Rust backend disabled (USE_RUST=0, target $(RUST_TARGET) unavailable); no OpenWeb/Windowland callers on $(ARCH)"
+endif
+endif
 	@echo "Build environment OK ($(CC), $(CXX), $(LD))"
+
+# Compile both no-std crates for both kernel triples and pin the Makefile's
+# toolchain/target selection.  Reverts prove the checks are sensitive: an
+# x86-only panic logger must fail on aarch64, and a hard-coded x86_64 host
+# toolchain path must fail the Makefile assertion.
+rust-target-check:
+	@python3 scripts/rust_target_check.py
+
+# Build the real ArkUI engine and prove the image payload carries its markers.
+# A skip is printed rather than passing silently: on a cross host without cmake
+# or without the submodule there is no x86_64 libstdc++ to link, and the kernel
+# simply does not embed the ELF.  The boot probe reports the same absence.
+ace-check:
+ifeq ($(ACE_BUILD),1)
+	$(MAKE) $(ACE_ELF_COPY)
+	@grep -a -q 'ACEOS layout begin' $(ACE_ELF) || { \
+	    echo "error: $(ACE_ELF) does not contain the engine probe"; exit 1; }
+	@grep -a -q 'ACEOS' $(ACE_ELF) && grep -a -q 'failure' $(ACE_ELF) || { \
+	    echo "error: $(ACE_ELF) does not contain the assertion report"; exit 1; }
+	@echo "ArkUI ACE layout engine checks passed"
+else
+	@echo "ArkUI ACE checks skipped (ACE_BUILD=$(ACE_BUILD); need x86_64 host, cmake and arkui)"
+endif
 
 # Host-side decoder checks. They live in pkgs/core/codec/tests/ because the
 # decoders themselves are a kernel package: the point is to compile the *real*
@@ -398,6 +574,18 @@ codec-check:
 
 codec-fuzz-check:
 	@sh ../pkgs/core/codec/tests/fuzz.sh
+
+# These three were advertised in .PHONY with no recipe at all, so
+# `make -C kernel ncvm-check` (and the other two) exited 0 without running a
+# single test.  Delegate to the Makefiles that own the real recipes instead.
+apk-parser-check:
+	$(MAKE) -C userspace apk-parser-check
+
+ncvm-check:
+	$(MAKE) -C .. ncvm-check
+
+jengine-check:
+	$(MAKE) -C .. jengine-check
 
 # Boots the ISO (with the pre-baked disk.img attached) into QEMU, then checks the
 # Bibata cursor loader and the rendered arrow probe against the theme files
@@ -431,8 +619,25 @@ arm64:
 # either.
 # $(BAS_ELF) is filtered out: it has its own recipe below, and a second recipe
 # for the same target would silently win over this one.
-$(filter-out $(BAS_ELF),$(USER_ELF)): FORCE
+$(filter-out $(BAS_ELF) $(ACE_ELF_COPY),$(USER_ELF)): FORCE
 	$(MAKE) -C userspace $(notdir $@)
+
+# ArkUI/ACE is built by its own CMake project, not userspace/Makefile: the
+# engine sources are C++ from the arkui submodule and the result is already a
+# static raw-syscall ELF.  userspace/ace-layout is only the stable name the
+# initramfs generator and disk-image population expect.
+$(ACE_ELF_COPY): $(ACE_ELF)
+	@mkdir -p $(dir $@)
+	@cp $< $@
+	@chmod 755 $@
+	@echo "Embedded ArkUI ACE layout engine: $@"
+
+$(ACE_ELF):
+	@echo "Building ArkUI ACE layout engine for CodeOS..."
+	cmake -S $(ACE_HOST_DIR) -B $(ACE_BUILD_DIR)
+	cmake --build $(ACE_BUILD_DIR) --target ace_codeos_elf_build \
+	    -- -j$$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)
+	@test -f $@ || { echo "error: cmake did not produce $@"; exit 1; }
 
 # The bas programs are built as a set by one sub-make invocation rather than
 # one per program: each `bas build` compiles the SDK and the platform libc from
@@ -507,14 +712,14 @@ arch/vectors.S: arch/genvectors.py
 	python3 $< > $@
 
 %.o: %.S
-	$(AS) -g -c -o $@ $<
+	$(AS) $(X86_TARGET) -g -c -o $@ $<
 
 OBJ = $(OBJ_ALL) $(EMBED_OBJ)
 PHASE1_OBJ = $(OBJ_ALL)
 
 ifdef STAGE1_TARGET
-$(STAGE1_TARGET): $(PHASE1_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(LDSCRIPT)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(OPENSSL_LDLIBS) --end-group
+$(STAGE1_TARGET): $(PHASE1_OBJ) $(RUST_LINK) $(LDSCRIPT)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(RUST_LINK) $(OPENSSL_LDLIBS) --end-group
 	@echo "Stage 1: $@"
 
 kernel/embed_kernel.S: $(STAGE1_TARGET)
@@ -533,8 +738,8 @@ kernel/embed_splash.o: bootloader/splash.png
 	$(LD_BINARY) -r -b binary -o $@ $<
 endif
 
-$(TARGET): $(PHASE1_OBJ) $(EMBED_OBJ) $(RUST_LIB) $(RUST_PR_LIB) $(QT6_OBJS) $(QT6_PANELS_STAMP) $(LDSCRIPT)
-	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(EMBED_OBJ) --whole-archive $(QT6_OBJS) --no-whole-archive $(RUST_LIB) $(RUST_PR_LIB) $(QT6_LIBS) $(OPENSSL_LDLIBS) --end-group
+$(TARGET): $(PHASE1_OBJ) $(EMBED_OBJ) $(RUST_LINK) $(QT6_OBJS) $(QT6_PANELS_STAMP) $(LDSCRIPT)
+	$(LD) $(LDFLAGS) -T $(LDSCRIPT) -o $@ --start-group $(PHASE1_OBJ) $(EMBED_OBJ) --whole-archive $(QT6_OBJS) --no-whole-archive $(RUST_LINK) $(QT6_LIBS) $(OPENSSL_LDLIBS) --end-group
 	@echo "Built: $@"
 
 # Flat binary for QEMU -kernel (multiboot2-compatible)
@@ -647,12 +852,23 @@ arm64-run-display: $(TARGET)
 	$(QEMU) -machine virt -cpu max -m 512M -serial stdio \
 		-device ramfb -kernel $(TARGET)
 
-# Headless display verification: boots with ramfb and captures the rendered
-# frame to /tmp/zircon.ppm for pixel inspection (useful in CI).
+# Full input demo: the framebuffer plus the two virtio-mmio devices that
+# arch/arm64/input.c probes for (absolute pointer + keyboard).  The plain
+# arm64-run* targets only exercise the PL011 serial-keyboard fallback.
+arm64-run-input: $(TARGET)
+	$(QEMU) -machine virt -cpu max -m 512M -serial stdio \
+		-global virtio-mmio.force-legacy=off \
+		-device ramfb \
+		-device virtio-tablet-device \
+		-device virtio-keyboard-device \
+		-kernel $(TARGET)
+
+# Headless display verification: boots with ramfb and exposes a QMP socket so
+# the rendered frame can be dumped to /tmp/codeos-arm64.ppm for CI inspection.
 arm64-run-display-nogui: $(TARGET)
 	$(QEMU) -machine virt -cpu max -m 512M -display none -device ramfb \
-		-kernel $(TARGET) -serial file:/tmp/zircon-serial.log \
-		-qmp unix:/tmp/zircon-qmp.sock,server,nowait
+		-kernel $(TARGET) -serial file:/tmp/codeos-arm64-serial.log \
+		-qmp unix:/tmp/codeos-arm64-qmp.sock,server,nowait
 
 run-iso: codeos-1.0.iso $(LIVE_DISK_IMG)
 	$(QEMU) $(QEMU_BASE) $(QEMU_DISPLAY) -boot order=d -cdrom $< $(QEMU_NET) $(QEMU_USB) -drive file=$(LIVE_DISK_IMG),format=raw,if=ide $(KVM)
@@ -875,10 +1091,14 @@ run-sb-setup: codeos-1-kernel-signed.iso disk.img-legacy
 		$(QEMU_NET) $(QEMU_USB) $(QEMU_FULL_DISK) $(KVM)
 
 clean:
-	rm -f $(OBJ) $(DEPFILES) codeos-1-kernel.bin codeos-1-kernel-arm64.bin $(STAGE1_TARGET) kernel/embed_kernel.S *.ftech
+	rm -f $(OBJ) $(DEPFILES) $(RUST_FALLBACK_OBJ) $(RUST_FALLBACK_DEP) codeos-1-kernel.bin codeos-1-kernel-arm64.bin $(STAGE1_TARGET) kernel/embed_kernel.S *.ftech
 	rm -f codeos-1-kernel-signed.iso bootloader/limine-uefi-cd-signed.bin
+	rm -f $(ACE_ELF_COPY)
+	rm -rf $(ACE_BUILD_DIR)
+# Both no-std triples are first-class now, so clean removes both even when
+# the current ARCH only builds one of them.
+	rm -rf $(foreach t,$(RUST_ALL_TARGETS),$(RUST_DIR)/target/$(t) $(RUST_PR_DIR)/target/$(t))
 ifneq ($(ARCH),arm64)
-	cd $(RUST_DIR) && cargo clean 2>/dev/null || true
 	rm -f $(HYPERDE_DIR)/*.o $(HYPERDE_DIR)/*.d 2>/dev/null || true
 	$(MAKE) -C userspace clean
 endif

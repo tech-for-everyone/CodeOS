@@ -469,7 +469,7 @@ const pkg_repo_t pkg_repo_extra[] = {
     {"zircon-invaders", "0.1.0", "Space Invaders clone for Zircon console", "", "MIT", 114688, 0, 0, 0, 0, 0, 0, 0, 7},
     {"lgame-pong", "2.0.0", "Classic Pong built with LGame API v2 (2D game framework)", "https://codeos.dev/lgame", "MIT", 139264, 0, 0, 0, 0, 0, 0, 0, 7},
     {"lgame-snake", "2.0.0", "Snake built with LGame API v2 (2D game framework)", "https://codeos.dev/lgame", "MIT", 131072, 0, 0, 0, 0, 0, 0, 0, 7},
-    {"freecode-games", "1.0.0", "Collection of FreeCode mini-games (tetris, breakout, minesweeper)", "", "MIT", 3145728, 0, 0, 0, 0, 0, 0, 0, 7},
+    {"freecode-games", "1.0.0", "Collection of Ziggy mini-games (tetris, breakout, minesweeper)", "", "MIT", 3145728, 0, 0, 0, 0, 0, 0, 0, 7},
     {"codeos-steam-link", "1.0.0", "Stream games from your STEAM desktop PC via network", "", "Proprietary", 2097152, (const char*[]){"steam-runtime", 0}, 1, 0, 0, 0, 0, 0, 7},
 
     /* ── Utils / network / multimedia ── */

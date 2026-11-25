@@ -1,0 +1,11 @@
+{
+  "name": "android-calendar",
+  "version": "1.0.0",
+  "description": "Android compatibility calendar app",
+  "license": "MIT",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/android-calendar"
+}

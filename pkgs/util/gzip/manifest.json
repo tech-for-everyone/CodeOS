@@ -1,0 +1,14 @@
+{
+  "name": "gzip",
+  "version": "1.12",
+  "description": "Gzip compression and decompression (freestanding port)",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "install_path": "/bin/gzip",
+  "source": "src/",
+  "upstream": "https://ftp.gnu.org/gnu/gzip/gzip-1.12.tar.xz",
+  "size": 128400,
+  "port_status": "ported",
+  "note": "Ported to the CodeOS freestanding toolchain: src/gzip.c, src/inflate.c and src/gzip_port.h. Host tests: tests/run.sh. Upstream archive kept under ports/gzip/upstream/ as reference; the original .ftech declared size is retained in `size`. Installed as /bin/gzip; an argv[0] of gunzip implies -d."
+}

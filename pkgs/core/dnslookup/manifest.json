@@ -1,0 +1,11 @@
+{
+  "name": "dnslookup",
+  "version": "1.0.0",
+  "description": "Minimal DNS A-record lookup tool over CodeOS socket syscalls",
+  "license": "MIT",
+  "type": "source",
+  "category": "Network",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/dnslookup"
+}

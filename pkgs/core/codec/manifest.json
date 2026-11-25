@@ -1,0 +1,10 @@
+{
+  "name": "codec",
+  "version": "1.0.0",
+  "description": "Freestanding image and audio codecs (PNG, BMP, WAV) with inflate and a codec registry",
+  "license": "MIT",
+  "type": "source",
+  "category": "Multimedia",
+  "dependencies": [],
+  "source": "src/"
+}

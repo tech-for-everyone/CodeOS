@@ -1,0 +1,13 @@
+{
+  "name": "netcat",
+  "version": "1.10",
+  "description": "Network utility",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://sourceforge.net/projects/netcat/files/netcat/1.10/",
+  "size": 128400,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from util/netcat.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

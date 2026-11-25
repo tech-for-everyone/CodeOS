@@ -1,0 +1,11 @@
+{
+  "name": "wineserver",
+  "version": "1.0.0",
+  "description": "Wine server managing Windows prefixes and registry state",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/wineserver"
+}

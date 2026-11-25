@@ -26,7 +26,7 @@
 #undef printf
 
 /* ── tiny test rig ────────────────────────────────────────────────────── */
-static int checks, failed;
+static int checks, failed, skipped;
 static char first_fail[256];
 
 static void ok(int cond, const char *what) {
@@ -35,6 +35,15 @@ static void ok(int cond, const char *what) {
     failed++;
     if (!first_fail[0]) snprintf(first_fail, sizeof(first_fail), "%s", what);
     printf("  FAIL %s\n", what);
+}
+
+/* An assertion that cannot be evaluated on this host is reported as SKIP,
+ * not PASS and not FAIL.  This keeps the suite meaningful on macOS (no
+ * /proc) and inside sandboxes that ignore SIGSTOP, without weakening the
+ * checks on hosts where the mechanism does work. */
+static void skip(const char *what) {
+    skipped++;
+    printf("  SKIP %s\n", what);
 }
 
 static void section(const char *name) { printf("== %s\n", name); }
@@ -497,6 +506,27 @@ static int wait_proc_state(int pid, char want, int ms) {
     return 0;
 }
 
+/* Probe the exact mechanism the pause/resume assertions depend on: a real
+ * child stopped by SIGSTOP must show up as 'T' in /proc/<pid>/stat.
+ *
+ * Linux normally satisfies this, but macOS has no /proc at all and some
+ * container/sandbox runtimes silently ignore or hide SIGSTOP.  Probing up
+ * front lets those hosts skip the state-based checks (while still checking
+ * the portable contract: the signal was aimed at the VMM, not the
+ * supervisor) instead of failing for an environment limitation. */
+static int sigstop_state_observable(void) {
+    fflush(stdout);
+    pid_t p = fork();
+    if (p == 0) { fflush(stdout); for (;;) pause(); }   /* child: idle */
+    if (p < 0) return 0;
+    kill(p, SIGSTOP);
+    int observable = wait_proc_state(p, 'T', 2000);
+    kill(p, SIGCONT);   /* resume before killing so the child is reapable */
+    kill(p, SIGKILL);
+    waitpid(p, NULL, 0);
+    return observable;
+}
+
 static void test_ctl_signals_reach_the_vmm(void) {
     char ctlpath[256], pidpath[256], marker[256], back[512], payload[32];
     section("lifecycle signals reach the VMM");
@@ -539,6 +569,12 @@ static void test_ctl_signals_reach_the_vmm(void) {
        "the VMM pid and the supervisor pid are tracked separately");
 
     /* Each directive must reach the VMM and leave the supervisor alone. */
+    int state_observable = sigstop_state_observable();
+    if (!state_observable)
+        printf("  note: SIGSTOP state is not observable on this host "
+               "(no /proc, or SIGSTOP ignored); pause/resume state "
+               "assertions will be skipped\n");
+
     snprintf(ctlpath, sizeof(ctlpath), "%s/sigtest.ctl", CMD_DIR);
     struct { const char *dir; int sig; } cases[] = {
         { "pause",  SIGSTOP },
@@ -555,17 +591,35 @@ static void test_ctl_signals_reach_the_vmm(void) {
 
         int want = cases[k].sig;
         if (want == SIGSTOP) {
-            okf(wait_proc_state(vmm_pid, 'T', 2000),
-               "pause stopped the VMM (its state is now %c)", proc_state(vmm_pid));
+            if (state_observable)
+                okf(wait_proc_state(vmm_pid, 'T', 2000),
+                   "pause stopped the VMM (its state is now %c)", proc_state(vmm_pid));
+            else
+                skip("pause stopped the VMM (SIGSTOP state not observable on this host)");
         } else if (want == SIGCONT) {
-            /* Assert the precondition, or this check passes for free: if the
-             * pause never happened the VMM is already 'S' and waiting for 'S'
-             * proves nothing.  The resume is only meaningful from 'T'. */
-            okf(state_before == 'T',
-               "the VMM really was stopped before the resume (state was %c)",
-               state_before);
-            okf(wait_proc_state(vmm_pid, 'S', 2000),
-               "resume ran the VMM again (state is now %c)", proc_state(vmm_pid));
+            if (state_observable) {
+                /* Assert the precondition, or this check passes for free: if
+                 * the pause never happened the VMM is already 'S' and waiting
+                 * for 'S' proves nothing.  The resume is only meaningful from
+                 * 'T'. */
+                okf(state_before == 'T',
+                   "the VMM really was stopped before the resume (state was %c)",
+                   state_before);
+                okf(wait_proc_state(vmm_pid, 'S', 2000),
+                   "resume ran the VMM again (state is now %c)", proc_state(vmm_pid));
+            } else {
+                skip("the VMM really was stopped before the resume (SIGSTOP state not observable)");
+                skip("resume ran the VMM again (SIGSTOP state not observable)");
+                /* Portable substitute: SIGCONT is trappable, and vmm_stub()
+                 * appends a marker line for it.  That still proves the resume
+                 * signal reached the VMM rather than the supervisor. */
+                sys_sleep(150);      /* let the SIGCONT trap append */
+                char cont_line[32];
+                snprintf(cont_line, sizeof(cont_line), "sig=%d", SIGCONT);
+                okf(slurp(marker, back, sizeof(back)) > 0 &&
+                    strstr(back, cont_line) != NULL,
+                    "resume (SIGCONT) reached the VMM, not the supervisor");
+            }
             sys_sleep(150);          /* let the SIGCONT trap append */
         } else {
             sys_sleep(150);          /* let the SIGTERM trap append */
@@ -812,7 +866,7 @@ int main(void) {
     test_long_path_not_truncated();
     test_syn_pool_reuse();
 
-    printf("\nchecks=%d failed=%d\n", checks, failed);
+    printf("\nchecks=%d failed=%d skipped=%d\n", checks, failed, skipped);
     if (failed) {
         printf("ncvm: FAIL (first: %s)\n", first_fail);
         return 1;

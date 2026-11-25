@@ -1,0 +1,13 @@
+{
+  "name": "cmake",
+  "version": "3.24.0",
+  "description": "Cross-platform build system",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://github.com/Kitware/CMake/releases/download/v3.24.0/cmake-3.24.0.tar.gz",
+  "size": 8388608,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/cmake.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

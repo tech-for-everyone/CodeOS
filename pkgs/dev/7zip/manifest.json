@@ -1,0 +1,13 @@
+{
+  "name": "7zip",
+  "version": "26.01",
+  "description": "A super useful unzipper",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://www.7-zip.org/download.html",
+  "size": 3932160,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/7zip.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

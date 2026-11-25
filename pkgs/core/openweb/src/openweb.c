@@ -5,6 +5,7 @@
 #include "openweb.h"
 #include "ow_html.h"
 #include "ow_engine.h"
+#include "ow_url.h"
 #include <unistd.h>
 
 #define MAX_URL 512
@@ -46,15 +47,65 @@ static void clear_screen(void) {
     printf("\x1b[2J");
 }
 
+/* Page URLs come from the shared backend, not from the address field: the
+ * address field may be empty while a page is displayed.  Links in the text
+ * grid are relative to that URL, so both a link follow and a reload need it. */
+static void current_url(char *buf, size_t size) {
+    web_state_t st;
+    buf[0] = 0;
+    memset(&st, 0, sizeof(st));
+    if (sys_web_get_info(&st) < 0) return;
+    ow_url_copy(buf, size, st.url, sizeof(st.url));
+}
+
+static int max_scroll(void) {
+    int max = ow_txt_lines - MAX_LINES;
+    return max > 0 ? max : 0;
+}
+
+static void clamp_scroll(void) {
+    if (g_scroll < 0) g_scroll = 0;
+    if (g_scroll > max_scroll()) g_scroll = max_scroll();
+}
+
 static void goto_home(void) {
     printf("\x1b[H");
+}
+
+/* OpenWeb's text renderer carries semantic line types; use them so headings,
+ * quotes, tables and rules read as structure instead of one flat wall. */
+static const char *line_style(uint8_t type) {
+    switch (type) {
+        case OW_LT_H1: case OW_LT_H2: case OW_LT_H3:
+            return "\x1b[1;96m";
+        case OW_LT_H4: case OW_LT_H5: case OW_LT_H6:
+            return "\x1b[1;95m";
+        case OW_LT_HR:
+            return "\x1b[90m";
+        case OW_LT_LI:
+            return "\x1b[92m";
+        case OW_LT_TH:
+            return "\x1b[1;93m";
+        case OW_LT_TD:
+            return "\x1b[37m";
+        case OW_LT_BQ:
+            return "\x1b[3;94m";
+        case OW_LT_BOLD:
+            return "\x1b[1m";
+        case OW_LT_ITALIC:
+            return "\x1b[3m";
+        case OW_LT_CODE:
+            return "\x1b[96m";
+        default:
+            return "";
+    }
 }
 
 static void render_help(void) {
     clear_screen();
     goto_home();
 
-    printf("\x1b[1mOpenWeb Help\x1b[0m\n");
+    printf("\x1b[1mOpenWeb Help\x1b[0m \x1b[36mYour web, shaped by you.\x1b[0m\n");
     printf("\x1b[33mNavigation:\x1b[0m\n");
     printf("  u/d               Scroll up/down\n");
     printf("  p/P               Jump to top/bottom\n");
@@ -69,6 +120,7 @@ static void render_help(void) {
     printf("  \x1b[1mb/f\x1b[0m     Back / Forward (history)\n");
     printf("  \x1b[1ms\x1b[0m       Stop loading\n");
     printf("  \x1b[1mr\x1b[0m       Reload page or active tab\n");
+    printf("  \x1b[1ma\x1b[0m       Toggle AdBlock (kernel enforcement)\n");
     printf("  \x1b[1mq\x1b[0m      Quit\n");
     printf("  \x1b[1mEsc\x1b[0m      Exit app\n");
     printf("  \x1b[1m?\x1b[0m       Show/hide help\n");
@@ -77,9 +129,22 @@ static void render_help(void) {
         printf("  %s\n", g_status_msg);
     }
     printf("\x1b[33mTips:\x1b[0m\n");
-    printf("  \x1b[1mNumber keys\x1b[0m  Switch to tab by number\n");
+    printf("  \x1b[1m1-9, Enter\x1b[0m Follow the numbered link on a page;\n");
+    printf("                 with no links, switch to that tab\n");
     printf("  \x1b[1mH/L\x1b[0m       Toggle help\n");
     g_dirty = 0;
+}
+
+static void render_adblock(void) {
+    web_adblock_info_t info;
+    memset(&info, 0, sizeof(info));
+    if (sys_web_adblock_status(&info) != 0) {
+        printf(" \x1b[90mAdBlock n/a\x1b[0m");
+        return;
+    }
+    printf(" \x1b[%smAdBlock %s (%d domains)\x1b[0m",
+           info.enabled ? "32" : "90",
+           info.enabled ? "on" : "off", info.domains);
 }
 
 static void render_page(void) {
@@ -91,22 +156,30 @@ static void render_page(void) {
     memset(&st, 0, sizeof(st));
     if (sys_web_get_info(&st) < 0) return;
 
-    char content[OW_CONTENT_MAX];
+    /* One spare byte for the terminator: the backend can return a body of
+     * exactly OW_CONTENT_MAX bytes. */
+    char content[OW_CONTENT_MAX + 1];
     int clen = st.content_len;
+    int rendered = 0;
     if (clen > 0 && clen <= OW_CONTENT_MAX) {
         int n = sys_web_get_content(content, clen);
         if (n > 0) {
             content[n] = 0;
             render_html(content, n);
+            rendered = 1;
         }
     }
+    /* A new tab, an empty document or a failed load must not keep showing the
+     * previous page's text grid and numbered links. */
+    if (!rendered) render_html("", 0);
 
     clear_screen();
     goto_home();
 
-    printf("\x1b[1mOpenWeb v2.0\x1b[0m");
+    printf("\x1b[1mOpenWeb 2.1\x1b[0m");
     printf(" \x1b[90m%c%d%c\x1b[0m", active < 0 ? '[' : '(', active + 1, active < 0 ? ']' : ')');
     printf(" \x1b[90m%d tabs\x1b[0m", sys_web_tab_count());
+    render_adblock();
     if (g_show_help) {
         printf(" \x1b[33m[HELP]\x1b[0m");
     }
@@ -141,11 +214,12 @@ static void render_page(void) {
             for (int li = 0; li < ow_link_cnt; li++) {
                 if (ow_links[li].line == i) { link_idx = li; break; }
             }
+            const char *style = line_style(ow_line_info[i].type);
+            printf("  ");
             if (link_idx >= 0) {
-                printf("  \x1b[34m[%d]\x1b[0m \x1b[1m%s\x1b[0m\n", link_idx + 1, ow_txt[i]);
-            } else {
-                printf("  %s\n", ow_txt[i]);
+                printf("\x1b[34m[%d]\x1b[0m ", link_idx + 1);
             }
+            printf("%s%s\x1b[0m\n", style, ow_txt[i]);
         }
 
         if (ow_txt_lines > MAX_LINES) {
@@ -169,7 +243,7 @@ static void render_page(void) {
         return;
     }
 
-    printf("\x1b[2m--- Help: ? Show/Hide  PageUp/PgDown Jump  Esc Quit  u/d Scroll  Tab Switch  Enter Navigate ---\x1b[0m");
+    printf("\x1b[2m--- Help: ? Show/Hide  a AdBlock  u/d Scroll  Tab Switch  Enter Navigate  N,Enter Follow Link  Esc Quit ---\x1b[0m");
     g_dirty = 0;
 }
 
@@ -183,19 +257,41 @@ static void handle_key(int key) {
         quit();
     }
     if (key == '\n' || key == '\r') {
+        char base[MAX_URL], url[MAX_URL];
         if (strlen(g_url) == 0) return;
-        if (g_url[0] >= '0' && g_url[0] <= '9') {
+
+        if (ow_url_all_digits(g_url)) {
             int idx = atoi(g_url) - 1;
             g_url[0] = 0;
-            if (idx >= 0 && idx < sys_web_tab_count()) sys_web_tab_set_active(idx);
-        } else {
-            snprintf(g_status_msg, sizeof(g_status_msg), "Navigating to: %.*s",
-                     (int)sizeof(g_status_msg) - 16, g_url);
-            sys_web_navigate(g_url);
-            g_url[0] = 0;
-            g_scroll = 0;
+            /* A number means "follow this link" while viewing a page with
+             * numbered links.  On a page without links it keeps its old
+             * meaning: switch to that tab by number. */
+            if (idx >= 0 && idx < ow_link_cnt && ow_links[idx].url[0]) {
+                current_url(base, sizeof(base));
+                ow_url_resolve(base, ow_links[idx].url, url, sizeof(url));
+                snprintf(g_status_msg, sizeof(g_status_msg), "Following link %d: %.*s",
+                         idx + 1, (int)sizeof(g_status_msg) - 22, url);
+                sys_web_navigate(url);
+                g_scroll = 0;
+            } else if (idx >= 0 && idx < sys_web_tab_count()) {
+                sys_web_tab_set_active(idx);
+                snprintf(g_status_msg, sizeof(g_status_msg), "Switched to tab %d", idx + 1);
+            } else {
+                snprintf(g_status_msg, sizeof(g_status_msg),
+                         "No link or tab %d", idx + 1);
+            }
             g_dirty = 1;
+            return;
         }
+
+        ow_url_trim_copy(url, sizeof(url), g_url);
+        if (!url[0]) { g_url[0] = 0; return; }
+        snprintf(g_status_msg, sizeof(g_status_msg), "Navigating to: %.*s",
+                 (int)sizeof(g_status_msg) - 16, url);
+        sys_web_navigate(url);
+        g_url[0] = 0;
+        g_scroll = 0;
+        g_dirty = 1;
         return;
     }
     if (key == '\b' || key == 127) {
@@ -267,17 +363,18 @@ static void handle_key(int key) {
         } else {
             g_scroll = g_scroll > 0 ? g_scroll - SCROLL_STEP : 0;
         }
+        clamp_scroll();
         snprintf(g_status_msg, sizeof(g_status_msg), "Scroll position: %d", g_scroll);
         g_dirty = 1;
         return;
     }
     if (g_url[0] == 0 && (key == 'd' || key == 'D' || key == 'n' || key == 'N')) {
         if (key == 'n' || key == 'N') {
-            g_scroll = ow_txt_lines - MAX_LINES;
-            if (g_scroll < 0) g_scroll = 0;
+            g_scroll = max_scroll();
         } else {
             g_scroll += SCROLL_STEP;
         }
+        clamp_scroll();
         snprintf(g_status_msg, sizeof(g_status_msg), "Scroll position: %d", g_scroll);
         g_dirty = 1;
         return;
@@ -311,6 +408,23 @@ static void handle_key(int key) {
     if (g_url[0] == 0 && (key == 's' || key == 'S')) {
         sys_web_stop();
         snprintf(g_status_msg, sizeof(g_status_msg), "Stop loading");
+        g_dirty = 1;
+        return;
+    }
+    if (g_url[0] == 0 && (key == 'a' || key == 'A')) {
+        web_adblock_info_t info;
+        memset(&info, 0, sizeof(info));
+        if (sys_web_adblock_status(&info) != 0) {
+            snprintf(g_status_msg, sizeof(g_status_msg), "AdBlock control unavailable");
+        } else if (sys_web_adblock_set(!info.enabled) != 0) {
+            snprintf(g_status_msg, sizeof(g_status_msg), "AdBlock change failed");
+        } else if (sys_web_adblock_status(&info) != 0) {
+            snprintf(g_status_msg, sizeof(g_status_msg), "AdBlock changed; status unavailable");
+        } else {
+            snprintf(g_status_msg, sizeof(g_status_msg), "AdBlock: %s (%d domains)",
+                     info.enabled ? "on" : "off", info.domains);
+        }
+        g_url[0] = 0;
         g_dirty = 1;
         return;
     }

@@ -536,6 +536,8 @@ static inline void *sys_shm_map(int fd) {
 #define WEB_GO_BACK        11
 #define WEB_GO_FORWARD     12
 #define WEB_STOP_LOADING   13
+#define WEB_ADBLOCK_STATUS 14
+#define WEB_ADBLOCK_SET    15
 
 typedef struct {
     char url[512];
@@ -547,15 +549,32 @@ typedef struct {
     char status[80];
 } web_state_t;
 
+/* Read-only view of the kernel's canonical adblock state. Browser frontends
+ * may show/toggle this because the same engine enforces every kernel HTTP(S)
+ * fetch; the PWA deliberately has no equivalent control. */
+typedef struct {
+    int enabled;
+    int domains;
+} web_adblock_info_t;
+
 static inline int sys_web(int cmd, uint64_t a1, uint64_t a2, uint64_t a3) {
     int ret;
     register uint64_t _a4 asm("r10") = a3;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYSCALL_WEB), "D"(cmd), "S"(a1), "d"(a2), "r"(_a4) : "memory");
     return ret;
 }
-static inline int sys_web_navigate(const char *url) { return sys_web(WEB_NAVIGATE, (uint64_t)url, 0, 0); }
-static inline int sys_web_search(const char *q) { return sys_web(WEB_SEARCH, (uint64_t)q, 0, 0); }
-static inline int sys_web_tab_new(const char *url) { return sys_web(WEB_TAB_NEW, (uint64_t)url, 0, 0); }
+/* The kernel takes (pointer, byte count) for these commands. Passing 0 made
+ * every navigate/search/new-tab copy an empty string into the backend. */
+static inline uint64_t web_arg_len(const char *s) { return s ? __builtin_strlen(s) + 1 : 0; }
+static inline int sys_web_navigate(const char *url) {
+    return sys_web(WEB_NAVIGATE, (uint64_t)url, web_arg_len(url), 0);
+}
+static inline int sys_web_search(const char *q) {
+    return sys_web(WEB_SEARCH, (uint64_t)q, web_arg_len(q), 0);
+}
+static inline int sys_web_tab_new(const char *url) {
+    return sys_web(WEB_TAB_NEW, (uint64_t)url, web_arg_len(url), 0);
+}
 static inline int sys_web_tab_close(int i) { return sys_web(WEB_TAB_CLOSE, (uint64_t)i, 0, 0); }
 static inline int sys_web_tab_set_active(int i) { return sys_web(WEB_TAB_SET_ACTIVE, (uint64_t)i, 0, 0); }
 static inline int sys_web_tab_active_get(void) { return sys_web(WEB_TAB_ACTIVE_GET, 0, 0, 0); }
@@ -567,6 +586,12 @@ static inline int sys_web_tab_used(void) { return sys_web(WEB_TAB_USED, 0, 0, 0)
 static inline int sys_web_go_back(void) { return sys_web(WEB_GO_BACK, 0, 0, 0); }
 static inline int sys_web_go_forward(void) { return sys_web(WEB_GO_FORWARD, 0, 0, 0); }
 static inline int sys_web_stop(void) { return sys_web(WEB_STOP_LOADING, 0, 0, 0); }
+static inline int sys_web_adblock_status(web_adblock_info_t *info) {
+    return sys_web(WEB_ADBLOCK_STATUS, (uint64_t)info, sizeof(web_adblock_info_t), 0);
+}
+static inline int sys_web_adblock_set(int enabled) {
+    return sys_web(WEB_ADBLOCK_SET, (uint64_t)(enabled ? 1 : 0), 0, 0);
+}
 
 /* ── Filesystem syscalls (38-47) ── */
 

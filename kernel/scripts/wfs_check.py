@@ -148,11 +148,14 @@ class Guest:
     def text(self):
         return "".join(self.chunks)
 
-    def wait_for(self, needle, timeout):
+    def wait_for(self, needle, timeout, since=0):
+        """Look only at output received at or after `since` (a character
+        offset).  Searching the whole log lets an earlier `echo wfs probe`
+        satisfy the later `cat /wfs-keep.txt` even when the read is broken."""
         until = time.time() + timeout
         while time.time() < until:
             self.pump(min(time.time() + 0.5, until))
-            if needle in self.text():
+            if needle in self.text()[since:]:
                 return True
         return False
 
@@ -165,12 +168,12 @@ class Guest:
             return [f"`{cmd}`: could not type into the guest ({exc})"]
         failures = []
         for needle in needles:
-            if not self.wait_for(needle, timeout):
+            if not self.wait_for(needle, timeout, mark):
                 failures.append(f"`{cmd}`: missing {needle!r}")
         # Let the prompt come back so the next command is not typed into the
-        # middle of this one's output.
-        self.wait_for("root@codeos-live", timeout)
-        del mark
+        # middle of this one's output.  Same window: a prompt printed before
+        # this command must not settle the wait.
+        self.wait_for("root@codeos-live", timeout, mark)
         return failures
 
     def close(self):

@@ -37,6 +37,9 @@ enum {
 
 static volatile int  s_img_state[OW_MAX_IMAGES];
 static volatile int  s_img_raw_len[OW_MAX_IMAGES];
+/* Generation guards against a worker from a previous page completing after
+ * a reset/requeue and overwriting the newer image for the same slot. */
+static volatile int  s_img_gen[OW_MAX_IMAGES];
 static unsigned char s_img_raw[OW_MAX_IMAGES][65535];
 static char          s_img_absurl[OW_MAX_IMAGES][OW_URL_MAX];
 static spinlock_t    s_img_lock = SPINLOCK_INIT;
@@ -48,12 +51,14 @@ void sched_sleep_ms(uint64_t ms);
 static void ow_img_worker(void) {
     for (;;) {
         int idx = -1;
+        int gen = 0;
         char url_local[OW_URL_MAX];
         spin_lock(&s_img_lock);
         for (int i = 0; i < OW_MAX_IMAGES; i++) {
             if (s_img_state[i] == IMG_ST_PENDING) {
                 s_img_state[i] = IMG_ST_FETCH;
                 idx = i;
+                gen = s_img_gen[i];
                 int u = 0;
                 while (u < OW_URL_MAX - 1 && s_img_absurl[i][u]) {
                     url_local[u] = s_img_absurl[i][u];
@@ -69,7 +74,7 @@ static void ow_img_worker(void) {
 
         int n = ow_image_download(url_local, s_img_raw[idx], 65535);
         spin_lock(&s_img_lock);
-        if (s_img_state[idx] == IMG_ST_FETCH) {
+        if (s_img_state[idx] == IMG_ST_FETCH && s_img_gen[idx] == gen) {
             s_img_raw_len[idx] = (n > 8) ? n : 0;
             s_img_state[idx]   = (n > 8) ? IMG_ST_READY : IMG_ST_FAIL;
         }
@@ -86,12 +91,30 @@ void ow_image_start_workers(void) {
 
 void ow_image_enqueue(int idx, const char *abs_url) {
     if (idx < 0 || idx >= OW_MAX_IMAGES || !abs_url) return;
+    /* Normalise first so a too-long URL cannot compare unequal forever. */
+    char url[OW_URL_MAX];
+    int u = 0;
+    while (u < OW_URL_MAX - 1 && abs_url[u]) { url[u] = abs_url[u]; u++; }
+    url[u] = 0;
+
     spin_lock(&s_img_lock);
-    if (s_img_state[idx] == IMG_ST_EMPTY || s_img_state[idx] == IMG_ST_FAIL) {
-        s_img_state[idx] = IMG_ST_PENDING;
-        int u = 0;
-        while (u < OW_URL_MAX - 1 && abs_url[u]) { s_img_absurl[idx][u] = abs_url[u]; u++; }
+    int state = s_img_state[idx];
+    if (state == IMG_ST_EMPTY || state == IMG_ST_FAIL) {
+        u = 0;
+        while (u < OW_URL_MAX - 1 && url[u]) { s_img_absurl[idx][u] = url[u]; u++; }
         s_img_absurl[idx][u] = 0;
+        s_img_state[idx] = IMG_ST_PENDING;
+    } else if (state == IMG_ST_PENDING || state == IMG_ST_FETCH) {
+        /* Reuse a slot only when it is for the same image. If the URL
+         * changed, bump the generation so an in-flight worker's result is
+         * discarded and the replacement is fetched from scratch. */
+        if (strncmp(s_img_absurl[idx], url, OW_URL_MAX) != 0) {
+            u = 0;
+            while (u < OW_URL_MAX - 1 && url[u]) { s_img_absurl[idx][u] = url[u]; u++; }
+            s_img_absurl[idx][u] = 0;
+            s_img_gen[idx]++;
+            s_img_state[idx] = IMG_ST_PENDING;
+        }
     }
     spin_unlock(&s_img_lock);
 }
@@ -114,6 +137,7 @@ int ow_image_raw_len(int idx) {
 void ow_image_reset_all(void) {
     spin_lock(&s_img_lock);
     for (int i = 0; i < OW_MAX_IMAGES; i++) {
+        s_img_gen[i]++;
         s_img_state[i]   = IMG_ST_EMPTY;
         s_img_raw_len[i] = 0;
         s_img_absurl[i][0] = 0;

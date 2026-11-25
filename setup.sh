@@ -40,9 +40,9 @@ yay -Syu --needed --noconfirm clang
 yay -Syu --needed --noconfirm llvm
 yay -Syu --needed --noconfirm lld
 # The final kernel link prefers x86_64-elf-ld (lld cannot relax the prebuilt
-# Qt archives' local-dynamic TLS) but falls back to the host GNU ld when the
-# cross binutils are absent; likewise the userspace/Zircon link prefers ld.lld
-# and falls back to host ld, so `lld` is recommended but not required.  Host
+# Qt archives' local-dynamic TLS), then ld.lld from PATH or rustup; a bare host
+# ld is only used when it can emit x86_64 ELF (not on aarch64).  Userspace and
+# Zircon use the same discovery, so `lld` is recommended but not required.  Host
 # g++ is still needed for the libstdc++ headers clang++ parses.  The userspace
 # and Qt panels build with clang; the cross GCC/G++ is only needed to rebuild
 # Qt6 from source (`make qt6-all`) or the optional SDL3 demos.
@@ -72,7 +72,9 @@ else
 fi
 
 echo "Compiling CodeOS and dependencies..."
-make -j"$(nproc)"
+# nproc is Linux-only; macOS/Termux provide getconf, with a 1-CPU fallback.
+JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+make -j"$JOBS"
 
 echo "CodeOS compiled successfully."
 echo "Boot it with:"

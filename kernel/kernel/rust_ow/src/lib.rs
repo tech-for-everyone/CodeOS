@@ -11,37 +11,75 @@ mod ow_render;
  * The panic handler used to be a bare `loop {}`. With panic = "abort" that is
  * indistinguishable from a hang, a blocked fetch or a wedged scheduler — a
  * silent spin that takes the whole system with it, and gives no clue which.
- * It now reports the panic location on COM1 before spinning.
+ * It now reports the panic location before spinning.
  *
  * Deliberately no `extern` declarations, so the crate stays linkable from
- * every context that pulls in libow_http.a (kernel, Qt panels). */
-const COM1: u16 = 0x3F8;
+ * every context that pulls in libow_http.a (kernel, Qt panels). The output
+ * backend is selected by target: x86_64 uses the COM1 port, aarch64 uses the
+ * QEMU virt PL011 that the arm64 kernel already maps at 0x09000000. */
 
-/* COM1 is a *port*, not a memory-mapped device: the kernel's serial driver
- * reaches it with in/out instructions. Dereferencing 0x3F8/0x3FD instead is a
- * page fault on an unmapped page (CR2=0x3fd), so these must be real port I/O. */
-#[inline(always)]
-unsafe fn dbg_outb(port: u16, val: u8) {
-    core::arch::asm!("out dx, al", in("dx") port, in("al") val,
-                     options(nomem, nostack, preserves_flags));
-}
+mod dbg {
+    #[cfg(target_arch = "x86_64")]
+    const COM1: u16 = 0x3F8;
 
-#[inline(always)]
-unsafe fn dbg_inb(port: u16) -> u8 {
-    let val: u8;
-    core::arch::asm!("in al, dx", out("al") val, in("dx") port,
-                     options(nomem, nostack, preserves_flags));
-    val
+    /* COM1 is a *port*, not a memory-mapped device: the kernel's serial driver
+     * reaches it with in/out instructions. Dereferencing 0x3F8/0x3FD instead
+     * is a page fault on an unmapped page (CR2=0x3fd), so these must be real
+     * port I/O. The cfg also keeps the x86-only asm out of aarch64 builds. */
+    #[cfg(target_arch = "x86_64")]
+    #[inline(always)]
+    unsafe fn outb(port: u16, val: u8) {
+        core::arch::asm!("out dx, al", in("dx") port, in("al") val,
+                         options(nomem, nostack, preserves_flags));
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[inline(always)]
+    unsafe fn inb(port: u16) -> u8 {
+        let val: u8;
+        core::arch::asm!("in al, dx", out("al") val, in("dx") port,
+                         options(nomem, nostack, preserves_flags));
+        val
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub fn putc(c: u8) {
+        unsafe {
+            let mut spins = 0u32;
+            while inb(COM1 + 5) & 0x20 == 0 && spins < 100_000 {
+                spins += 1;
+            }
+            outb(COM1, c);
+        }
+    }
+
+    /* QEMU virt / CodeOS arm64 maps the PL011 here. Keep this self-contained:
+     * libow_http.a is also linked by hosted tools that have no kernel serial
+     * symbols to import. */
+    #[cfg(target_arch = "aarch64")]
+    const UART_DR: *mut u8 = 0x0900_0000 as *mut u8;
+    #[cfg(target_arch = "aarch64")]
+    const UART_FR: *const u8 = 0x0900_0018 as *const u8;
+    #[cfg(target_arch = "aarch64")]
+    const FR_TXFF: u8 = 1 << 5;
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn putc(c: u8) {
+        unsafe {
+            let mut spins = 0u32;
+            while core::ptr::read_volatile(UART_FR) & FR_TXFF != 0 && spins < 100_000 {
+                spins += 1;
+            }
+            core::ptr::write_volatile(UART_DR, c);
+        }
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    pub fn putc(_c: u8) {}
 }
 
 fn dbg_putc(c: u8) {
-    unsafe {
-        let mut spins = 0u32;
-        while dbg_inb(COM1 + 5) & 0x20 == 0 && spins < 100_000 {
-            spins += 1;
-        }
-        dbg_outb(COM1, c);
-    }
+    dbg::putc(c);
 }
 
 fn dbg_puts(s: &str) {
@@ -180,6 +218,23 @@ fn cache_lookup(url: &[u8]) -> isize {
     -1
 }
 
+/// Forget a cached page. Used when a host is added to the adblock list after
+/// the page was cached: reload/history navigation must not serve stale content.
+fn cache_invalidate(url: &[u8]) {
+    if url.is_empty() || url.len() >= OW_URL_MAX { return; }
+    unsafe {
+        for i in 0..OW_CACHE_ENTRIES {
+            if CACHE_LEN[i] > 0
+                && CACHE_URL[i][..url.len()] == *url
+                && CACHE_URL[i][url.len()] == 0 {
+                CACHE_LEN[i] = 0;
+                CACHE_ORDER[i] = 0;
+                return;
+            }
+        }
+    }
+}
+
 fn cache_store(url: &[u8], body: &[u8]) {
     /* See cache_lookup: a slice as long as the destination buffer cannot be a
      * terminable URL, and the CACHE_URL[i][url.len()] probe below would be out
@@ -218,6 +273,11 @@ extern "C" {
     fn http_post(host: *const c_char, port: u16, path: *const c_char,
                  body: *const u8, body_len: u16, buf: *mut u8, max_len: u16) -> c_int;
     fn fs_read(path: *const c_char, buf: *mut c_char, max: c_int) -> c_int;
+    /* CodeOS's canonical adblock engine. `adblock_check_host` is a no-op when
+     * filtering is disabled, so a block here is counted exactly once: we return
+     * before net.c gets a chance to make its own (duplicate) HTTP guard. */
+    fn adblock_check_host(host: *const c_char) -> c_int;
+    fn adblock_record_http_block();
 }
 
 // ── Utility helpers ──
@@ -423,6 +483,57 @@ fn parse_host_path(url: &[u8], host: &mut [u8], path: &mut [u8]) {
     }
 }
 
+/// Strip an optional `:port` from an authority and parse the numeric port.
+/// IPv6 bracket syntax is not supported by this backend's HTTP client, so a
+/// colon always means a port here.
+fn split_authority(host_str: &str, host_no_port: &mut [u8; 128], default_port: u16) -> u16 {
+    let (authority, port_str) = match host_str.find(':') {
+        Some(ci) => (&host_str[..ci], Some(&host_str[ci + 1..])),
+        None => (host_str, None),
+    };
+    let port = if let Some(ps) = port_str {
+        let mut p: u32 = 0;
+        let mut valid = !ps.is_empty();
+        for &b in ps.as_bytes() {
+            if b < b'0' || b > b'9' { valid = false; break; }
+            p = p.wrapping_mul(10).wrapping_add((b - b'0') as u32);
+        }
+        if valid && p <= 65535 { p as u16 } else { default_port }
+    } else { default_port };
+    let n = core::cmp::min(authority.len(), host_no_port.len() - 1);
+    host_no_port[..n].copy_from_slice(&authority.as_bytes()[..n]);
+    host_no_port[n] = 0;
+    port
+}
+
+/// Ask the shared kernel adblock engine about a host. Returns the bare host in
+/// `bare` so the tab status can name exactly what was blocked. A block is
+/// recorded here because this path returns before net.c's HTTP guard runs.
+fn adblock_host_blocked(host: &[u8], bare: &mut [u8; 128]) -> bool {
+    let host_str = buf_as_str(host);
+    if host_str.is_empty() { return false; }
+    split_authority(host_str, bare, 0);
+    if bare[0] == 0 { return false; }
+    unsafe {
+        if adblock_check_host(bare.as_ptr() as *const c_char) != 0 {
+            adblock_record_http_block();
+            return true;
+        }
+    }
+    false
+}
+
+fn set_blocked_status(tab: &mut OpenwebTab, host: &[u8]) {
+    let mut msg = [0u8; OW_STATUS_MAX];
+    build_msg(&mut msg, b"Blocked by AdBlock: ", host);
+    set_status(tab, &msg);
+}
+
+fn is_http_url(url: &[u8]) -> bool {
+    let s = buf_as_str(url);
+    s.starts_with("http://") || s.starts_with("https://")
+}
+
 fn build_search_url(query: &str, out: &mut [u8]) {
     let prefix = b"http://www.google.com/search?q=";
     let mut i = 0;
@@ -453,24 +564,12 @@ fn http_fetch(url: &[u8], host: &[u8], path: &[u8], body: Option<&[u8]>, buf: &m
     // full mbedtls handshake + HTTP/1.1 exchange (accept: * / *, conn: close).
     let https = buf_as_str(url).starts_with("https://");
     // The authority may carry an explicit ":port" ("10.0.2.2:8095").
+    // Keep the adblock precheck and the network request on the *same* bare
+    // host: adblock rules match hostnames, never host:port strings.
     let host_str = buf_as_str(host);
     let mut host_no_port = [0u8; 128];
-    let mut port: u16 = if https { 443 } else { 80 };
-    if let Some(ci) = host_str.find(':') {
-        let port_str = &host_str[ci + 1..];
-        let mut p: u32 = 0;
-        let mut valid = !port_str.is_empty();
-        for &b in port_str.as_bytes() {
-            if b < b'0' || b > b'9' { valid = false; break; }
-            p = p * 10 + (b - b'0') as u32;
-        }
-        if valid && p <= 65535 { port = p as u16; }
-        if ci < host_no_port.len() {
-            host_no_port[..ci].copy_from_slice(&host_str.as_bytes()[..ci]);
-        }
-    } else if host_str.len() < host_no_port.len() {
-        host_no_port[..host_str.len()].copy_from_slice(host_str.as_bytes());
-    }
+    let port = split_authority(host_str, &mut host_no_port,
+                               if https { 443 } else { 80 });
     let host_c = host_no_port.as_ptr() as *const c_char;
     let path_c = path.as_ptr() as *const c_char;
     unsafe {
@@ -632,6 +731,25 @@ fn classify_and_fetch_inner(tab_idx: c_int, raw_input: &[u8], body: Option<&[u8]
              * buffer: the cache keys on exactly these bytes, so a zero-padded
              * 512-byte slice would never match a stored key. */
             let key_len = core::cmp::min(strlen_u8(&final_url) + 1, OW_URL_MAX);
+            /* A page cached before a host joined the blocklist must not be
+             * served from history/reload. Check the final host first, then
+             * drop the stale entry so the next load also goes through the
+             * network guard. */
+            let mut cache_host = [0u8; 128];
+            let mut cache_path = [0u8; 512];
+            let mut bare_host = [0u8; 128];
+            parse_host_path(&final_url, &mut cache_host, &mut cache_path);
+            if is_http_url(&final_url) && adblock_host_blocked(&cache_host, &mut bare_host) {
+                cache_invalidate(&final_url[..key_len]);
+                set_blocked_status(t, &bare_host);
+                /* 6 = blocked by policy, distinct from a network failure. */
+                t.error = 6;
+                t.loading = 0;
+                t.content_len = 0;
+                OW_LOAD_PROGRESS = 0;
+                t.scroll = 0;
+                return;
+            }
             let hit = cache_lookup(&final_url[..key_len]);
             if hit >= 0 {
                 let e = hit as usize;
@@ -726,6 +844,21 @@ fn classify_and_fetch_inner(tab_idx: c_int, raw_input: &[u8], body: Option<&[u8]
             let mut host = [0u8; 128];
             let mut path = [0u8; 512];
             parse_host_path(&final_url, &mut host, &mut path);
+
+            /* Single OpenWeb-side policy gate for every HTTP(S) fetch, POST and
+             * redirect hop. net.c also guards kernel HTTP(S), but returning
+             * here lets us report a real "Blocked by AdBlock" status instead
+             * of a generic "IP needed" and avoids double-counting the block. */
+            let mut bare_host = [0u8; 128];
+            if is_http_url(&final_url) && adblock_host_blocked(&host, &mut bare_host) {
+                set_blocked_status(t, &bare_host);
+                t.error = 6;
+                t.loading = 0;
+                t.content_len = 0;
+                OW_LOAD_PROGRESS = 0;
+                t.scroll = 0;
+                break;
+            }
 
             /* Build "Loading <host>..." status message. */
             let mut status_msg = [0u8; 80];
@@ -857,7 +990,8 @@ fn classify_and_fetch_inner(tab_idx: c_int, raw_input: &[u8], body: Option<&[u8]
                         &t.content[..t.content_len as usize]);
         }
         t.loading = 0;
-        OW_LOAD_PROGRESS = 100;
+        /* A policy block is not a completed load; keep the progress bar idle. */
+        if t.error != 6 { OW_LOAD_PROGRESS = 100; }
         t.scroll = 0;
     }
 }

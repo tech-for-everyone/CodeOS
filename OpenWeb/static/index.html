@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OpenWeb Browser</title>
+  <link rel="icon" type="image/svg+xml" href="/static/openweb-mark.svg" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <meta name="theme-color" content="#0b1430" />
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +15,10 @@
 <body>
   <div class="browser-shell">
     <header class="chrome-bar">
+      <div class="brand-lockup" aria-label="OpenWeb">
+        <img src="/static/openweb-mark.svg" alt="" width="28" height="28" />
+        <span class="brand-word">OpenWeb</span>
+      </div>
       <form id="navigation-form" class="navigation-form">
         <button type="button" class="nav-button" id="back-button" title="Back" disabled>←</button>
         <button type="button" class="nav-button" id="forward-button" title="Forward" disabled>→</button>
@@ -23,7 +30,7 @@
           <input id="address-bar" type="text" value="https://google.com" autocomplete="off" spellcheck="false" />
         </div>
         
-        <button type="submit" class="go-button" title="Go">Go</button>
+        <button type="submit" class="go-button" id="go-button" title="Go">Go</button>
         <div class="engine-picker">
           <select id="engine-select" title="Search engine">
             <option value="google">Google</option>
@@ -39,6 +46,7 @@
         <button type="button" class="tab-action" id="history-button" title="History (Ctrl+H)">⏐</button>
         <button type="button" class="tab-action" id="downloads-button" title="Downloads (Ctrl+J)">⬇</button>
         <button type="button" class="tab-action" id="settings-button" title="Settings">⚙</button>
+        <button type="button" class="tab-action" id="modtools-button" title="ModTools (Ctrl+M)" aria-label="ModTools">🛠</button>
       </div>
     </header>
 
@@ -50,6 +58,13 @@
       <!-- New tab page -->
       <div id="new-tab-page" class="new-tab-page hidden">
         <div class="new-tab-content">
+          <div class="ntp-brand">
+            <img src="/static/openweb-mark.svg" alt="" width="64" height="64" />
+            <div>
+              <h1>OpenWeb</h1>
+              <p>Your web, shaped by you.</p>
+            </div>
+          </div>
           <div class="search-box">
             <svg class="search-icon" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
             <input type="text" id="ntp-search-input" placeholder="Search or enter address" autocomplete="off" spellcheck="false" />
@@ -118,6 +133,117 @@
       </div>
     </div>
 
+    <div id="modtools-modal" class="modal hidden">
+      <div class="modal-content wide modtools-modal">
+        <header>
+          <h2>ModTools <span class="modtools-kicker">page workbench</span></h2>
+          <button class="modal-close" aria-label="Close">×</button>
+        </header>
+        <div class="modal-body modtools-body">
+          <p class="modtools-intro">
+            Restyle and rewrite pages without leaving OpenWeb. Live overrides work on
+            pages OpenWeb can read; the Source tab builds an isolated preview for any page.
+          </p>
+          <div class="modtools-scope-row">
+            <div class="form-group">
+              <label for="modtools-scope">Apply to</label>
+              <select id="modtools-scope">
+                <option value="url">This page</option>
+                <option value="host">This site</option>
+                <option value="all">Every site</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="modtools-url">Page</label>
+              <input type="text" id="modtools-url" readonly />
+            </div>
+          </div>
+
+          <nav class="modtools-tabs" id="modtools-tabs" role="tablist">
+            <button type="button" class="modtools-tab active" data-panel="css">CSS</button>
+            <button type="button" class="modtools-tab" data-panel="html">DOM</button>
+            <button type="button" class="modtools-tab" data-panel="js">JavaScript</button>
+            <button type="button" class="modtools-tab" data-panel="source">Source</button>
+            <button type="button" class="modtools-tab" data-panel="elements">Inspect</button>
+          </nav>
+
+          <section class="modtools-panel" id="modtools-panel-css" data-panel="css">
+            <div class="form-group">
+              <label for="modtools-css">Custom CSS</label>
+              <textarea id="modtools-css" class="modtools-code" spellcheck="false"
+                placeholder="article { max-width: 68ch; }"></textarea>
+            </div>
+          </section>
+
+          <section class="modtools-panel hidden" id="modtools-panel-html" data-panel="html">
+            <p class="modtools-hint">Rules are a JSON array. Each rule has a selector,
+              an action, and an optional value.</p>
+            <div class="form-group">
+              <label for="modtools-rules">DOM rules</label>
+              <textarea id="modtools-rules" class="modtools-code" spellcheck="false"
+                placeholder='[{"selector":"header","action":"hide","value":""}]'></textarea>
+            </div>
+            <div class="modtools-rule-builder">
+              <input type="text" id="modtools-selector" placeholder="Selector, e.g. .sidebar" />
+              <select id="modtools-action" title="Action">
+                <option value="hide">Hide</option>
+                <option value="remove">Remove</option>
+                <option value="text">Set text</option>
+                <option value="html">Set HTML</option>
+                <option value="attr">Set attribute</option>
+                <option value="class">Add class</option>
+                <option value="style">Add style</option>
+                <option value="before">Insert before</option>
+                <option value="after">Insert after</option>
+                <option value="prepend">Prepend</option>
+                <option value="append">Append</option>
+              </select>
+              <input type="text" id="modtools-value" placeholder="Value (for text/attr/etc.)" />
+              <button type="button" id="modtools-add-rule">Add rule</button>
+            </div>
+            <div id="modtools-rule-list" class="modtools-rule-list"></div>
+          </section>
+
+          <section class="modtools-panel hidden" id="modtools-panel-js" data-panel="js">
+            <p class="modtools-hint">JavaScript runs inside the page once per load.
+              Use it for live experiments; it is saved with this override.</p>
+            <div class="form-group">
+              <label for="modtools-js">Custom JavaScript</label>
+              <textarea id="modtools-js" class="modtools-code" spellcheck="false"
+                placeholder="document.body.dataset.owMod = 'on';"></textarea>
+            </div>
+          </section>
+
+          <section class="modtools-panel hidden" id="modtools-panel-source" data-panel="source">
+            <p class="modtools-hint">Paste any HTML document. OpenWeb applies the saved CSS,
+              DOM rules and JavaScript inside a sandboxed preview.</p>
+            <div class="form-group">
+              <label for="modtools-source">Page source</label>
+              <textarea id="modtools-source" class="modtools-code modtools-source" spellcheck="false"
+                placeholder="&lt;!doctype html&gt;&lt;h1&gt;Hello OpenWeb&lt;/h1&gt;"></textarea>
+            </div>
+            <button type="button" id="modtools-preview-source" class="btn-secondary">
+              Open isolated preview
+            </button>
+          </section>
+
+          <section class="modtools-panel hidden" id="modtools-panel-elements" data-panel="elements">
+            <p class="modtools-hint">Pick an element in the page to copy a ready-made
+              selector into the DOM rule builder.</p>
+            <button type="button" id="modtools-pick" class="btn-secondary">Pick an element</button>
+            <div id="modtools-picked" class="modtools-picked">No element selected.</div>
+          </section>
+
+          <div id="modtools-status" class="modtools-status" role="status"></div>
+          <div class="form-actions modtools-actions">
+            <button type="button" id="modtools-preview" class="btn-secondary">Preview (unsaved)</button>
+            <button type="button" id="modtools-apply" class="btn-primary">Apply &amp; save</button>
+            <button type="button" id="modtools-reset" class="btn-danger">Reset page</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="add-bookmark-modal" class="modal hidden">
       <div class="modal-content small">
         <header><h2>Add Bookmark</h2><button class="modal-close" aria-label="Close">×</button></header>
@@ -142,21 +268,8 @@
       </div>
     </div>
 
+    <script src="/static/modtools.js"></script>
     <script src="/static/app.js"></script>
   </div>
 </body>
-</html><script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/static/sw.js')
-      .then(registration => {
-        console.log('SW registered: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
-</script>
-<link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#1a1a1a">
+</html>

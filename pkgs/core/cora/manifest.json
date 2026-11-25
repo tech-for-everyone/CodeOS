@@ -1,0 +1,13 @@
+{
+  "name": "cora",
+  "version": "0.1.0",
+  "description": "Python-inspired language with a C compilation backend",
+  "author": "CodeOS Team",
+  "license": "MIT",
+  "type": "source",
+  "category": "Development",
+  "dependencies": ["gcc", "clang"],
+  "install_path": "/usr/bin/cora",
+  "source": "src/",
+  "note": "Replaces the bas package. Compiler is src/cora.c; examples are src/hello.co and src/selftest.co. Host tests: tests/run.sh. The shell's `cora` builtin runs prebuilt /bin/cora-<name> programs."
+}

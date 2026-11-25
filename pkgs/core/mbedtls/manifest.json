@@ -1,0 +1,10 @@
+{
+  "name": "mbedtls",
+  "version": "3.5.2",
+  "description": "Vendored Mbed TLS 3.5.2 cryptographic and TLS library",
+  "license": "Apache-2.0 OR GPL-2.0-or-later",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/"
+}

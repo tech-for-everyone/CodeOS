@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codeos.local/pkgs/manifest.schema.json",
+  "title": "CodeOS package manifest",
+  "description": "Descriptor for a package stored under pkgs/. Source packages use type=source; already-packaged archives use type=binary with format=xora-1. Unknown fields are allowed so newer tooling can add metadata without breaking older readers.",
+  "type": "object",
+  "required": ["name", "version"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Package identifier. Should match the directory name.",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Package version, normally dotted numeric (1.0.0).",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "One-line human-readable summary."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier."
+    },
+    "author": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "description": "What the descriptor represents: source tree, prebuilt download, built archive, or tool.",
+      "enum": ["source", "prebuilt", "binary", "tool", "kernel"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Display group used by installers and app launchers (System, Graphics, Development, ...)."
+    },
+    "categories": {
+      "type": "array",
+      "description": "Alternative tag list used by some manifests; prefer the singular category field in new packages.",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Names of packages that must be installed first.",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "provides": {
+      "type": "array",
+      "description": "Virtual names or libraries satisfied by this package.",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "install_path": {
+      "type": "string",
+      "description": "Absolute destination for the package payload, e.g. /bin/terminal.",
+      "pattern": "^/"
+    },
+    "source": {
+      "type": "string",
+      "description": "Where the payload comes from: a relative directory, 'upstream', or a URL."
+    },
+    "upstream": {
+      "type": "string",
+      "description": "Original upstream download URL for a package that has since been ported to source."
+    },
+    "homepage": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "repo": {
+      "type": "string",
+      "description": "Repository/category the manifest originated from."
+    },
+    "note": {
+      "type": "string",
+      "description": "Free-form build or integration notes."
+    },
+    "format": {
+      "type": "string",
+      "description": "Descriptor/archive format: xora-1 for built archives, ftech for converted prebuilt downloads.",
+      "enum": ["xora-1", "ftech"]
+    },
+    "port_status": {
+      "type": "string",
+      "description": "Porting progress for packages converted from prebuilt-only descriptors.",
+      "enum": ["not-started", "in-progress", "ported"]
+    },
+    "archive": {
+      "type": "string",
+      "description": "Compression/container format for type=binary packages.",
+      "enum": ["tar.gz"]
+    },
+    "size": {
+      "type": "integer",
+      "description": "Uncompressed payload size in bytes; for ported packages this is the original .ftech declared size.",
+      "minimum": 0
+    }
+  }
+}

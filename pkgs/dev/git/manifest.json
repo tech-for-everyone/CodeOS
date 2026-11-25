@@ -1,0 +1,13 @@
+{
+  "name": "git",
+  "version": "2.38.0",
+  "description": "Version control system",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.38.0.tar.xz",
+  "size": 5242880,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/git.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

@@ -1,0 +1,13 @@
+{
+  "name": "file",
+  "version": "5.42",
+  "description": "File type identification",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://astron.com/pub/file/file-5.42.tar.gz",
+  "size": 458752,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from util/file.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

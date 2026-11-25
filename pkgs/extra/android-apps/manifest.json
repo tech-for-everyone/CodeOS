@@ -1,0 +1,11 @@
+{
+  "name": "android-apps",
+  "version": "1.0.0",
+  "description": "Android app manager for CodeOS — lists bundled apps/containers and launches demo apps",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/android-apps"
+}

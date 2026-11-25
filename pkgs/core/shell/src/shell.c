@@ -936,8 +936,8 @@ static void bi_help(void) {
 "    date                 print the time          whoami         print the user\n"
 "    hostname             print the host          sleep MS       pause\n"
 "    true / false         exit status 0 / 1      clear          clear the screen\n"
-"    ai <question>        ask FreeCode            vm ...         virtual machine control\n"
-"    bas <program> [a..]  run a bas program (/bin/bas-<program>)\n"
+"    ai <question>        ask Ziggy            vm ...         virtual machine control\n"
+"    cora <program> [a..] run a cora program (/bin/cora-<program>)\n"
 "\n"
 "  syntax\n"
 "    'literal'  \"expand $VAR\"  \\escape\n"
@@ -971,7 +971,7 @@ static void bi_help(void) {
 }
 
 static const char *const builtin_names[] = {
-    "alias", "bas", "cat", "cd", "clear", "date", "echo", "env", "exit", "export",
+    "alias", "cat", "cd", "clear", "cora", "date", "echo", "env", "exit", "export",
     "false", "help", "history", "hostname", "ls", "mkdir", "printf", "pwd",
     "rm", "set", "sleep", "test", "true", "type", "unalias", "unset", "which",
     "whoami", "[", "ai", "vm", NULL
@@ -1072,7 +1072,7 @@ static int run_external(const char *name, char **argv, int argc, int out_fd) {
             sys_close(out_fd);
         }
         sys_execve(path, argv, argc);
-        const char *msg = "bas: cannot execute\n";
+        const char *msg = "cannot execute program\n";
         sys_write(msg, (int)strlen(msg));
         sys_exit(127);
     }
@@ -1245,36 +1245,36 @@ static int run_builtin(cmd_t *c) {
         last_status = 0;
     }
     else if (strcmp(cmd, "whoami") == 0)   { sh_puts("root\n"); last_status = 0; }
-    else if (strcmp(cmd, "bas") == 0) {
-        /* Run a bas program.  The image carries them as /bin/bas-<name>
-         * (the .ba sources in pkgs/core/bas, cross-compiled on the host),
+    else if (strcmp(cmd, "cora") == 0) {
+        /* Run a cora program.  The image carries them as /bin/cora-<name>
+         * (the .co sources in pkgs/core/cora, compiled through C on the host),
          * and the kernel shell has the same command; this is the one the
          * desktop's terminal reaches. */
         if (c->argc < 2) {
-            sh_outf("usage: bas <program> [args...]\n");
-            sh_outf("       bas list\n");
+            sh_outf("usage: cora <program> [args...]\n");
+            sh_outf("       cora list\n");
             rc = 1;
         } else if (strcmp(c->argv[1], "list") == 0) {
-            /* The bas programs in the image: /bin/bas-<name>. */
+            /* The cora programs in the image: /bin/cora-<name>. */
             char names[4096];
             int n = sys_readdir("/bin", names, sizeof(names));
             int shown = 0;
             for (int i = 0; i < n; ) {
                 const char *nm = names + i;
                 int len = (int)strlen(nm);
-                if (strncmp(nm, "bas-", 4) == 0 && nm[4]) {
-                    sh_outf("  %s\n", nm + 4);
+                if (strncmp(nm, "cora-", 5) == 0 && nm[5]) {
+                    sh_outf("  %s\n", nm + 5);
                     shown++;
                 }
                 i += len + 1;
             }
-            if (!shown) sh_outf("  (no bas programs in this image)\n");
+            if (!shown) sh_outf("  (no cora programs in this image)\n");
             rc = 0;
         } else {
             char path[256];
-            snprintf(path, sizeof(path), "/bin/bas-%s", c->argv[1]);
+            snprintf(path, sizeof(path), "/bin/cora-%s", c->argv[1]);
             if (!program_exists(path)) {
-                sh_outf("bas: %s: no such program\n", c->argv[1]);
+                sh_outf("cora: %s: no such program\n", c->argv[1]);
                 rc = 127;
             } else {
                 /* argv[0] is the program; the rest are its arguments. */
@@ -1369,7 +1369,7 @@ static int run_builtin(cmd_t *c) {
             static char resp[2048];
             int rlen = sys_ai_query(prompt, resp, sizeof(resp) - 1);
             if (rlen > 0) { resp[rlen] = 0; sh_puts(resp); if (resp[rlen - 1] != '\n') sh_putc_('\n'); }
-            else sh_puts("FreeCode didn't have an answer for that.\n");
+            else sh_puts("Ziggy didn't have an answer for that.\n");
             last_status = (rlen > 0) ? 0 : 1;
         }
     }
@@ -1462,7 +1462,7 @@ static int run_builtin(cmd_t *c) {
         /* Not a built-in.  A pipeline runs it itself, because an external
          * stage has to run in a child with the pipes wired up; a lone
          * command is run by the caller.  Either way this is what makes the
-         * bas programs -- and every other program in the image --
+         * cora programs -- and every other program in the image --
          * reachable from the desktop's terminal. */
         if (external_runner) return external_runner(c);
         if (have_capture) sink_free(&fsink);
@@ -1508,7 +1508,7 @@ static int run_builtin(cmd_t *c) {
  * An external program runs in a child, and its output goes down a *real*
  * pipe -- the kernel's.  The shell used to run an external stage with its
  * output going to the terminal whatever the pipeline said, so
- * `bas hello | cat` printed the line twice and `bas list | grep hello`
+ * `cora hello | cat` printed the line twice and `cora list | grep hello`
  * printed the whole listing and nothing else.  The kernel's pipe now
  * blocks while there is nothing to read and reports the end of the file
  * when the last writer is gone, so a stage can be read to the end.
@@ -1662,7 +1662,7 @@ static void run_stage(const char *text, const char *stage_stdin, int stage_in,
 
     if (!run_builtin(&c) && external_runner == 0) {
         /* Not a built-in, and not a pipeline: run it as an external
-         * program.  This is what makes the bas programs -- and every other
+         * program.  This is what makes the cora programs -- and every other
          * program in the image -- reachable from the desktop's terminal. */
         int rc = run_external(c.argv[0], c.argv, c.argc, c.out_fd);
         last_status = rc;

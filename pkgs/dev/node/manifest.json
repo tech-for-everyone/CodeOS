@@ -1,0 +1,13 @@
+{
+  "name": "node",
+  "version": "18.7.0",
+  "description": "JavaScript runtime",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://nodejs.org/dist/v18.7.0/node-v18.7.0.tar.xz",
+  "size": 35651584,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/node.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

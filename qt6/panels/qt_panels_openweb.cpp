@@ -23,6 +23,8 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QDesktopServices>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QByteArray>
 
@@ -70,6 +72,7 @@ void installer_set_locale(const char *locale);
 QtOpenWebWidget::QtOpenWebWidget(QWidget *parent) : QtAppWindow("OpenWeb", parent) {
     resize(1024, 768);
     m_status = "Ready";
+    refreshAdblock();
     m_initialized = false;
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
@@ -93,9 +96,20 @@ QtOpenWebWidget::QtOpenWebWidget(QWidget *parent) : QtAppWindow("OpenWeb", paren
                 if (tabs && tabs[idx].loading) live = true;
             }
         }
+        refreshAdblock();
         if (live || m_initialized) update();
     });
     m_refreshTimer.start(150);
+}
+
+void QtOpenWebWidget::refreshAdblock() {
+    ow_core_adblock_info_t info;
+    info.enabled = 0;
+    info.domains = 0;
+    if (ow_core_adblock_status(&info) == 0) {
+        m_adblockEnabled = info.enabled != 0;
+        m_adblockDomains = info.domains;
+    }
 }
 
 void QtOpenWebWidget::showEvent(QShowEvent *event) {
@@ -182,6 +196,10 @@ void QtOpenWebWidget::navigateAbsolute(const QString &url) {
         m_initialized = ow_core_is_initialized();
     }
     QByteArray ba = url.toUtf8();
+    /* A reload of the same URL can reuse the tab's content buffer. Drop the
+     * decoded images and in-flight fetches here as well as in the render
+     * guard so a stale image can never survive a navigation. */
+    resetImageCache();
     kprintf("NAV calling ow_core_navigate\n");
     ow_core_navigate(ba.constData());
     kprintf("NAV returned from ow_core_navigate\n");
@@ -434,6 +452,13 @@ void QtOpenWebWidget::submitForm(int form) {
     navigateTo(url);
 }
 
+void QtOpenWebWidget::resetImageCache() {
+    m_imageCache.clear();
+    m_imageLoaded.clear();
+    m_imageLoadTick = 0;
+    ow_image_reset_all();
+}
+
 void QtOpenWebWidget::renderCurrentTab() {
     if (!m_initialized) return;
     int cnt = ow_core_tab_count();
@@ -442,7 +467,19 @@ void QtOpenWebWidget::renderCurrentTab() {
     int idx = ow_core_active_tab();
     if (!tabs || idx < 0 || idx >= cnt) return;
     openweb_tab_t *tab = &tabs[idx];
-    if (tab->content_len > 0 && tab->content_len < OW_CONTENT_MAX) {
+    /* The render output reuses image slots by index, so a page change must
+     * invalidate both the decoded QImages and the background fetch state.
+     * Include the tab index so switching tabs cannot show the other page's
+     * cached image in the same slot. */
+    const QString pageKey = QString::number(idx) + QLatin1Char('|') +
+                            QString::fromUtf8(tab->url) + QLatin1Char('|') +
+                            QString::number(tab->content_len) + QLatin1Char('|') +
+                            QString::number((quintptr)tab->content);
+    if (pageKey != m_imagePageKey) {
+        m_imagePageKey = pageKey;
+        resetImageCache();
+    }
+    if (tab->content_len > 0 && tab->content_len <= OW_CONTENT_MAX) {
         ow_core_render_active();
         /* capture <title> */
         if (ow_page_title[0]) {
@@ -500,7 +537,7 @@ void QtOpenWebWidget::ensureImages() {
                 m_imageLoaded[i] = true;
             }
         } else if (st == 0 /* IMG_ST_EMPTY */ || st == 4 /* IMG_ST_FAIL */) {
-            if (abs.startsWith("http://")) {
+            if (abs.startsWith("http://") || abs.startsWith("https://")) {
                 ow_image_enqueue(i, abs.toUtf8().constData());
             } else {
                 m_imageLoaded[i] = true;
@@ -541,37 +578,51 @@ void QtOpenWebWidget::paintPageContent(QPainter &p, const QRect &contentRect) {
 
     if (isStartPage()) {
         /* ── Builtin start page ── */
-        p.fillRect(contentRect, QColor(0x12,0x12,0x14));
-        QLinearGradient g(0, contentRect.y(), 0, contentRect.y()+260);
-        g.setColorAt(0, QColor(0x1B,0x22,0x33));
-        g.setColorAt(1, QColor(0x12,0x12,0x14));
-        p.fillRect(contentRect.adjusted(0,0,0,-contentRect.height()+260), g);
+        /* Original OpenWeb identity: midnight canvas, signal-teal orbit,
+         * nebula-violet depth. Shared with the PWA palette in IDENTITY.json. */
+        p.fillRect(contentRect, QColor(0x05,0x08,0x17));
+        QLinearGradient g(0, contentRect.y(), 0, contentRect.y()+300);
+        g.setColorAt(0, QColor(0x10,0x1D,0x3D));
+        g.setColorAt(1, QColor(0x05,0x08,0x17));
+        p.fillRect(contentRect.adjusted(0,0,0,-contentRect.height()+300), g);
 
-        /* logo */
-        QRect logoRect(contentRect.center().x()-46, contentRect.y()+46, 92, 92);
-        QLinearGradient lg(logoRect.topLeft(), logoRect.bottomRight());
-        lg.setColorAt(0, QColor(0x64,0xD9,0xF0));
-        lg.setColorAt(1, QColor(0x29,0x6B,0xFF));
-        p.setPen(Qt::NoPen); p.setBrush(lg);
-        p.drawEllipse(logoRect);
-        QFont lf = f; lf.setPointSize(30); lf.setBold(true); p.setFont(lf);
-        p.setPen(QColor(255,255,255,240));
-        p.drawText(logoRect, Qt::AlignCenter, "W");
+        /* Mark: rounded tile, open orbit, page grid, signal W. */
+        QRect logoRect(contentRect.center().x()-46, contentRect.y()+42, 92, 92);
+        p.setPen(QPen(QColor(0x35,0xE0,0xCF,120), 1));
+        p.setBrush(QColor(0x16,0x26,0x53));
+        p.drawRoundedRect(logoRect, 20, 20);
 
-        QFont tf2 = f; tf2.setPointSize(20); tf2.setBold(true); p.setFont(tf2);
-        p.setPen(QColor(245,245,247));
+        QPainterPath orbit;
+        orbit.arcTo(logoRect.adjusted(9,9,-9,-9), -42, 268);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(0x35,0xE0,0xCF), 5, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(orbit);
+
+        QRect page = logoRect.adjusted(24, 23, -23, -20);
+        p.setPen(QPen(QColor(0x8F,0xA9,0xD2,180), 1));
+        p.setBrush(QColor(0x1D,0x31,0x5F));
+        p.drawRoundedRect(page, 5, 5);
+        p.setPen(QPen(QColor(0x35,0xE0,0xCF), 3, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPoint(page.left()+5, page.top()+6), QPoint(page.left()+15, page.top()+22));
+        p.drawLine(QPoint(page.left()+15, page.top()+22), QPoint(page.left()+23, page.top()+6));
+        p.setPen(QPen(QColor(0xC7,0xB6,0xFF), 3, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(QPoint(page.left()+23, page.top()+6), QPoint(page.left()+31, page.top()+22));
+        p.drawLine(QPoint(page.left()+31, page.top()+22), QPoint(page.left()+39, page.top()+7));
+
+        QFont tf2 = f; tf2.setPointSize(22); tf2.setBold(true); p.setFont(tf2);
+        p.setPen(QColor(0xF6,0xFA,0xFF));
         p.drawText(contentRect.adjusted(0,0,0,-100), Qt::AlignCenter, "OpenWeb");
-        QFont sf2 = f; sf2.setPointSize(9); p.setFont(sf2);
-        p.setPen(QColor(142,142,147));
+        QFont sf2 = f; sf2.setPointSize(10); p.setFont(sf2);
+        p.setPen(QColor(0x91,0xA4,0xC6));
         p.drawText(contentRect.adjusted(0,36,0,-100), Qt::AlignCenter,
-                   "plain-HTTP browser for CodeOS");
+                   "Your web, shaped by you.");
 
         /* big search field */
         QRect sbar(contentRect.center().x()-180, contentRect.y()+150, 360, 34);
-        p.setBrush(QColor(0x24,0x24,0x28)); p.setPen(QPen(QColor(0x64,0xD9,0xF0,140),1));
+        p.setBrush(QColor(0x0B,0x14,0x30)); p.setPen(QPen(QColor(0x35,0xE0,0xCF,150),1));
         p.drawRoundedRect(sbar, 8, 8);
         if (m_urlInput.isEmpty()) {
-            p.setPen(QColor(142,142,147,170));
+            p.setPen(QColor(145,164,198,180));
             p.drawText(sbar.adjusted(12,0,-8,0), Qt::AlignVCenter, "Search or enter address...");
         } else {
             p.setPen(QColor(245,245,247,220));
@@ -857,6 +908,7 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
     m_fwdRect  = QRect(bx+bw+4, r.y()+(toolbarH-bh)/2, bw, bh);
     m_reloadRect = QRect(bx+bw*2+8, r.y()+(toolbarH-bh)/2, bw, bh);
     m_stopRect   = QRect(bx+bw*3+12, r.y()+(toolbarH-bh)/2, bw, bh);
+    m_adblockRect = QRect(bx+bw*4+16, r.y()+(toolbarH-bh)/2, 48, bh);
 
     auto drawBtn = [&](const QRect &br, const QString &label, bool enabled) {
         bool hovered = enabled && br.contains(mapFromGlobal(cursor().pos()));
@@ -880,8 +932,21 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
     }
     drawBtn(m_stopRect, QString::fromUtf8("\xe2\x9c\x95"), loadingNow);
 
+    /* AdBlock toggle. This reads and changes the same kernel state net.c and
+     * the Rust fetch path enforce; it is never a decorative PWA-style switch. */
+    bool abHover = m_adblockRect.contains(mapFromGlobal(cursor().pos()));
+    p.setBrush(abHover ? QColor(0x35,0x70,0x78,200)
+                       : (m_adblockEnabled ? QColor(0x16,0x4E,0x55,190)
+                                           : QColor(0x52,0x2A,0x2A,190)));
+    p.setPen(Qt::NoPen);
+    p.drawRoundedRect(m_adblockRect, 4, 4);
+    QFont abFont = f; abFont.setPointSize(9); abFont.setBold(true); p.setFont(abFont);
+    p.setPen(m_adblockEnabled ? QColor(0x64,0xD9,0xF0) : QColor(0xFF,0x8A,0x72));
+    p.drawText(m_adblockRect, Qt::AlignCenter,
+               m_adblockEnabled ? QStringLiteral("AD ON") : QStringLiteral("AD OFF"));
+
     /* URL bar */
-    int urlX = m_stopRect.right() + 10;
+    int urlX = m_adblockRect.right() + 10;
     int urlW = r.width() - (urlX - r.x()) - 8;
     QRect urlBar(urlX, r.y()+(toolbarH-28)/2, urlW, 28);
     p.setBrush(QColor(0x1C,0x1C,0x1E)); p.setPen(QPen(QColor(0x63,0x63,0x66,120),1));
@@ -1068,12 +1133,16 @@ void QtOpenWebWidget::paintContent(QPainter &p, const QRect &r) {
         : "↗ " + m_hoverUrl;
     p.drawText(statusBar.adjusted(8,0,-220,0), Qt::AlignVCenter, statusText);
 
+    QString adblockText = QString("AdBlock %1 (%2 domains)")
+        .arg(m_adblockEnabled ? QStringLiteral("on") : QStringLiteral("off"))
+        .arg(m_adblockDomains);
     if (ow_link_cnt > 0) {
         p.drawText(statusBar.adjusted(8,0,-8,0), Qt::AlignVCenter|Qt::AlignRight,
-                   QString("%1 links · %2").arg(ow_link_cnt).arg(activeTitle()));
+                   QString("%1 links · %2 · %3")
+                       .arg(ow_link_cnt).arg(adblockText).arg(activeTitle()));
     } else {
         p.drawText(statusBar.adjusted(8,0,-8,0), Qt::AlignVCenter|Qt::AlignRight,
-                   activeTitle());
+                   QString("%1 · %2").arg(adblockText).arg(activeTitle()));
     }
 
     m_scrollY = qBound(0, m_scrollY, m_maxScroll);
@@ -1138,6 +1207,18 @@ void QtOpenWebWidget::mousePressEvent(QMouseEvent *e) {
         }
     }
 
+    if (m_adblockRect.contains(pos)) {
+        bool next = !m_adblockEnabled;
+        if (ow_core_adblock_set(next) == 0) {
+            refreshAdblock();
+            m_status = QString("AdBlock: %1 (%2 domains)")
+                .arg(m_adblockEnabled ? QStringLiteral("on") : QStringLiteral("off"))
+                .arg(m_adblockDomains);
+        } else {
+            m_status = QStringLiteral("AdBlock control failed");
+        }
+        update(); return;
+    }
     if (m_backRect.contains(pos)) {
         back(); update(); return;
     }
@@ -1238,7 +1319,8 @@ void QtOpenWebWidget::mouseMoveEvent(QMouseEvent *e) {
     for (int i = 0; i < m_tabRects.size(); i++) {
         if (m_tabRects[i].contains(pos)) { hoverTab = i; overInteractive = true; break; }
     }
-    if (m_backRect.contains(pos) || m_fwdRect.contains(pos) || m_reloadRect.contains(pos) || m_stopRect.contains(pos))
+    if (m_backRect.contains(pos) || m_fwdRect.contains(pos) || m_reloadRect.contains(pos) ||
+        m_stopRect.contains(pos) || m_adblockRect.contains(pos))
         overInteractive = true;
     if (m_hoveredTab != hoverTab) { m_hoveredTab = hoverTab; update(); }
     setCursor(overInteractive ? Qt::PointingHandCursor : Qt::ArrowCursor);

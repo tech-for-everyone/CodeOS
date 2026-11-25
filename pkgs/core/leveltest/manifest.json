@@ -1,0 +1,11 @@
+{
+  "name": "leveltest",
+  "version": "1.0.0",
+  "description": "Security-level gate test for the kill syscall",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/leveltest"
+}

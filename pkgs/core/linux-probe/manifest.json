@@ -1,0 +1,11 @@
+{
+  "name": "linux-probe",
+  "version": "1.0.0",
+  "description": "Freestanding x86_64 Linux-ABI syscall compatibility probe",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/linux-probe"
+}

@@ -1,0 +1,14 @@
+{
+  "name": "tar",
+  "version": "1.24",
+  "description": "ustar archive creation, listing and extraction (freestanding port)",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "install_path": "/bin/tar",
+  "source": "src/",
+  "upstream": "https://ftp.gnu.org/gnu/tar/tar-1.24.tar.gz",
+  "size": 524288,
+  "port_status": "ported",
+  "note": "Ported to the CodeOS freestanding toolchain: src/tar.c. Host tests: tests/run.sh. Upstream archive kept under ports/tar/upstream/ as reference; the original .ftech declared size is retained in `size`. Directories come from sys_readdir (sys_stat is broken on this kernel); symlinks/hardlinks and -z are not supported."
+}

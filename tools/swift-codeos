@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONTAINER_DIR="${CODEOS_CONTAINER_DIR:-/home/codeosuser/container}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONTAINER_DIR="${CODEOS_CONTAINER_DIR:-$ROOT_DIR/../container}"
 SWIFT_BIN="${CODEOS_SWIFT:-}"
 if [[ -z "$SWIFT_BIN" ]]; then
     if [[ -x /usr/bin/swiftc ]]; then
         SWIFT_BIN=/usr/bin/swiftc
-    elif [[ -x /home/codeosuser/.local/share/swiftly/bin/swiftc ]]; then
-        SWIFT_BIN=/home/codeosuser/.local/share/swiftly/bin/swiftc
+    elif [[ -x "$HOME/.local/share/swiftly/bin/swiftc" ]]; then
+        SWIFT_BIN="$HOME/.local/share/swiftly/bin/swiftc"
     elif command -v swiftc >/dev/null 2>&1; then
         SWIFT_BIN="$(command -v swiftc)"
     else
@@ -16,7 +17,6 @@ if [[ -z "$SWIFT_BIN" ]]; then
     fi
 fi
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE_DIR="${CODEOS_SWIFT_CACHE:-/tmp/codeos-swift-cache}"
 SWIFT_REAL="$(readlink -f "$SWIFT_BIN" 2>/dev/null || printf '%s' "$SWIFT_BIN")"
 SWIFT_ROOT="$(cd "$(dirname "$SWIFT_REAL")/.." && pwd)"

@@ -1,0 +1,13 @@
+{
+  "name": "ruby",
+  "version": "3.1.2",
+  "description": "Ruby programming language",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://cache.ruby-lang.org/pub/ruby/3.1/ruby-3.1.2.tar.gz",
+  "size": 8126464,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/ruby.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

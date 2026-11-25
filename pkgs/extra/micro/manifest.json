@@ -1,0 +1,13 @@
+{
+  "name": "micro",
+  "version": "1.0.0",
+  "description": "Small terminal text editor with micro-style keys",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "install_path": "/bin/micro",
+  "source": "src/",
+  "upstream": "https://github.com/zyedidia/micro",
+  "port_status": "ported",
+  "note": "New package requested alongside the zip/unzip ports: a compact freestanding editor inspired by micro's keybindings, not a port of the upstream Go program. Source in src/, host tests in tests/run.sh."
+}

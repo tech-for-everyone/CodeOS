@@ -1,0 +1,11 @@
+{
+  "name": "crosvm-launcher",
+  "version": "1.0.0",
+  "description": "Userspace daemon that launches and manages crosvm VMs via /tmp/crosvm-cmds",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/crosvm-launcher"
+}

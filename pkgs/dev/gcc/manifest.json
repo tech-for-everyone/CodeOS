@@ -1,0 +1,13 @@
+{
+  "name": "gcc",
+  "version": "12.2.0",
+  "description": "GNU C compiler",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://ftp.gnu.org/gnu/gcc/gcc-12.2.0/gcc-12.2.0.tar.xz",
+  "size": 52428800,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/gcc.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

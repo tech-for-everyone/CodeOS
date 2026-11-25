@@ -2364,6 +2364,42 @@ static void cmd_bas(int argc, char **argv) {
     cmd_exec_level(eargc, eargv, LEVEL_USER);
 }
 
+/* `ace` runs the ArkUI layout engine embedded as /bin/ace-layout.
+ *
+ * The boot probe runs this same ELF automatically, but a user still needs a
+ * way to reach it.  cmd_exec_level() is the shared exec path, so the loader,
+ * stack setup, process level and syscall stack are identical to every other
+ * userspace program. */
+static void cmd_ace(int argc, char **argv) {
+    if (argc >= 2 && strcmp(argv[1], "help") == 0) {
+        kprintf("ArkUI/ACE layout engine from the OpenHarmony ace_engine tree.\n");
+        kprintf("usage: ace [layout]\n");
+        kprintf("       ace help\n");
+        return;
+    }
+    if (argc >= 2 && strcmp(argv[1], "layout") != 0) {
+        kprintf("ace: unknown subcommand '%s'\n", argv[1]);
+        kprintf("usage: ace [layout]\n");
+        return;
+    }
+
+    const char *path = "/bin/ace-layout";
+    int is_dir;
+    if (fs_resolve(path, &is_dir) < 0 || is_dir) {
+        kprintf("ace: %s is not in this image\n", path);
+        kprintf("the engine needs cmake and arkui at build time\n");
+        return;
+    }
+
+    /* cmd_exec_level() takes the ELF at argv[1] and passes argv+1 to the
+     * process, so the constructed vector keeps that shape. */
+    char *eargv[3];
+    eargv[0] = (char *)"ace";
+    eargv[1] = (char *)path;
+    eargv[2] = 0;
+    cmd_exec_level(3, eargv, LEVEL_USER);
+}
+
 /* ---------- csl games ---------- */
 
 #define GAME_DIR "/usr/share/games"
@@ -4476,6 +4512,7 @@ static void run_builtin(int argc, char **argv) {
     else if (strcmp(cmd, "exec") == 0) cmd_exec(argc, argv);
     else if (strcmp(cmd, "run") == 0) cmd_run(argc, argv);
     else if (strcmp(cmd, "bas") == 0) cmd_bas(argc, argv);
+    else if (strcmp(cmd, "ace") == 0) cmd_ace(argc, argv);
     else if (strcmp(cmd, "games") == 0) cmd_games(argc, argv);
     else if (strcmp(cmd, "gplay") == 0) cmd_gplay(argc, argv);
     else if (strcmp(cmd, "pong") == 0) cmd_lgame_game(argc, argv);

@@ -12,7 +12,7 @@ extern "C" {
 #include "fmanager.h"
 #include "calc.h"
 #include "appvm.h"
-#include "freecode_gui.h"
+#include "ziggy_gui.h"
 #include "sysmon.h"
 #include "desktop.h"
 #include "string.h"
@@ -52,7 +52,7 @@ DECL_ICON_64(files);      DECL_ICON_44(files);
 DECL_ICON_64(exit);       DECL_ICON_64(exit);
 DECL_ICON_64(trash);      DECL_ICON_44(trash);
 DECL_ICON_64(appvm);      DECL_ICON_44(appvm);
-DECL_ICON_64(freecode);   DECL_ICON_44(freecode);
+DECL_ICON_64(ziggy);   DECL_ICON_44(ziggy);
 DECL_ICON_64(sysinfo);    DECL_ICON_44(sysinfo);
 DECL_ICON_64(sysmon);     DECL_ICON_44(sysmon);
 DECL_ICON_64(firewall);   DECL_ICON_64(firewall);
@@ -60,7 +60,7 @@ DECL_ICON_64(firewall);   DECL_ICON_64(firewall);
 static const unsigned char *icon_data_64[APP_COUNT_MAX] = {
     _binary_icon_terminal_rgba, _binary_icon_about_rgba, _binary_icon_calculator_rgba,
     _binary_icon_store_rgba, _binary_icon_settings_rgba, _binary_icon_openweb_rgba,
-    _binary_icon_files_rgba, _binary_icon_exit_rgba, _binary_icon_freecode_rgba,
+    _binary_icon_files_rgba, _binary_icon_exit_rgba, _binary_icon_ziggy_rgba,
     _binary_icon_sysinfo_rgba, _binary_icon_sysmon_rgba,
     _binary_icon_firewall_rgba
 };
@@ -68,13 +68,13 @@ static const unsigned char *icon_data_64[APP_COUNT_MAX] = {
 static const unsigned char *icon_data_44[APP_COUNT_MAX] = {
     _binary_icon_terminal_44_rgba, _binary_icon_about_44_rgba, _binary_icon_calculator_44_rgba,
     _binary_icon_store_44_rgba, _binary_icon_settings_44_rgba, _binary_icon_openweb_44_rgba,
-    _binary_icon_files_44_rgba, _binary_icon_exit_44_rgba, _binary_icon_freecode_44_rgba,
+    _binary_icon_files_44_rgba, _binary_icon_exit_44_rgba, _binary_icon_ziggy_44_rgba,
     _binary_icon_sysinfo_44_rgba, _binary_icon_sysmon_44_rgba,
     _binary_icon_firewall_44_rgba
 };
 
 const char *app_names[APP_COUNT_MAX] = {
-    "Terminal", "About", "Calc", "DevStore", "Settings", "OpenWeb", "Explorer", "Exit", "FreeCode",
+    "Terminal", "About", "Calc", "DevStore", "Settings", "OpenWeb", "Explorer", "Exit", "Ziggy",
     "Sys Info", "SysMon", "Firewall", "Steam"
 };
 
@@ -109,7 +109,7 @@ static void launch_app(int item) {
         case 5: openweb_open(); break;
         case 6: fmanager_open(); break;
         case 7: panels_desktop_stop_with_reason(PANELS_STOP_EXIT); break;
-        case 8: freecode_gui_open(); break;
+        case 8: ziggy_gui_open(); break;
         case 9: sys_info_open(); break;
         case 10: sysmon_open(); break;
         case 11: firewall_open(); break;

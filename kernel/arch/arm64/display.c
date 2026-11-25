@@ -182,12 +182,12 @@ static void draw_icon(int type, uint32_t cx, uint32_t cy, uint32_t r, uint32_t c
     }
 }
 
-static void draw_status_bar(uint32_t clock) {
+static void draw_status_bar(uint32_t clock, const char *title) {
     /* bar background */
     fb_fillrect(0, 0, SCREEN_W, 36, 0x0f1522);
     fb_fillrect(0, 36, SCREEN_W, 2, 0x2a3a5c);
 
-    fb_drawstr_px(16, 10, "Zircon 1.0", 0xdfe6f2, 0x0f1522);
+    fb_drawstr_px(16, 10, title ? title : "CodeOS 1.0", 0xdfe6f2, 0x0f1522);
 
     /* network bars */
     for (int i = 0; i < 4; i++) {
@@ -274,11 +274,40 @@ void display_home_screen(void) {
     fb_clear();
     draw_wallpaper();
     draw_app_grid();
-    draw_status_bar(rtc_read_wallclock());
+    draw_status_bar(rtc_read_wallclock(), "CodeOS 1.0");
     fb_cursor_hide();
 }
 
 void display_update_clock(void) {
     if (!fb_getwidth()) return;
-    draw_status_bar(rtc_read_wallclock());
+    draw_status_bar(rtc_read_wallclock(), "CodeOS 1.0");
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Public API declared in display.h.  The primitives above were all static
+ * and named differently, so the interactive UI (ui.c) could not link at all.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+void display_wallpaper(void) {
+    if (fb_getwidth()) draw_wallpaper();
+}
+
+void display_rounded_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                          uint32_t color) {
+    rounded_rect(x, y, w, h, color);
+}
+
+void display_icon(int type, uint32_t cx, uint32_t cy, uint32_t r,
+                  uint32_t color) {
+    draw_icon(type, cx, cy, r, color);
+}
+
+void display_draw_status_bar(uint32_t clock, const char *title, int show_back) {
+    (void)show_back;  /* Back is rendered by the UI framework, not here */
+    draw_status_bar(clock, title);
+}
+
+void display_draw_pointer(int x, int y) {
+    fb_cursor_move(x, y);
+    fb_cursor_render();
 }

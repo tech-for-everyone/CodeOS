@@ -550,6 +550,13 @@ void sched_retire_proc_thread(process_t *proc) {
     for (int i = 0; i < THREAD_MAX; i++) {
         thread_t *t = &threads[i];
         if (t == idle_thread || t->proc != proc) continue;
+        /* A borrowed thread (owns_proc == 0) is a kernel thread that entered
+         * user mode on behalf of this process and still has a live C frame
+         * waiting to be resumed.  Retiring it here strands the launcher: it
+         * will never be requeued after the program returns.  Borrowed
+         * processes have ppid == 0, so no parent reaps them out from under
+         * the thread either. */
+        if (!t->owns_proc) continue;
         if (t->state == THREAD_READY) ready_queue_remove(t);
         t->state = THREAD_ZOMBIE;
         t->proc = 0;

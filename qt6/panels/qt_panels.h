@@ -704,6 +704,8 @@ private:
     QString activeTitle() const;
     QString existingTabUrl(int i) const;
     bool isStartPage() const;
+    void resetImageCache();
+    void refreshAdblock();
     void ensureImages();
     void paintPageContent(QPainter &p, const QRect &contentRect);
     QRect contentGeom() const;
@@ -711,9 +713,12 @@ private:
     QString m_urlInput;
     int m_cursorPos = 0;
     QString m_status;
+    bool m_adblockEnabled = true;
+    int m_adblockDomains = 0;
     int m_scrollY = 0;
     int m_maxScroll = 0;
     QRect m_backRect, m_fwdRect, m_reloadRect, m_stopRect, m_newTabRect;
+    QRect m_adblockRect;
     QList<QRect> m_tabRects;
     QList<QRect> m_tabCloseRects;
     int m_hoveredTab = -1;
@@ -741,6 +746,7 @@ private:
     /* images */
     QList<QImage> m_imageCache;
     QList<bool>   m_imageLoaded;
+    QString m_imagePageKey;
     long m_imageLoadTick = 0;
     /* scrollbar drag */
     bool m_scrollDrag = false;

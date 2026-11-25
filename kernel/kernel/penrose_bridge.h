@@ -56,6 +56,15 @@ void prs_blit(uint32_t xid, int dst_x, int dst_y, int w, int h,
 void prs_set_title(uint32_t xid, const char *title);
 int prs_painting(void);
 
+/* Present one compositor frame. The Qt desktop calls this only through
+ * windowland_frame(), so Windowland owns the event → layout → present order.
+ *
+ * prs_present_frame() composites X11 client surfaces only.
+ * prs_compose_frame() adds the HyperDE shell overlay, giving Windowland a
+ * single entry point for a complete desktop frame. */
+void prs_present_frame(void);
+void prs_compose_frame(void *wm);
+
 /* ── desktop chrome: X11 windows as first-class desktop citizens ──
  * The HyperDE shell (bar pills + window chrome) consumes this snapshot;
  * Qt routes bar-pill clicks, chrome clicks and keyboard shortcuts through

@@ -340,6 +340,7 @@ static void heap_add_page(void) {
     if (!heap_first) {
         heap_first = chunk;
         pageadd_note(phys, 0, chunk, 0);
+        heap_total_size += PAGE_SIZE;
         return;
     }
     heap_chunk_t *last = heap_first;
@@ -472,6 +473,9 @@ static void coalesce(heap_chunk_t *chunk) {
 
 void *malloc(size_t size) {
     if (size == 0) return 0;
+    /* (size + 15) below must not wrap.  Without this, malloc((size_t)-8)
+     * rounds to 8 and hands back a tiny chunk for a near-SIZE_MAX request. */
+    if (size > (size_t)-1 - 15) return 0;
 
     /* Try size class first (fast path) */
     int cls = size_class_index(size);
@@ -647,6 +651,16 @@ void free(void *ptr) {
     heap_chunk_t *chunk = (heap_chunk_t *)((char *)ptr - sizeof(heap_chunk_t));
     if (chunk->magic != HEAP_CHUNK_MAGIC) {
         /* Dangling or corrupted — nothing we can do */
+        spin_unlock(&heap_lock);
+        return;
+    }
+    if (chunk->free) {
+        /* The size-class path rejects a second free through its bitmap; the
+         * general heap must do the same.  Without it, freeing an already-free
+         * chunk runs coalesce() twice and a later reuse of that address is
+         * silently released out from under its owner. */
+        kprintf("!! HEAP DOUBLE-FREE ptr=%p caller=%p\n",
+                ptr, __builtin_return_address(0));
         spin_unlock(&heap_lock);
         return;
     }

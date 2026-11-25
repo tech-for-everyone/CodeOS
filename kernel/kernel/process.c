@@ -126,7 +126,7 @@ int proc_fork(void) {
      * store physical addresses into the entries; never run virt_to_phys() over
      * a value that is already physical (it walks the current page tables). */
     uint64_t new_pml4_phys = pmm_alloc_page();
-    if (!new_pml4_phys) { return -1; }
+    if (!new_pml4_phys) { goto fork_fail; }
     uint64_t *new_pml4 = (uint64_t *)phys_to_virt(new_pml4_phys);
     uint64_t *old_pml4 = (uint64_t *)phys_to_virt((uint64_t)child->pml4);
     memset(new_pml4, 0, 0x1000);
@@ -249,7 +249,7 @@ int proc_fork(void) {
             pmm_free_page(new_pml4[i] & ~0xFFF);
         }
         pmm_free_page(new_pml4_phys);
-        return -1;
+        goto fork_fail;
     }
 
     child->pml4 = (uint64_t *)new_pml4_phys;
@@ -330,6 +330,16 @@ int proc_fork(void) {
     }
 
     return child->pid;
+
+fork_fail:
+    /* The slot was filled in from the parent before any allocation was
+     * attempted.  Leaving it there would expose a PROC_READY process whose
+     * pml4 is the *parent's* live CR3 but which has no thread; a later
+     * proc_wait() would then free the parent's page tables.  Discard the
+     * whole reservation on every allocation-failure path. */
+    memset(child, 0, sizeof(*child));
+    child->state = PROC_DEAD;
+    return -1;
 }
 
 uint64_t proc_exec(uint64_t entry, uint64_t stack_top, int argc, char **argv, char **envp, elf_auxv_info_t *auxv) {
@@ -502,6 +512,21 @@ int proc_wait(int pid, int *status) {
     process_t *p = current_process;
     if (!p) return -1;
 
+    /* A wait for a pid that is not one of our live children can never be
+     * satisfied: the table is not going to change, so the loop below used to
+     * sleep forever.  POSIX returns -1 for an unknown child; do the same
+     * check here so a bad pid (or a second wait after the child was reaped)
+     * fails instead of hanging the caller. */
+    if (pid > 0) {
+        int found = 0;
+        for (int i = 0; i < PROC_MAX; i++) {
+            process_t *child = &proc_table[i];
+            if (child->state == PROC_DEAD) continue;
+            if (child->ppid == p->pid && child->pid == pid) { found = 1; break; }
+        }
+        if (!found) return -1;
+    }
+
     for (;;) {
         for (int i = 0; i < PROC_MAX; i++) {
             process_t *child = &proc_table[i];
@@ -658,6 +683,12 @@ proc_fd_t *proc_fd_get(int fd) {
 }
 
 int proc_fd_dup(int oldfd) {
+    /* The syscall passes the user's fd straight through.  Without a range
+     * check a negative or huge oldfd indexes outside the descriptor array
+     * (fds[-1] lands on unrelated process_t fields), and a garbage "type"
+     * can send file_table_ref()/pipe_close() through a bogus pointer. */
+    if (!current_process || oldfd < 0 || oldfd >= PROC_FD_MAX ||
+        !current_process->fds[oldfd].used) return -1;
     int newfd = proc_fd_alloc();
     if (newfd < 0) return -1;
     current_process->fds[newfd] = current_process->fds[oldfd];
@@ -673,6 +704,8 @@ int proc_fd_dup(int oldfd) {
 }
 
 int proc_fd_dup2(int oldfd, int newfd) {
+    if (!current_process || oldfd < 0 || oldfd >= PROC_FD_MAX ||
+        !current_process->fds[oldfd].used) return -1;
     if (oldfd == newfd) return newfd;
     if (newfd < 0 || newfd >= PROC_FD_MAX) return -1;
     /* Close the target fd first if open */
@@ -779,6 +812,10 @@ int pipe_create(int fd[2]) {
     int r = proc_fd_alloc();
     int w = proc_fd_alloc();
     if (r < 0 || w < 0) {
+        /* proc_fd_alloc() marks the slot used before we know whether the
+         * second one is available.  Leave it allocated and the failed pipe
+         * permanently eats the last free descriptor. */
+        if (r >= 0) proc_fd_close(r);
         pmm_free_pages(p_phys, PIPE_PAGES);
         return -1;
     }

@@ -1,0 +1,13 @@
+{
+  "name": "less",
+  "version": "590",
+  "description": "File pager",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://www.greenwoodsoftware.com/less/less-590.tar.gz",
+  "size": 147456,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from extra/less.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

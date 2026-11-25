@@ -1,0 +1,12 @@
+{
+    "name": "openweb",
+    "version": "2.1.0",
+    "description": "OpenWeb - your web, shaped by you. Lightweight CodeOS browser with tabs, history, bookmarks, Reader mode, ModTools and an HTML text renderer",
+    "author": "CodeOS OpenWeb Team",
+    "license": "MIT",
+    "type": "binary",
+    "categories": ["network", "web", "browser"],
+    "dependencies": [],
+    "install_path": "/bin/openweb",
+    "source": "src/"
+}

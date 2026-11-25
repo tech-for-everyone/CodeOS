@@ -2,7 +2,21 @@
 # Produces .o files that the kernel Makefile links into the binary
 
 QTDIR = $(abspath ../sysroot/usr)
-MOC = /usr/lib/qt6/moc
+
+# Qt installs moc in a different place on every OS: Arch/Fedora use
+# /usr/lib/qt6/moc, Debian/RHEL put it in /usr/lib/qt6/bin, Homebrew uses
+# $(brew --prefix qt6)/bin, and Termux has it on PATH.  Auto-detect all of
+# those; `make MOC=/path/to/moc` still overrides.  A missing moc is reported
+# up front rather than as a confusing "No rule to make target" later on.
+MOC ?= $(firstword $(wildcard \
+    /usr/lib/qt6/bin/moc /usr/lib/qt6/moc /usr/lib/x86_64-linux-gnu/qt6/bin/moc \
+    /usr/local/opt/qt6/bin/moc /opt/homebrew/opt/qt6/bin/moc \
+    /usr/local/bin/moc /usr/bin/moc) \
+    $(shell command -v moc 2>/dev/null) \
+    $(shell command -v moc6 2>/dev/null))
+ifeq ($(MOC),)
+$(error moc (Qt6 meta-object compiler) not found; install qt6-base-tools / qt6-tools and retry, or pass MOC=/path/to/moc)
+endif
 # LLVM toolchain, matching the kernel Makefile.  Override on the command
 # line to build the panels with GNU instead (make CXX=g++ CC=gcc AS=as LD=ld).
 CXX = clang++

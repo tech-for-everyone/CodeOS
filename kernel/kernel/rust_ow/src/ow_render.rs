@@ -295,7 +295,9 @@ fn try_entity(html: &[u8], i: usize, out: &mut [u8; 5]) -> (usize, usize) {
         if digits == 0 || j >= html.len() || html[j] != b';' {
             return (0, 0);
         }
-        if cp == 0 || cp > 0x10FFFF {
+        /* Numeric character references must be scalar values: NUL and the
+         * UTF-16 surrogate range are not valid UTF-8 code points. */
+        if cp == 0 || cp > 0x10FFFF || (0xD800..=0xDFFF).contains(&cp) {
             return (0, 0);
         }
         let ol = utf8_encode(cp, out);
@@ -1344,8 +1346,19 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 continue;
             }
             if tag_match_exact(html, i, b"table") == 2 {
+                st.flush_buf();
+                St::add_blank_line();
+                st.in_row = false;
+                st.cell_count = 0;
+                st.cell_type = 0;
+                st.in_thead = false;
+                st.in_tbody = false;
+                st.in_tfoot = false;
+                i = skip_tag_end(html, i);
+                continue;
+            }
 
-/* ── thead ── */
+            /* ── table section containers ── */
             if tag_match(html, i, b"thead") == 1 {
                 st.flush_buf();
                 St::add_blank_line();
@@ -1360,8 +1373,6 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 i = skip_tag_end(html, i);
                 continue;
             }
-
-/* ── tbody ── */
             if tag_match(html, i, b"tbody") == 1 {
                 st.flush_buf();
                 St::add_blank_line();
@@ -1376,8 +1387,6 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 i = skip_tag_end(html, i);
                 continue;
             }
-
-/* ── tfoot ── */
             if tag_match(html, i, b"tfoot") == 1 {
                 st.flush_buf();
                 St::add_blank_line();
@@ -1389,15 +1398,6 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 st.flush_buf();
                 St::add_blank_line();
                 st.in_tfoot = false;
-                i = skip_tag_end(html, i);
-                continue;
-            }
-
-                st.flush_buf();
-                St::add_blank_line();
-                st.in_row = false;
-                st.cell_count = 0;
-                st.cell_type = 0;
                 i = skip_tag_end(html, i);
                 continue;
             }
@@ -1446,12 +1446,10 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 continue;
             }
             if tag_match(html, i, b"th") == 2 || tag_match(html, i, b"td") == 2 {
+                /* A row can contain many cells. Keep the row state alive
+                 * until </tr> so separators and the row rule still work. */
                 st.flush_buf();
-                if st.in_row {
-                    st.in_row = false;
-                    st.cell_count = 0;
-                    st.cell_type = OW_LT_NORMAL;
-                }
+                st.cell_type = OW_LT_NORMAL;
                 i = skip_tag_end(html, i);
                 continue;
             }
@@ -2087,17 +2085,18 @@ pub extern "C" fn ow_render_rs(html: *const c_char, len: c_int) {
                 }
                 if brk > 0 {
                     let saved = st.col;
+                    let rest_start = brk as usize + 1;
+                    let rest_len = saved - rest_start;
+                    /* flush_buf() writes a NUL at the break and resets col,
+                     * so snapshot the continuation first. The old code
+                     * started at byte 1 after the flush and dropped the
+                     * first character of the wrapped word. */
+                    let mut rest = [0u8; OW_TXT_COLS];
+                    rest[..rest_len].copy_from_slice(&st.buf[rest_start..saved]);
                     st.col = brk as usize;
                     st.flush_buf();
-                    brk = st.col as i32; /* flush resets col to 0 */
-                    let mut ni = 0usize;
-                    let mut k = (brk + 1) as usize;
-                    while k < saved {
-                        st.buf[ni] = st.buf[k];
-                        ni += 1;
-                        k += 1;
-                    }
-                    st.col = ni;
+                    st.buf[..rest_len].copy_from_slice(&rest[..rest_len]);
+                    st.col = rest_len;
                 } else {
                     st.flush_buf();
                     st.col = 0;

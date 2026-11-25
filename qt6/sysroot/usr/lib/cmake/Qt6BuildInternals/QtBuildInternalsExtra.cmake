@@ -45,7 +45,7 @@ endfunction()
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT AND
         NOT QT_BUILD_INTERNALS_NO_FORCE_SET_INSTALL_PREFIX
         AND NOT QT_SUPERBUILD)
-    set(qtbi_orig_prefix "/home/codeosuser/CodeOS/qt6/sysroot/usr")
+    set(qtbi_orig_prefix "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}")
     set(qtbi_orig_staging_prefix "")
     qt_internal_new_prefix(qtbi_new_prefix
         "${QT_BUILD_INTERNALS_RELOCATABLE_INSTALL_PREFIX}"
@@ -81,8 +81,12 @@ set(QT_INSTALL_CI_FILES OFF CACHE BOOL
 set(QT_WILL_INSTALL ON CACHE BOOL
     "Boolean indicating if doing a Qt prefix build (vs non-prefix build)." FORCE)
 
-set(QT_SOURCE_TREE "/home/codeosuser/CodeOS/qt6/build/qt6-src/qtbase" CACHE PATH
+get_filename_component(__qtbi_qt_source_tree
+                       "${CMAKE_CURRENT_LIST_DIR}/../../../../../build/qt6-src/qtbase"
+                       ABSOLUTE)
+set(QT_SOURCE_TREE "${__qtbi_qt_source_tree}" CACHE PATH
 "A path to the source tree of the previously configured QtBase project." FORCE)
+unset(__qtbi_qt_source_tree)
 
 # Propagate decision of building tests and examples to other repositories.
 set(QT_BUILD_TESTS OFF CACHE BOOL "Build the testing tree.")

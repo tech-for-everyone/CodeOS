@@ -1,0 +1,2 @@
+# hello.co — the smallest end-to-end cora program.
+print("Hello World")

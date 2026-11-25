@@ -13,6 +13,7 @@
 #include "kprintf.h"
 #include "x11_server.h"
 #include "xserver.h"
+#include "fb.h"
 
 #include <string.h>
 
@@ -375,6 +376,26 @@ void prs_set_title(uint32_t xid, const char *title) {
 
 int prs_painting(void) {
     return g_qcount > 0;
+}
+
+/* Rust-owned compositor boundary: commit every X11 surface for this frame.
+ * xs_present() rewraps the active framebuffer and flushes the compositor back
+ * buffer; keeping the call here means only Windowland can trigger presentation. */
+void prs_present_frame(void) {
+    /* xs_present() already guards on its own screen state. Do not gate this on
+     * g_screen: presentation only needs xs_init(), and keeping the bridge
+     * usable before prs_init() lets either backend drive the same frame. */
+    xs_present();
+}
+
+/* HyperDE's shell overlay is the last stage of a desktop frame. It draws into
+ * the active framebuffer after X11 surfaces have been composited, so the bar
+ * and window chrome sit on top. */
+extern void hyperde_shell_pump(void *wm);
+
+void prs_compose_frame(void *wm) {
+    prs_present_frame();
+    hyperde_shell_pump(wm);
 }
 
 // ---- event generation (called from x11_server.c) ----

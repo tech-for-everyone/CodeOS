@@ -10,6 +10,8 @@ works — not a bajillion distros, one approachable system.
 
 - **x86_64 kernel** (experimental ARM64 path) with Limine / Multiboot2 boot
 - **Desktop GUI** — menubar, dock, launcher, windows, OpenWeb browser panel
+- **ArkUI/ACE** — the real OpenHarmony layout engine is built from `arkui/`,
+  embedded as `/bin/ace-layout`, and run at boot and from the `ace` shell command
 - **Userspace** programs via initramfs (`init`, `shell`, Zircon helpers, ...)
 - **Package tree** under `pkgs/` (manifests + compressed `.xora` app archives)
 - **Zircon** — lightweight native C GUI toolkit (`Zircon/`)
@@ -19,6 +21,19 @@ works — not a bajillion distros, one approachable system.
 - **Security** — AdBlock, firewall, file integrity monitoring, ClamAV
 - **Automated Driver Detection Subsystem** — runtime hardware identification probes, dynamic loading into volatile RAM, strictly withholding un-detected drivers
 - **CLI & Python Tools** — `codeos-cli`, Python `cmatrix`, and analogous Swift `cmatrix`
+
+## Documentation
+
+- [Building on Linux, macOS and Android/Termux](docs/BUILDING.md) — prerequisites,
+  submodules, both architectures, cross-host notes and troubleshooting
+- [Virtualization guide](docs/VIRTUALIZATION.md) — QEMU (x86_64 and ARM64),
+  VirtualBox, libvirt, headless verification and networking
+- [Installing on a real PC](docs/INSTALL.md) — Live USB vs. persistent install,
+  boot layout, safety notes and known limitations
+- [Hardware support matrix](docs/HARDWARE.md) — what each kernel target actually
+  drives, and the prioritized work needed for more devices
+- [Usability roadmap](docs/ROADMAP.md) — staged plan for OpenWeb, Antartica,
+  AMD desktop hardware and the named ARM devices
 
 ## Roadmap
 1. Make NetBeam for every OS
@@ -42,13 +57,24 @@ sudo pacman -Syu base-devel clang lld qemu-system-x86_64 xorriso python
 # Ubuntu / Debian
 sudo apt install build-essential clang lld qemu-system-x86 xorriso python3
 
-# Optional cross binutils (x86_64-elf-gcc / binutils) speed up nothing; the
-# build falls back to host GNU ld when x86_64-elf-ld is not installed.  Install
-# them from the AUR (x86_64-elf-gcc x86_64-elf-binutils) only if you want the
-# exact cross linkers, or to rebuild Qt6 from source.
+# Optional cross binutils (x86_64-elf-gcc / binutils) speed up nothing; when
+# x86_64-elf-ld is missing the build discovers ld.lld from PATH (including the
+# copy rustup installs).  A bare host ld is used only if it can actually emit
+# x86_64 ELF, which is not true on aarch64 hosts.  Install the cross binutils
+# from the AUR (x86_64-elf-gcc x86_64-elf-binutils) only if you want the exact
+# GNU cross linker, or to rebuild Qt6 from source.
 ```
 
-You also need **Rust** (`cargo`) for the OpenWeb HTTP backend (`kernel/rust_ow`).
+**Rust** (`cargo` plus the `x86_64-unknown-none` target for x86_64 images, or
+`aarch64-unknown-none` for arm64 images) enables the full OpenWeb backend and
+the Windowland compositor (`kernel/kernel/rust_ow` and
+`kernel/kernel/rust_penrose`). A nightly rustup install on an aarch64 host works
+without extra configuration; the Makefile follows the active `rustc`/`cargo`
+proxies and never hard-codes an x86_64 toolchain path. Rust is optional: without
+the target the x86_64 image links `kernel/rust_fallback.c`, which keeps the
+desktop and frame pump working with a text-only OpenWeb notice and no automatic
+window layout. `make rust-target-check` compiles both crates for both triples
+and proves the architecture guards are load-bearing.
 
 ### Build
 
@@ -76,14 +102,15 @@ Root `Makefile` shortcuts:
 ### Run in QEMU
 
 ```sh
-# Quick launch script (auto-detects KVM, boots from kernel)
+# Asks 1) x86_64 or 2) arm64, builds that target, then boots it in QEMU
 ./run.sh
 
-# Or with options:
-./run.sh -m 1G -c 8     # 1GB RAM, 8 cores
-./run.sh -i              # Boot from ISO
-./run.sh -n              # Serial only (no display)
-./run.sh -g              # Use virtio-gpu
+# Or select the architecture directly (non-interactive / scripts):
+./run.sh -a x86_64       # full kernel + Limine ISO, KVM when available
+./run.sh -a arm64 -n     # CodeOS ARM64 kernel, serial only
+./run.sh -a arm64 -z     # Zircon mobile demo instead of CodeOS
+./run.sh -m 1G -c 8      # override memory and CPU count
+./run.sh -s              # skip the rebuild, boot the existing image
 ```
 
 ### Linux applications
@@ -119,6 +146,20 @@ fetch upgrade
 Installed state is stored in `/.pkg/db`; repository configuration and metadata
 are cached under `/.pkg` so package listings and dependency checks survive a
 reboot.
+
+### OpenWeb
+
+OpenWeb is the built-in browser package (`pkgs/core/openweb`). The tty app
+supports tabs, shared back/forward history, reload/stop, numbered links and
+relative URL resolution. Its PWA UI lives in `OpenWeb/static/` and ships with a
+service worker, offline cache, tabs, bookmarks, history and settings.
+
+```sh
+make openweb-check      # URL joining tests + static UI asset/script checks
+```
+
+The package manifest is `pkgs/core/openweb/manifest.json`; installable
+`.xora` archives are refreshed with `make xora-all`.
 
 ### Move On: transfer data from Zircon to CodeOS
 

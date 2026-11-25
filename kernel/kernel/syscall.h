@@ -66,6 +66,8 @@
  * @WEB_GO_BACK:        Move the active tab back in its history.
  * @WEB_GO_FORWARD:     Move the active tab forward in its history.
  * @WEB_STOP_LOADING:   Cancel an in-flight load in the active tab.
+ * @WEB_ADBLOCK_STATUS: Copy the canonical adblock state to userspace.
+ * @WEB_ADBLOCK_SET:    Enable/disable the canonical adblock engine.
  */
 /* SYSCALL_WEB commands (drives the in-kernel ow_* HTTP backend) */
 #define WEB_NAVIGATE       0
@@ -82,6 +84,8 @@
 #define WEB_GO_BACK        11
 #define WEB_GO_FORWARD     12
 #define WEB_STOP_LOADING   13
+#define WEB_ADBLOCK_STATUS 14
+#define WEB_ADBLOCK_SET    15
 
 /* Active-tab state snapshot for WEB_GET_INFO (ABI shared with userspace) */
 typedef struct {
@@ -93,6 +97,13 @@ typedef struct {
     int  can_go_forward;
     char status[80];
 } web_state_t;
+
+/* Read-only snapshot of the canonical adblock engine state. This mirrors
+ * web_adblock_info_t in userspace/include/unistd.h. */
+typedef struct {
+    int enabled;
+    int domains;
+} web_adblock_info_t;
 
 /* mmap flags */
 #define MAP_PHYSICAL 0x10000

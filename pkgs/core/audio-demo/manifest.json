@@ -1,0 +1,11 @@
+{
+  "name": "audio-demo",
+  "version": "1.0.0",
+  "description": "Audio callback demo — plays a triangle-wave tone through the kernel mixer",
+  "license": "MIT",
+  "type": "source",
+  "category": "Multimedia",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/audio-demo"
+}

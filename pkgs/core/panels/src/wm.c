@@ -579,7 +579,7 @@ void wm_handle_key(int key) {
         return;
     }
 
-    /* F6 — toggle FreeCode AI overlay (Spotlight-style) */
+    /* F6 — toggle Ziggy AI overlay (Spotlight-style) */
     if (key == KEY_F6) {
         extern void ai_overlay_toggle(void);
         ai_overlay_toggle();

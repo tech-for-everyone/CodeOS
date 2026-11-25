@@ -410,13 +410,15 @@ def _wr(img, blk, data):
         f.write(bytes(data))
 
 
-def _enable_csum_v2(sb, start, seq):
+def _enable_csum_v2(sb, start, seq, break_=None):
     """Make the journal superblock a conformant csum_v2 one.
 
     Three things have to hold together, and the kernel checks all three:
     the CSUM_V2 feature bit, s_checksum_type == JBD2_CRC32C_CHKSUM (a u8 at
     0x50 -- read as a be32 it picks up its own padding), and an s_checksum over
     the whole 1024-byte superblock.  Any one wrong and the mount is refused.
+    `break_ == "super"` corrupts that last one so the fourth checksum gets a
+    negative control like the other three.
     """
     incompat = struct.unpack_from(">I", sb, SB_INCOMPAT)[0]
     struct.pack_into(">I", sb, SB_INCOMPAT, incompat | JBD2_INCOMPAT_CSUM_V2)
@@ -424,7 +426,10 @@ def _enable_csum_v2(sb, start, seq):
     struct.pack_into(">I", sb, SB_START, start)
     sb[SB_CSUM_TYPE] = JBD2_CRC32C_CHKSUM
     struct.pack_into(">I", sb, SB_CHECKSUM, 0)
-    struct.pack_into(">I", sb, SB_CHECKSUM, crc32c(0xFFFFFFFF, bytes(sb)))
+    s_csum = crc32c(0xFFFFFFFF, bytes(sb))
+    if break_ == "super":
+        s_csum ^= 0xFFFFFFFF
+    struct.pack_into(">I", sb, SB_CHECKSUM, s_csum)
 
 
 def _transaction(seed, seq, home, data, uuid, break_=None):
@@ -499,7 +504,7 @@ def _one_run(work, break_=None):
     _wr(img, jfirst + 1, desc)
     _wr(img, jfirst + 2, dat)
     _wr(img, jfirst + 3, com)
-    _enable_csum_v2(sb, 1, 1)
+    _enable_csum_v2(sb, 1, 1, break_)
     _wr(img, jfirst, sb)
 
     # Poison the home copy, so a restore can only have come from the journal.
@@ -530,7 +535,7 @@ def roundtrip():
     os.makedirs(work, exist_ok=True)
     allok = True
     print(f"{'corruption':<12} {'restored':<9} {'rc':<4} {'e2fsck follow-up':<19} note")
-    for break_ in (None, "tag", "tail", "commit"):
+    for break_ in (None, "tag", "tail", "commit", "super"):
         ok, rc, note, rc2 = _one_run(work, break_)
         want = break_ is None
         passed = (ok == want) and rc2 == 0

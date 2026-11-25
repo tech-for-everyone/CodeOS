@@ -72,32 +72,36 @@ int hid_parse_report_descriptor(const uint8_t *desc, int desc_len,
         uint32_t val = read_item(desc + i, size);
         i += size;
 
+        /* hid_item_tag() returns the 4-bit bTag, but the HID_TAG_* constants
+         * are full item prefixes (bTag<<4 | bType<<2 | bSize).  Comparing
+         * the nibble against 0x04/0x94/... never matched, so every real
+         * descriptor produced zero fields. */
         switch (type) {
         case HID_ITEM_TYPE_GLOBAL:
             switch (tag) {
-            case 0x04: /* Usage Page */
+            case HID_TAG_USAGE_PAGE >> 4:
                 state.usage_page = val;
                 state.report->usage_page = val;
                 break;
-            case 0x14: /* Logical Minimum */
+            case HID_TAG_LOGICAL_MIN >> 4:
                 state.logical_min = sign_extend(val, size * 8);
                 break;
-            case 0x24: /* Logical Maximum */
+            case HID_TAG_LOGICAL_MAX >> 4:
                 state.logical_max = sign_extend(val, size * 8);
                 break;
-            case 0x34: /* Physical Minimum */
+            case HID_TAG_PHYS_MIN >> 4:
                 state.physical_min = sign_extend(val, size * 8);
                 break;
-            case 0x44: /* Physical Maximum */
+            case HID_TAG_PHYS_MAX >> 4:
                 state.physical_max = sign_extend(val, size * 8);
                 break;
-            case 0x74: /* Report Size */
+            case HID_TAG_REPORT_SIZE >> 4:
                 state.report_size = val;
                 break;
-                case 0x84: /* Report ID */
+            case HID_TAG_REPORT_ID >> 4:
                 state.report_id = val;
                 break;
-            case 0x94: /* Report Count */
+            case HID_TAG_REPORT_COUNT >> 4:
                 state.report_count = val;
                 break;
             default:
@@ -107,16 +111,16 @@ int hid_parse_report_descriptor(const uint8_t *desc, int desc_len,
 
         case HID_ITEM_TYPE_LOCAL:
             switch (tag) {
-            case 0x08: /* Usage */
+            case HID_TAG_USAGE >> 4:
                 state.usage = val;
                 state.report->usage = val;
                 state.has_usage_min_max = 0;
                 break;
-            case 0x18: /* Usage Minimum */
+            case HID_TAG_USAGE_MIN >> 4:
                 state.usage_min = val;
                 state.has_usage_min_max = 1;
                 break;
-            case 0x28: /* Usage Maximum */
+            case HID_TAG_USAGE_MAX >> 4:
                 state.usage_max = val;
                 state.has_usage_min_max = 1;
                 break;
@@ -127,9 +131,9 @@ int hid_parse_report_descriptor(const uint8_t *desc, int desc_len,
 
         case HID_ITEM_TYPE_MAIN:
             switch (tag) {
-            case HID_TAG_INPUT: /* 0x80 */
-            case HID_TAG_OUTPUT: /* 0x90 */
-            case HID_TAG_FEATURE: /* 0xB0 */
+            case HID_TAG_INPUT >> 4:
+            case HID_TAG_OUTPUT >> 4:
+            case HID_TAG_FEATURE >> 4:
             {
                 /* Create fields for this report item */
                 uint32_t usage = state.usage;
@@ -170,14 +174,14 @@ int hid_parse_report_descriptor(const uint8_t *desc, int desc_len,
                 break;
             }
 
-            case HID_TAG_COLLECTION: /* 0xA0 */
+            case HID_TAG_COLLECTION >> 4:
                 /* Reset local items */
                 state.has_usage_min_max = 0;
                 state.usage_min = 0;
                 state.usage_max = 0;
                 break;
 
-            case HID_TAG_END_COL: /* 0xC0 */
+            case HID_TAG_END_COL >> 4:
                 break;
 
             default:

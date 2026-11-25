@@ -29,7 +29,7 @@ extern "C" void kprintf(const char *fmt, ...);
 #include <QPlainTextEdit>
 
 extern "C" void windowland_init(void);
-extern "C" void windowland_pump(void);
+extern "C" void windowland_frame(void *wm);
 
 extern "C" {
 #include "mouse.h"
@@ -716,7 +716,7 @@ void QtDesktopManager::run() {
     m_running = true;
     kprintf("Qt6: Full desktop running (%dx%d)\n", scr_w, scr_h);
     hyperde_shell_init();
-    windowland_init();   /* Windowland tiling WM (X11 position manager) */
+    windowland_init();   /* Windowland compositor (layout + frame presentation) */
     /* HyperDE owns the top chrome when active: hide the Qt menubar so its
        repaints never cover the Rust-drawn liquid-glass bar, and route bar
        clicks through the transparent strip to hyperde_shell_bar_hit(). */
@@ -735,10 +735,9 @@ void QtDesktopManager::run() {
 
     while (m_running) {
         app.processEvents(QEventLoop::AllEvents, 16);
-        extern void xs_present(void);      /* composite X11 client windows */
-        windowland_pump();                    /* run Windowland against X11 events */
-        xs_present();
-        hyperde_shell_pump(&m_wm);
+        /* Windowland owns the whole frame: drain X11 events, apply layout,
+         * composite client surfaces, then paint the HyperDE chrome overlay. */
+        windowland_frame(&m_wm);
         updater_tick();
         updater_t *s = updater_get_state();
         bool hasBadge = s->update_pending || (s->state == UPDATER_UPDATE_AVAILABLE);

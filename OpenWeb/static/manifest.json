@@ -1,14 +1,20 @@
 {
   "name": "OpenWeb Browser",
   "short_name": "OpenWeb",
-  "description": "OpenWeb Browser for CodeOS",
+  "description": "OpenWeb Browser for CodeOS - your web, shaped by you",
   "start_url": "/static/index.html",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "theme_color": "#1a1a1a",
-  "background_color": "#0f0f0f",
+  "theme_color": "#0b1430",
+  "background_color": "#050817",
   "icons": [
+    {
+      "src": "/static/openweb-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/static/icon-192.png",
       "sizes": "192x192",
@@ -22,6 +28,6 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
+  "categories": ["web", "browser", "productivity"],
   "prefer_related_applications": false
 }

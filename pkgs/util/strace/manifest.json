@@ -1,0 +1,13 @@
+{
+  "name": "strace",
+  "version": "5.19",
+  "description": "System call tracer",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://github.com/strace/strace/releases/download/v5.19/strace-5.19.tar.xz",
+  "size": 614400,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from util/strace.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

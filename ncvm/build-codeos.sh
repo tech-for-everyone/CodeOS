@@ -33,7 +33,8 @@ cd "$(dirname "$0")"
 
 QEMU_SRC="${NCVM_QEMU_SRC:-./src/qemu}"
 QEMU_TAG="${NCVM_QEMU_TAG:-v11.1.2}"
-JOBS="$(nproc)"
+# nproc is Linux-only; macOS/Termux provide getconf, with a 1-CPU fallback.
+JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
 TARGET="${1:-all}"
 
 # If this checkout itself is the QEMU source (ncvm overlay committed inside

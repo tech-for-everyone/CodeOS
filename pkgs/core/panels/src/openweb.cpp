@@ -8,7 +8,7 @@ extern "C" {
 #include "keyboard.h"
 #include "fb.h"
 #include "timer.h"
-#include "freecode_gui.h"
+#include "ziggy_gui.h"
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -743,7 +743,7 @@ int openweb_click(int mx, int my) {
         }
         /* AI Summarize */
         if (mx >= btn_x + 140 && mx < btn_x + 170 && my >= btn_y && my < btn_y + btn_h) {
-            freecode_gui_open();
+            ziggy_gui_open();
             desktop_redraw();
             return 1;
         }

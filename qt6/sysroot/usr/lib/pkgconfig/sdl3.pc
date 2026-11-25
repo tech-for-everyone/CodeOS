@@ -1,4 +1,4 @@
-prefix=/home/codeosuser/CodeOS/qt6/cmake/../sysroot/usr
+prefix=${pcfiledir}/../..
 exec_prefix=${prefix}
 libdir=${prefix}/lib
 includedir=${prefix}/include

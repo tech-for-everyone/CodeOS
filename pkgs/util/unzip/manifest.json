@@ -1,0 +1,14 @@
+{
+  "name": "unzip",
+  "version": "6.0",
+  "description": "ZIP archive listing and extraction (freestanding port)",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "install_path": "/bin/unzip",
+  "source": "src/",
+  "upstream": "https://downloads.sourceforge.net/project/infozip/UnZip%206.x%20%28latest%29/UnZip%206.0/unzip60.tar.gz",
+  "size": 262144,
+  "port_status": "ported",
+  "note": "Ported to the CodeOS freestanding toolchain: src/unzip.c. Host tests: tests/run.sh. Upstream archive kept under ports/unzip/upstream/ as reference; the original .ftech declared size is retained in `size`. Stored entries only; deflated members are rejected with a clear message."
+}

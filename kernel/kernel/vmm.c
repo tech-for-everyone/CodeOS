@@ -66,6 +66,11 @@ static inline uint64_t *pdp_entry(uint64_t virt, uint64_t *pdp) {
 
 static inline uint64_t *get_pd(uint64_t *pdpe) {
     if (!(*pdpe & PAGE_PRESENT)) return 0;
+    /* A 1 GiB leaf has no page directory: the 1 GiB-aligned frame is mapped
+     * data, not a table.  Callers that want to split one (ensure_pd()) do so
+     * before reaching here; everyone else must fail rather than read and
+     * write arbitrary physical memory as if it were a PD. */
+    if (*pdpe & PAGE_HUGE) return 0;
     return (uint64_t*)phys_to_virt(*pdpe & ~0xFFF);
 }
 
@@ -191,14 +196,18 @@ int vmm_unmap_page(uint64_t virt) {
     uint64_t *pde = pd_entry(virt, pd);
     if (!(*pde & PAGE_PRESENT)) { spin_unlock(&vmm_lock); return -1; }
 
-    /* Handle 2MB huge page: split into 4KB pages before unmapping */
-    if (*pde & (1ULL << 7)) {
+    /* Handle 2MB huge page: split into 4KB pages before unmapping.  Keep the
+     * leaf's flag bits (PAGE_USER, cache flags, ...) for every sibling page
+     * and for the new PDE: hardcoding just PRESENT|WRITE made the rest of a
+     * user mapping supervisor-only as soon as one 4 KiB page was unmapped. */
+    if (*pde & PAGE_HUGE) {
+        uint64_t flags = *pde & (0xFFF | PAGE_NX);
         uint64_t large_phys = *pde & ~((1ULL << 7) | 0xFFF);
         uint64_t *pt = alloc_table();
         if (!pt) { spin_unlock(&vmm_lock); return -1; }
         for (int i = 0; i < 512; i++)
-            pt[i] = (large_phys + i * 0x1000) | PAGE_PRESENT | PAGE_WRITE;
-        *pde = virt_to_phys((uint64_t)pt) | PAGE_PRESENT | PAGE_WRITE;
+            pt[i] = (large_phys + i * 0x1000) | (flags & ~PAGE_HUGE) | PAGE_PRESENT;
+        *pde = virt_to_phys((uint64_t)pt) | (flags & ~PAGE_HUGE) | PAGE_PRESENT;
         tlb_flush(virt & ~0x1FFFFFULL);
     }
 
@@ -212,6 +221,11 @@ int vmm_unmap_page(uint64_t virt) {
     if (old_entry) {
         uint64_t old_phys = old_entry & ~0xFFF;
         if (old_entry & PAGE_COW) {
+            /* The PTE is already zero, but without an invlpg the CPU keeps
+             * translating this address through the stale COW mapping.  A
+             * later pmm reuse of that frame then shows up at the same virtual
+             * address, so every unmap path must flush, including this one. */
+            tlb_flush(virt);
             spin_unlock(&vmm_lock);
             return 0;
         }

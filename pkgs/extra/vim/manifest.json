@@ -1,0 +1,13 @@
+{
+  "name": "vim",
+  "version": "8.2",
+  "description": "Advanced text editor",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://github.com/vim/vim/archive/refs/tags/v8.2.0000.tar.gz",
+  "size": 2097152,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from extra/vim.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

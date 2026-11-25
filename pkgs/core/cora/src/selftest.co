@@ -1,0 +1,30 @@
+# selftest.co — arithmetic, functions, branches, loops and logic.
+
+def add(a, b):
+    return a + b
+
+def fib(n):
+    a = 0
+    b = 1
+    i = 0
+    while i < n:
+        t = a + b
+        a = b
+        b = t
+        i = i + 1
+    return a
+
+x = add(2, 3)
+print("add =", x)
+
+if x == 5:
+    print("branch: five")
+elif x == 4:
+    print("branch: four")
+else:
+    print("branch: other")
+
+print("fib(10) =", fib(10))
+
+if x > 3 and fib(10) == 55:
+    print("logic ok")

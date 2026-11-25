@@ -43,6 +43,54 @@ void ui_register(ui_app_t *app) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+ * Small drawing/text helpers used by every screen.
+ * These were called all over this file but never defined, which kept the
+ * whole interactive UI out of the ARM64 image.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* Draw s horizontally centred on cx.  fb_text_width() reports 8 px/glyph. */
+static void draw_text_c(int cx, int y, const char *s, uint32_t fg, uint32_t bg) {
+    if (!s) return;
+    int x = cx - fb_text_width(s) / 2;
+    if (x < 0) x = 0;
+    fb_drawstr_px((uint32_t)x, (uint32_t)y, s, fg, bg);
+}
+
+/* Integer -> decimal, including negatives.  buf needs at least 12 bytes. */
+static void itoa10(char *buf, int v) {
+    char tmp[16];
+    int i = 0;
+    unsigned int n;
+    if (v < 0) { n = (unsigned int)(-(int64_t)v); }
+    else       { n = (unsigned int)v; }
+    if (!n) tmp[i++] = '0';
+    while (n) { tmp[i++] = (char)('0' + (n % 10)); n /= 10; }
+    if (v < 0) tmp[i++] = '-';
+    int j = 0;
+    while (i > 0) buf[j++] = tmp[--i];
+    buf[j] = 0;
+}
+
+/* Circle outline, midpoint algorithm.  fb_putpixel() clips at the edges. */
+static void circle_pts(int cx, int cy, int r, uint32_t color) {
+    if (r < 1) return;
+    int x = r, y = 0, err = 1 - r;
+    while (x >= y) {
+        fb_putpixel((uint32_t)(cx + x), (uint32_t)(cy + y), color);
+        fb_putpixel((uint32_t)(cx + y), (uint32_t)(cy + x), color);
+        fb_putpixel((uint32_t)(cx - y), (uint32_t)(cy + x), color);
+        fb_putpixel((uint32_t)(cx - x), (uint32_t)(cy + y), color);
+        fb_putpixel((uint32_t)(cx - x), (uint32_t)(cy - y), color);
+        fb_putpixel((uint32_t)(cx - y), (uint32_t)(cy - x), color);
+        fb_putpixel((uint32_t)(cx + y), (uint32_t)(cy - x), color);
+        fb_putpixel((uint32_t)(cx + x), (uint32_t)(cy - y), color);
+        y++;
+        if (err < 0) err += 2 * y + 1;
+        else { x--; err += 2 * (y - x) + 1; }
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
  * Home screen
  * ──────────────────────────────────────────────────────────────────────── */
 

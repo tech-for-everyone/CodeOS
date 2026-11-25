@@ -1,0 +1,11 @@
+{
+  "name": "csl",
+  "version": "1.0.0",
+  "description": "CodeOS csh — interactive shell with builtins, history and root mode",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/csl"
+}

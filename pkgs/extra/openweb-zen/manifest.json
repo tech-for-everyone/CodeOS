@@ -1,7 +1,7 @@
 {
     "name": "openweb-zen",
     "version": "0.1.0",
-    "description": "OpenWeb desktop browser, based on Zen, launched inside Debian through linux-runner",
+    "description": "Optional Zen-based desktop browser runtime launched inside Debian through linux-runner; separate from OpenWeb's own CodeOS engine",
     "author": "CodeOS OpenWeb Team",
     "license": "MPL-2.0",
     "binaries": ["openweb"],

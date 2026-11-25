@@ -57,8 +57,16 @@ static int rtl8169_probe(void) {
     }
     if (!found) return -1;
 
-    uint32_t bar0 = pci_config_read(gig_bus, gig_slot, gig_func, 0x10);
-    gig_mmio_base = (uintptr_t)phys_to_virt(bar0 & ~0xF);
+    /* MMIO is not in BAR0 on every RTL8169-family chip: the original
+     * 8169 uses BAR1, 8168/8101/8125 use BAR2.  Pick the first 32-bit
+     * memory BAR instead of blindly treating BAR0 as a memory address. */
+    uint32_t mmio_bar = 0;
+    for (int b = 0; b < 6; b++) {
+        uint32_t v = pci_config_read(gig_bus, gig_slot, gig_func, 0x10 + b * 4);
+        if (v && !(v & 1) && ((v >> 1) & 3) == 0) { mmio_bar = v; break; }
+    }
+    if (!mmio_bar) return -1;
+    gig_mmio_base = (uintptr_t)phys_to_virt(mmio_bar & ~0xF);
 
     pci_config_write(gig_bus, gig_slot, gig_func, 0x04, 0x0006);
 
@@ -78,8 +86,9 @@ static int rtl8169_probe(void) {
         if (!(gig_mmio_readb(RTL_GIG_REG_CMD) & RTL_GIG_CMD_RESET)) break;
     }
 
-    /* Unlock config registers */
-    gig_mmio_writeb(0x51, 0xC0);
+    /* Unlock config registers: Cfg9346 is at 0x50.  Writing the key to
+     * 0x51 (Config0) never unlocked anything. */
+    gig_mmio_writeb(RTL_GIG_REG_CFG9346, RTL_GIG_CFG9346_UNLOCK);
 
     /* Set C+ Command: disable RX/TX checksum offload for simplicity */
     gig_mmio_writew(RTL_GIG_REG_CPLUS_CMD, 0);
@@ -94,7 +103,9 @@ static int rtl8169_probe(void) {
     /* Setup RX descriptors */
     for (int i = 0; i < RTL_GIG_NUM_RX; i++) {
         memset((void *)rx_bufs[i], 0, RTL_GIG_BUF_LEN);
-        rx_descs[i].status = RTL_GIG_RX_OWN;
+        /* RX descriptor bits 13:0 hold the buffer capacity; OWN alone
+         * told the NIC the buffer was zero bytes long. */
+        rx_descs[i].status = RTL_GIG_RX_OWN | RTL_GIG_BUF_LEN;
         rx_descs[i].addr_low = (uint32_t)virt_to_phys((uintptr_t)rx_bufs[i]);
         rx_descs[i].addr_high = 0;
         rx_descs[i].vlan = 0;
@@ -139,8 +150,11 @@ static int rtl8169_send(const void *data, int len) {
 
     memcpy((void *)tx_bufs[desc], data, len);
 
+    /* Keep the End-of-Ring marker on the last descriptor when it is
+     * reused; overwriting status dropped it after the first pass. */
     tx_descs[desc].status = RTL_GIG_TX_OWN | RTL_GIG_TX_FS | RTL_GIG_TX_LS |
-                            (len & RTL_GIG_TX_LEN_MASK);
+                            (len & RTL_GIG_TX_LEN_MASK) |
+                            (desc == RTL_GIG_NUM_TX - 1 ? RTL_GIG_TX_EOR : 0);
 
     tx_cur = (tx_cur + 1) % RTL_GIG_NUM_TX;
 
@@ -166,7 +180,7 @@ static int rtl8169_recv(void *buf, int max_len) {
     if (len > max_len) len = max_len;
     memcpy(buf, (void *)rx_bufs[desc], len);
 
-    rx_descs[desc].status = RTL_GIG_RX_OWN;
+    rx_descs[desc].status = RTL_GIG_RX_OWN | RTL_GIG_BUF_LEN;
     if (desc == RTL_GIG_NUM_RX - 1)
         rx_descs[desc].status |= RTL_GIG_RX_EOR;
 

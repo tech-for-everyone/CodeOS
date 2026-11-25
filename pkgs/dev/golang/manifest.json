@@ -1,0 +1,13 @@
+{
+  "name": "golang",
+  "version": "1.19",
+  "description": "Go programming language",
+  "type": "prebuilt",
+  "category": "Development",
+  "dependencies": [],
+  "source": "https://go.dev/dl/go1.19.src.tar.gz",
+  "size": 62914560,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from dev/golang.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

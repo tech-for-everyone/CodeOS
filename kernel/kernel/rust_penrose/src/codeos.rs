@@ -566,7 +566,8 @@ pub unsafe extern "C" fn windowland_init() {
     process_pending(&mut wm);
     klog("windowland: pending done\n");
 
-    // Keep the WindowManager alive in a static so windowland_pump can access it.
+    // Keep the WindowManager alive in a static so windowland_frame can apply
+    // layout before the compositor presents each frame.
     unsafe {
         WM_INSTANCE.replace(wm);
     }
@@ -616,19 +617,28 @@ fn klog(msg: &str) {
     }
 }
 
-/// Process pending WM events and refresh the layout. Called once per frame
-/// from the desktop loop, *before* the compositor presents.
+/// Complete one compositor frame: drain WM events, refresh layout, composite
+/// the X11 surfaces, then paint the shell overlay. Called once per frame from
+/// the desktop loop.
+///
+/// `wm` is the desktop manager pointer the shell painter needs for Qt window
+/// chrome; pass null if only X11 chrome is wanted.
 ///
 /// # Safety
 /// Must only be called after `windowland_init`.
 #[no_mangle]
-pub unsafe extern "C" fn windowland_pump() {
-    let wm = match WM_INSTANCE.as_mut() {
-        Some(w) => w,
-        None => return,
-    };
+pub unsafe extern "C" fn windowland_frame(wm: *mut ::core::ffi::c_void) {
+    if let Some(state) = WM_INSTANCE.as_mut() {
+        process_pending(state);
+    }
+    crate::compositor::compose_frame(wm);
+}
 
-    process_pending(wm);
+/// Legacy no-argument name kept for older integrations. It drives a full
+/// frame with no Qt window manager attached; X11 chrome is still painted.
+#[no_mangle]
+pub unsafe extern "C" fn windowland_pump() {
+    windowland_frame(::core::ptr::null_mut());
 }
 
 /* Stable ABI aliases for older desktop objects and third-party integrations. */

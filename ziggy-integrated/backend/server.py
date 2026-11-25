@@ -11,7 +11,9 @@ import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 # Add Jarvis to path
-sys.path.insert(0, '/home/codeosuser/CodeOS/jarvis')
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(ROOT_DIR, 'jarvis'))
 from jarviscli import Jarvis
 
 # Global Jarvis instance with lazy initialization

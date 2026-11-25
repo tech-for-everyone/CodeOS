@@ -64,8 +64,12 @@ echo "$out" | grep -q "classes.dex" \
     && pass "lists classes.dex" || bad "did not list classes.dex"
 echo "$out" | grep -q "lib/x86_64/netbeam" \
     && pass "lists the native lib" || bad "did not list the native lib"
-echo "$out" | grep -q "Entries listed: 8 of 8" \
-    && pass "all 8 entries listed" || bad "entry count wrong: $(echo "$out" | grep 'Entries listed')"
+# Derive the expected count from what was actually printed: a hardcoded
+# "8 of 8" went stale when the shipped APK changed to 5 entries, making this
+# suite fail forever for a reason unrelated to the parser.
+listed=$(echo "$out" | grep -c '^  \[FILE\]' || true)
+echo "$out" | grep -q "Entries listed: $listed of $listed" \
+    && pass "all $listed entries listed" || bad "entry count wrong: $(echo "$out" | grep 'Entries listed')"
 echo "$out" | grep -q "Native .so libraries: 0" \
     && pass "native .so count is 0 -- netbeam's lib has no .so suffix" \
     || bad "unexpected .so count: $(echo "$out" | grep 'Native .so')"
@@ -84,8 +88,9 @@ fi
 # 3. With the 64 KiB cap emulated, an under-cap APK must still parse: the cap
 #    is the kernel's, not the parser's, and must not cost us the good case.
 out=$("$tmp/apk-parser-cap" "$apk" 2>&1) || true
-echo "$out" | grep -q "Entries listed: 8 of 8" \
-    && pass "24 KB APK parses even under the 64 KiB cap" \
+listed=$(echo "$out" | grep -c '^  \[FILE\]' || true)
+echo "$out" | grep -q "Entries listed: $listed of $listed" \
+    && pass "under-cap APK parses even under the 64 KiB cap" \
     || bad "under-cap APK failed under the cap: $(echo "$out" | tail -1)"
 
 # 4. An archive past the cap. EOCD for a >64 KiB archive sits past the cap

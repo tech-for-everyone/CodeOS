@@ -1,0 +1,13 @@
+{
+  "name": "rsync",
+  "version": "3.2.5",
+  "description": "File synchronization",
+  "type": "prebuilt",
+  "category": "Network",
+  "dependencies": [],
+  "source": "https://download.samba.org/pub/rsync/src/rsync-3.2.5.tar.gz",
+  "size": 819200,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from extra/rsync.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

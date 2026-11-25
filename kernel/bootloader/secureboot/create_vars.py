@@ -5,11 +5,12 @@ import struct
 import sys
 import os
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 VARS_FILE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/sb-vars.fd"
 TEMPLATE = sys.argv[2] if len(sys.argv) > 2 else "/usr/share/edk2-ovmf/x64/OVMF_VARS.4m.fd"
-DB_CRT = sys.argv[3] if len(sys.argv) > 3 else "/home/devos2/CodeOS/kernel/bootloader/secureboot/db.crt"
-KEK_CRT = sys.argv[4] if len(sys.argv) > 4 else "/home/devos2/CodeOS/kernel/bootloader/secureboot/KEK.crt"
-PK_CRT = sys.argv[5] if len(sys.argv) > 5 else "/home/devos2/CodeOS/kernel/bootloader/secureboot/PK.crt"
+DB_CRT = sys.argv[3] if len(sys.argv) > 3 else os.path.join(HERE, "db.crt")
+KEK_CRT = sys.argv[4] if len(sys.argv) > 4 else os.path.join(HERE, "KEK.crt")
+PK_CRT = sys.argv[5] if len(sys.argv) > 5 else os.path.join(HERE, "PK.crt")
 
 # GUIDs
 PK_GUID = "8be4df61-93ca-11d2-aa0d-00e098032b8c"

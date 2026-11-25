@@ -1,10 +1,12 @@
-//! Windowland: CodeOS's tiling window manager, originally based on Penrose.
+//! Windowland: CodeOS's desktop compositor and layout engine, originally based
+//! on Penrose.
 //!
 //! Vendored into CodeOS from https://github.com/sminez/penrose (MIT) and adapted
-//! to build as a `no_std` kernel crate (`x86_64-unknown-none`) so that the real
-//! window manager logic (workspace / stacking / tiling layout engine) can run as
-//! HyperDE's window position manager. The X11 transport layer (`xcb`/`x11rb`) is
-//! replaced by `codeos::CodeOSConn`, bound to the kernel X11 server + compositor.
+//! to build as a `no_std` kernel crate (`x86_64-unknown-none`). It owns the
+//! frame pump: layout decisions stay in the Penrose-derived engine in
+//! `codeos.rs`, while `compositor.rs` commits each frame through the C bridge.
+//! The X11 transport layer (`xcb`/`x11rb`) is replaced by `codeos::CodeOSConn`,
+//! bound to the kernel X11 server + framebuffer compositor.
 #![no_std]
 #![no_main]
 
@@ -80,6 +82,7 @@ pub mod util;
 pub mod core;
 pub use crate::core::WinId;
 
+mod compositor;
 mod codeos;
 pub use codeos::{CodeOSConn, CodeOSEvent};
 

@@ -1,7 +1,9 @@
 ARCH ?= x86_64
 
-# clang compiles; the link prefers ld.lld and falls back to the host GNU ld,
-# so no GNU *cross* toolchain is required either way.
+# clang compiles; the link prefers a cross-capable linker so no GNU *cross*
+# toolchain is required.  The helper also finds lld inside rustup, which is
+# the common case on aarch64 hosts where the bare host `ld` cannot emit
+# x86_64 ELF at all.
 # `--target=...-none` selects freestanding code generation so clang does not
 # assume a host Linux runtime (PIE, dynamic linker, start files) -- the
 # userspace has its own `_start` in crt0.S and its own link.ld.
@@ -14,7 +16,10 @@ LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo "ld.lld -m aarch64elf" |
 AS = clang --target=aarch64-none-elf
 else
 CC = clang --target=x86_64-unknown-none
-LD := $(shell command -v ld.lld >/dev/null 2>&1 && echo ld.lld || echo ld)
+LD := $(shell ../../scripts/find_x86_64_ld.sh)
+ifeq ($(strip $(LD)),)
+$(error No linker can emit x86_64 ELF; install ld.lld or x86_64-elf-binutils)
+endif
 AS = clang --target=x86_64-unknown-none
 endif
 
@@ -193,7 +198,7 @@ ZC_CFLAGS = -I$(ZC_PORT) -I$(PKG_SRC)/zircapp/src/shim \
             $(ZC_APP_INCLUDES) \
             $(USER_CFLAGS) -Wno-error
 ZC_OBJS = zircapp_host.o zircapp_platform.o zircapp_ow_stub.o \
-          zc_zircapp.o zc_windows.o $(ZC_APP_OBJS)
+          zc_zircapp.o zc_gestures.o zc_windows.o $(ZC_APP_OBJS)
 
 zircapp: $(ZC_OBJS) crt0.o $(LIB_OBJ)
 	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ $(ZC_OBJS) crt0.o $(LIB_OBJ)
@@ -205,6 +210,8 @@ zircapp_platform.o: $(PKG_SRC)/zircapp/src/zircapp_platform.c
 zircapp_ow_stub.o: $(PKG_SRC)/zircapp/src/zircapp_ow_stub.c
 	$(CC) $(ZC_CFLAGS) -c -o $@ $<
 zc_zircapp.o: $(ZC_BASE)/zircapp/src/zircapp.c
+	$(CC) $(ZC_CFLAGS) -c -o $@ $<
+zc_gestures.o: $(ZC_BASE)/zircapp/src/gestures.c
 	$(CC) $(ZC_CFLAGS) -c -o $@ $<
 zc_windows.o: $(ZC_BASE)/gui/src/windows.c
 	$(CC) $(ZC_CFLAGS) -c -o $@ $<
@@ -231,7 +238,7 @@ terminal: $(TERM)/terminal.c crt0.o $(LIB_OBJ)
 	$(LD) $(USER_LDFLAGS) -T link.ld -o $@ terminal.o crt0.o $(LIB_OBJ)
 
 OPENWEB_SRC = $(PKG_SRC)/openweb/src
-openweb: $(OPENWEB_SRC)/openweb.c $(OPENWEB_SRC)/ow_html.c $(OPENWEB_SRC)/ow_engine.c crt0.o $(LIB_OBJ)
+openweb: $(OPENWEB_SRC)/openweb.c $(OPENWEB_SRC)/ow_url.h $(OPENWEB_SRC)/ow_html.c $(OPENWEB_SRC)/ow_html.h $(OPENWEB_SRC)/ow_engine.c $(OPENWEB_SRC)/ow_engine.h crt0.o $(LIB_OBJ)
 	$(CC) $(USER_CFLAGS) -c -o openweb.o $(OPENWEB_SRC)/openweb.c
 	$(CC) $(USER_CFLAGS) -c -o ow_html.o $(OPENWEB_SRC)/ow_html.c
 	$(CC) $(USER_CFLAGS) -c -o ow_engine.o $(OPENWEB_SRC)/ow_engine.c

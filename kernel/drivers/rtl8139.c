@@ -77,8 +77,11 @@ static int rtl8139_probe(void) {
 
     rtl_reset();
 
-    /* Allocate RX ring (page-aligned, physically contiguous) */
-    void *rx_phys = (void*)pmm_alloc_pages(1);
+    /* RTL_RX_BUF_SIZE is 4112: a 16-byte header plus 2x2048 data bytes.
+     * One page is 16 bytes short, and the memset below (plus the NIC's
+     * DMA) ran past the allocation into whatever page came next. */
+    size_t rx_pages = (RTL_RX_BUF_SIZE + PAGE_SIZE - 1) / PAGE_SIZE;
+    void *rx_phys = (void*)pmm_alloc_pages(rx_pages);
     if (!rx_phys) return -1;
     rx_ring = (uint8_t *)phys_to_virt((uint64_t)rx_phys);
     memset(rx_ring, 0, RTL_RX_BUF_SIZE);
@@ -151,8 +154,10 @@ static int rtl8139_recv(void *buf, int max_len) {
     uint16_t rx_len    = *(volatile uint16_t *)(rx_ring + rx_offset + 2);
 
     if (!(rx_status & RTL_RX_OK)) {
-        rx_offset = (rx_offset + rx_len + 4 + 3) & ~3;
-        if (rx_offset >= RTL_RX_BUF_SIZE) rx_offset -= RTL_RX_BUF_SIZE;
+        /* The length field includes the 4-byte header; mask it before
+         * using it to advance, and wrap with modulo (one subtraction was
+         * not enough for a frame longer than the ring). */
+        rx_offset = ((rx_offset + (rx_len & 0x3FFF) + 4 + 3) & ~3) % RTL_RX_BUF_SIZE;
         if (rx_offset >= 16)
             outw_reg(RTL_REG_CAPR, rx_offset - 16);
         return -1;
@@ -161,23 +166,26 @@ static int rtl8139_recv(void *buf, int max_len) {
     rx_len &= 0x3FFF;
     if (rx_len < 4) return -1;
     rx_len -= 4;
-    if (rx_len > max_len)
-        rx_len = max_len;
+
+    /* Advance over the *whole* frame, even when the caller's buffer is
+     * smaller.  Clamping rx_len to max_len first left rx_offset inside
+     * the previous packet, so every subsequent read re-read its header. */
+    int pkt_len = rx_len;
+    int copy_len = (rx_len < max_len) ? rx_len : max_len;
 
     int data_off = rx_offset + 4;
-    for (int i = 0; i < rx_len; i++) {
+    for (int i = 0; i < copy_len; i++) {
         ((uint8_t *)buf)[i] = *(volatile uint8_t *)(rx_ring + (data_off + i) % RTL_RX_BUF_SIZE);
     }
 
-    rx_offset = (rx_offset + rx_len + 4 + 3) & ~3;
-    if (rx_offset >= RTL_RX_BUF_SIZE) rx_offset -= RTL_RX_BUF_SIZE;
+    rx_offset = ((rx_offset + pkt_len + 4 + 3) & ~3) % RTL_RX_BUF_SIZE;
 
     if (rx_offset >= 16)
         outw_reg(RTL_REG_CAPR, rx_offset - 16);
     else
         outw_reg(RTL_REG_CAPR, 0);
 
-    return rx_len;
+    return copy_len;
 }
 
 static void rtl8139_get_mac(uint8_t *mac) {

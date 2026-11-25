@@ -1,7 +1,6 @@
 #include "ow_html.h"
 #include "string.h"
 #include "kprintf.h"
-#include "mm.h"
 
 char ow_txt[OW_TXT_LINES][OW_TXT_COLS];
 int  ow_txt_lines;
@@ -11,6 +10,10 @@ int  ow_need_render;
 ow_line_info_t ow_line_info[OW_TXT_LINES];
 
 /* ─── helpers ─── */
+
+static char lower_ascii(char c) {
+    return (c >= 'A' && c <= 'Z') ? (char)(c + ('a' - 'A')) : c;
+}
 
 static void line_set_type(int ln, uint8_t t) {
     if (ln >= 0 && ln < OW_TXT_LINES) ow_line_info[ln].type = t;
@@ -43,26 +46,102 @@ static void add_blank_line(void) {
 
 static int tag_match(const char *html, int i, int len, const char *tag) {
     /* check if at position i we have <tag or </tag */
-    if (html[i] != '<') return 0;
-    int is_close = (html[i+1] == '/');
+    if (!html || i < 0 || i >= len || html[i] != '<') return 0;
+    int is_close = (i + 1 < len && html[i+1] == '/');
     const char *t = tag;
     int pos = is_close ? i + 2 : i + 1;
-    while (*t && pos < len && html[pos] == *t) { t++; pos++; }
+    while (*t && pos < len && lower_ascii(html[pos]) == lower_ascii(*t)) { t++; pos++; }
     if (*t) return 0;
     /* tag must be followed by >, space, /, or end */
     if (pos >= len) return 0;
     char n = html[pos];
-    return (n == '>' || n == ' ' || n == '/') ? (is_close ? 2 : 1) : 0;
+    return (n == '>' || n == ' ' || n == '\t' || n == '/') ? (is_close ? 2 : 1) : 0;
 }
 
 static int tag_match_exact(const char *html, int i, int len, const char *tag) {
-    if (html[i] != '<') return 0;
-    int is_close = (html[i+1] == '/');
+    if (!html || i < 0 || i >= len || html[i] != '<') return 0;
+    int is_close = (i + 1 < len && html[i+1] == '/');
     const char *t = tag;
     int pos = is_close ? i + 2 : i + 1;
-    while (*t && pos < len && html[pos] == *t) { t++; pos++; }
+    while (*t && pos < len && lower_ascii(html[pos]) == lower_ascii(*t)) { t++; pos++; }
     if (*t) return 0;
     if (pos < len && html[pos] == '>') return is_close ? 2 : 1;
+    return 0;
+}
+
+/* ─── entity decoding ─── */
+
+static int hex_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int append_utf8(char *out, unsigned int cp) {
+    if (cp < 0x80) { out[0] = (char)cp; return 1; }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
+/* Decode one entity at html[i]. Returns bytes consumed (0 = not an entity)
+ * and writes the UTF-8 replacement into out (at most 4 bytes + NUL). */
+static int decode_entity(const char *html, int len, int i, char *out) {
+    static const char *names[] = {
+        "&amp;", "&lt;", "&gt;", "&nbsp;", "&quot;", "&apos;",
+        "&copy;", "&reg;", "&trade;", "&hellip;", "&mdash;", "&ndash;",
+        "&bull;", "&middot;", "&larr;", "&rarr;", "&uarr;", "&darr;", 0
+    };
+    static const char *values[] = {
+        "&", "<", ">", " ", "\"", "'",
+        "\xC2\xA9", "\xC2\xAE", "\xE2\x84\xA2", "\xE2\x80\xA6",
+        "\xE2\x80\x94", "\xE2\x80\x93", "\xE2\x80\xA2", "\xC2\xB7",
+        "\xE2\x86\x90", "\xE2\x86\x92", "\xE2\x86\x91", "\xE2\x86\x93", 0
+    };
+    int n;
+
+    if (i + 1 < len && html[i + 1] == '#') {
+        int base = 10;
+        int j = i + 2;
+        unsigned int cp = 0;
+        int digits = 0;
+        if (j < len && (html[j] == 'x' || html[j] == 'X')) { base = 16; j++; }
+        while (j < len && digits < 6) {
+            int v = (base == 16) ? hex_value(html[j])
+                                 : ((html[j] >= '0' && html[j] <= '9') ? html[j] - '0' : -1);
+            if (v < 0) break;
+            cp = cp * (unsigned int)base + (unsigned int)v;
+            digits++;
+            j++;
+        }
+        if (!digits || j >= len || html[j] != ';') return 0;
+        if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0;
+        n = append_utf8(out, cp);
+        out[n] = 0;
+        return j - i + 1;
+    }
+
+    for (n = 0; names[n]; n++) {
+        int name_len = (int)strlen(names[n]);
+        if (i + name_len <= len && strncmp(html + i, names[n], (size_t)name_len) == 0) {
+            strcpy(out, values[n]);
+            return name_len;
+        }
+    }
     return 0;
 }
 
@@ -193,10 +272,9 @@ void render_html(const char *html, int len) {
                 flush_buf(buf, &col); add_blank_line();
                 int ln = ow_txt_lines;
                 if (ln < OW_TXT_LINES) {
+                    for (int li = 0; li < OW_TXT_COLS - 1; li++) ow_txt[ln][li] = ' ';
                     ow_txt[ln][0] = '>';
                     ow_txt[ln][1] = ' ';
-                    ow_txt[ln][2] = 0;
-                    for (int li = 0; li < OW_TXT_COLS - 1; li++) ow_txt[ln][li] = ' ';
                     ow_txt[ln][OW_TXT_COLS-1] = 0;
                     line_set_type(ln, OW_LT_BQ);
                     ow_txt_lines = ln + 1;
@@ -241,7 +319,7 @@ void render_html(const char *html, int len) {
             }
             if (tag_match_exact(html, i, len, "/table") == 2) {
                 flush_buf(buf, &col); add_blank_line();
-                i += 7; continue;
+                i += 8; continue; /* "</table>" is eight bytes */
             }
             if (tag_match(html, i, len, "tr") == 1) {
                 flush_buf(buf, &col);
@@ -276,17 +354,20 @@ void render_html(const char *html, int len) {
             }
 
         /* ── Anchor tags ── */
-            if (!in_a && (strncmp(html+i, "<a ", 3) == 0 || strncmp(html+i, "<A ", 3) == 0)) {
+            if (!in_a && tag_match(html, i, len, "a") == 1) {
                 if (ow_link_cnt < OW_MAX_LINKS) {
                     cur_link = ow_link_cnt;
+                    const char *end = html + len;
                     const char *h = html + i + 2;
-                    while (*h && *h != '>') {
-                        if ((*h == 'h'||*h=='H') && (*(h+1)=='r'||*(h+1)=='R') &&
-                            (*(h+2)=='e'||*(h+2)=='E') && (*(h+3)=='f'||*(h+3)=='F')) {
+                    while (h < end && *h != '>') {
+                        if (h + 3 < end && (*h == 'h'||*h=='H') &&
+                            (*(h+1)=='r'||*(h+1)=='R') && (*(h+2)=='e'||*(h+2)=='E') &&
+                            (*(h+3)=='f'||*(h+3)=='F')) {
                             h += 5;
-                            if (*h == '"' || *h == '\'') h++;
+                            if (h < end && (*h == '"' || *h == '\'')) h++;
                             int ui = 0;
-                            while (*h && *h != '"' && *h != '\'' && *h != '>' && *h != ' ' && ui < OW_URL_MAX-1)
+                            while (h < end && *h != '"' && *h != '\'' && *h != '>' &&
+                                   *h != ' ' && ui < OW_URL_MAX-1)
                                 ow_links[cur_link].url[ui++] = *h++;
                             ow_links[cur_link].url[ui] = 0;
                             ow_links[cur_link].line = -1;
@@ -301,7 +382,7 @@ void render_html(const char *html, int len) {
                 if (i < len) i++;
                 continue;
             }
-            if (in_a && (strncmp(html+i, "</a", 3) == 0 || strncmp(html+i, "</A", 3) == 0)) {
+            if (in_a && tag_match(html, i, len, "a") == 2) {
                 in_a = 0; cur_link = -1;
                 while (i < len && html[i] != '>') i++;
                 if (i < len) i++;
@@ -329,7 +410,7 @@ void render_html(const char *html, int len) {
                         while (i < len && html[i] != '>') i++;
                         if (i < len) i++;
                         while (i < len) {
-                            if (html[i] == '<' && html[i+1] == '/' &&
+                            if (i + 2 + clen <= len && html[i] == '<' && html[i+1] == '/' &&
                                 strncmp(html + i + 2, close_tag, clen) == 0) {
                                 while (i < len && html[i] != '>') i++;
                                 if (i < len) i++;
@@ -352,15 +433,16 @@ skip_tag:
 
         /* ── HTML entities ── */
         if (html[i] == '&') {
-            if (strncmp(html+i,"&amp;",5)==0)  { if(col<OW_TXT_COLS-1) buf[col++]='&'; i+=5; continue; }
-            if (strncmp(html+i,"&lt;",4)==0)   { if(col<OW_TXT_COLS-1) buf[col++]='<'; i+=4; continue; }
-            if (strncmp(html+i,"&gt;",4)==0)   { if(col<OW_TXT_COLS-1) buf[col++]='>'; i+=4; continue; }
-            if (strncmp(html+i,"&nbsp;",6)==0) { if(col<OW_TXT_COLS-1) buf[col++]=' '; i+=6; continue; }
-            if (strncmp(html+i,"&quot;",6)==0) { if(col<OW_TXT_COLS-1) buf[col++]='"'; i+=6; continue; }
-            if (strncmp(html+i,"&#x27;",6)==0) { if(col<OW_TXT_COLS-1) buf[col++]='\''; i+=6; continue; }
-            if (strncmp(html+i,"&#39;",5)==0)  { if(col<OW_TXT_COLS-1) buf[col++]='\''; i+=5; continue; }
-            if (strncmp(html+i,"&#x2F;",6)==0) { if(col<OW_TXT_COLS-1) buf[col++]='/'; i+=6; continue; }
-            /* unrecognized entity — just pass through */
+            char decoded[8];
+            int used = decode_entity(html, len, i, decoded);
+            if (used > 0) {
+                int k;
+                for (k = 0; decoded[k] && col < OW_TXT_COLS - 1; k++)
+                    buf[col++] = decoded[k];
+                i += used;
+                continue;
+            }
+            /* unrecognized entity — pass through as text */
         }
 
         /* ── Whitespace handling in pre mode ── */
@@ -394,9 +476,14 @@ skip_tag:
                 int brk = -1;
                 for (int k = col-1; k >= 0; k--) { if (buf[k] == ' ') { brk = k; break; } }
                 if (brk > 0) {
+                    /* flush_buf() resets the index it is given, so capture
+                     * the continuation before calling it. Otherwise the
+                     * wrapped word loses its first byte. */
+                    int rest = brk + 1;
+                    int rest_len = col - rest;
                     flush_buf(buf, &brk);
                     int ni = 0;
-                    for (int k = brk + 1; k < col; k++) buf[ni++] = buf[k];
+                    for (int k = 0; k < rest_len; k++) buf[ni++] = buf[rest + k];
                     col = ni;
                 } else {
                     flush_buf(buf, &col);

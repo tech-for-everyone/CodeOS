@@ -27,6 +27,16 @@ int  ow_core_load_progress(void);
 int  ow_core_engine_select(int backend);
 void ow_core_engine_status(ow_engine_status_t *status);
 
+/* Kernel-backed AdBlock state. The Qt panel is linked into the kernel image,
+ * so these call ad_block.c directly rather than going through SYSCALL_WEB.
+ * The struct mirrors web_adblock_info_t in the userspace/kern ABI. */
+typedef struct {
+    int enabled;
+    int domains;
+} ow_core_adblock_info_t;
+int  ow_core_adblock_status(ow_core_adblock_info_t *info);
+int  ow_core_adblock_set(int enabled);
+
 /* Headless diagnostics: render the active tab with the Rust renderer and dump
  * the resulting text grid / links / title to the console. Used by the kernel
  * shell `ow render <url>` command. */

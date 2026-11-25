@@ -1,0 +1,14 @@
+{
+  "name": "zip",
+  "version": "3.0",
+  "description": "ZIP archive creation (freestanding port)",
+  "type": "source",
+  "category": "Utilities",
+  "dependencies": [],
+  "install_path": "/bin/zip",
+  "source": "src/",
+  "upstream": "https://downloads.sourceforge.net/project/infozip/Zip%203.x%20%28latest%29/3.0/zip30.tar.gz",
+  "size": 294912,
+  "port_status": "ported",
+  "note": "Ported to the CodeOS freestanding toolchain: src/zip.c. Host tests: tests/run.sh. Upstream archive kept under ports/zip/upstream/ as reference; the original .ftech declared size is retained in `size`. Entries use the stored method (no compression) and the kernel's 64 KiB file cap applies."
+}

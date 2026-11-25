@@ -1,0 +1,11 @@
+{
+  "name": "ncvm",
+  "version": "1.0.0",
+  "description": "In-guest ncvm VM backend and VM control CLI",
+  "license": "MIT",
+  "type": "source",
+  "category": "System",
+  "dependencies": [],
+  "source": "src/",
+  "install_path": "/bin/ncvm"
+}

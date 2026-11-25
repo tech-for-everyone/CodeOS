@@ -22,7 +22,9 @@ if($ENV{_QT_TOOLCHAIN_VARS_INITIALIZED})
 endif()
 
 
-set(__qt_initially_configured_toolchain_file "/home/codeosuser/CodeOS/qt6/cmake/codeos-toolchain.cmake")
+get_filename_component(__qt_initially_configured_toolchain_file
+                       "${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/codeos-toolchain.cmake"
+                       ABSOLUTE)
 set(__qt_chainload_toolchain_file "${__qt_initially_configured_toolchain_file}")
 
 if(NOT QT_QMAKE_TARGET_MKSPEC)

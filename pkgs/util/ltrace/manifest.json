@@ -1,0 +1,13 @@
+{
+  "name": "ltrace",
+  "version": "0.7.3",
+  "description": "Library call tracer",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://github.com/elkrane/ltrace",
+  "size": 573440,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from util/ltrace.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}

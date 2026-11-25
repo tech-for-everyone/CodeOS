@@ -1,8 +1,13 @@
-const CACHE_NAME = 'openweb-v1';
+/* v4 drops the inert image/tracker settings and keeps the OpenWeb identity,
+ * ModTools and Reader shell in sync with the app.js contract. Older clients
+ * must not keep serving the previous settings UI from the cache. */
+const CACHE_NAME = 'openweb-v4';
 const STATIC_ASSETS = [
   '/static/index.html',
   '/static/styles.css',
+  '/static/modtools.js',
   '/static/app.js',
+  '/static/openweb-mark.svg',
   '/static/manifest.json'
 ];
 

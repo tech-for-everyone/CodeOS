@@ -28,14 +28,14 @@ like a portability bug and is actually a measurement bug.
 """
 import os
 
-ROOT = os.environ.get("ACE_ROOT", "/home/codeosuser/CodeOS/arkui")
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.environ.get("ACE_ROOT", os.path.join(os.path.dirname(HERE), "arkui"))
 
 # ace-host/ohos-root/foundation/arkui/ace_engine is a symlink back to ROOT. Seven
 # files include ace_engine headers by their OpenHarmony absolute path
 # (`#include "foundation/arkui/ace_engine/frameworks/base/utils/utf.h"`), which is
 # what `$ace_root` means inside the OHOS build. Rather than patch those seven,
 # ohos-root recreates the prefix so the includes resolve as written.
-HERE = os.path.dirname(os.path.abspath(__file__))
 OHOS_ROOT = f"{HERE}/ohos-root"
 
 INCLUDE_DIRS = [

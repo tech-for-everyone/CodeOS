@@ -124,15 +124,20 @@ setup_paging:
     subs x2, x2, #1
     b.gt 1b
 
-    /* Map UART + virt platform peripherals at 0x09000000 - 0x09100000
-     * (UART PL011, PL050 KMI, PL031 RTC, fw_cfg) as device memory
-     * (AttrIndx=0 -> MAIR[0] = nGnRnE). */
+    /* Map QEMU virt platform peripherals as device memory
+     * (AttrIndx=0 -> MAIR[0] = nGnRnE):
+     *   0x09000000  PL011 UART, PL031 RTC, fw_cfg
+     *   0x0A000000  virtio-mmio window (32 slots, 0x200 apart)
+     * The generic loop above covers 0x0A000000 with a *normal* mapping to
+     * PA 0x4A000000, so without this override the virtio input probe reads
+     * RAM and never sees a device.  16 blocks x 2MB = 32MB covers both
+     * windows (PD[72..87]). */
     ldr x0, =pd
     mov x1, #(0x09000000 >> 21)     /* PD index 72 for VA 0x09000000 */
     mov x2, #0x09000000
     orr x2, x2, #0x1                /* block descriptor */
     orr x2, x2, #(1 << 10)          /* AF */
-    mov x3, #8                      /* 8 * 2MB = 16MB device space */
+    mov x3, #16                     /* 16 * 2MB = 32MB device space */
 3:  str x2, [x0, x1, lsl #3]
     add x2, x2, #0x200000
     add x1, x1, #1

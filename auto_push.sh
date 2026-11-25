@@ -4,8 +4,8 @@
 
 set -e
 
-CODEOS_DIR="/home/codeosuser/CodeOS"
-ZIRCON_DIR="/home/codeosuser/CodeOS/Zircon"
+CODEOS_DIR="${CODEOS_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+ZIRCON_DIR="${ZIRCON_DIR:-$CODEOS_DIR/Zircon}"
 
 echo "=== CodeOS Auto-Push Script ==="
 echo "CodeOS dir: $CODEOS_DIR"

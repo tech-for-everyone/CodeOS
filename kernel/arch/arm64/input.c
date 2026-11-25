@@ -5,7 +5,9 @@
  *     phone UI an absolute pointer (the touch-like path), and
  *     `-device virtio-keyboard-device` gives it keys.  The device is found by
  *     scanning the QEMU `virt` virtio-mmio window at 0x0A000000, so no device
- *     tree parsing is needed.
+ *     tree parsing is needed.  QEMU defaults these to legacy virtio-mmio
+ *     (version 1); this driver speaks the modern version-2 register layout,
+ *     so run QEMU with `-global virtio-mmio.force-legacy=off`.
  *   - the PL011 serial console, decoded as a keyboard.  This keeps the UI
  *     navigable in a plain `-nographic` boot with no input devices attached.
  */
@@ -129,6 +131,35 @@ typedef struct {
     uint32_t value;
 } vio_event_t;
 
+/* Split virtqueue (VIRTIO_F_VERSION_1, legacy ring layout).  All three areas
+ * live in guest memory; their addresses are handed to the device through the
+ * queue DESC/DRIVER/DEVICE registers in vio_vq_setup(). */
+#define VQ_N 32
+
+typedef struct {
+    uint64_t addr;
+    uint32_t len;
+    uint16_t flags;
+    uint16_t next;
+} vq_desc_t;
+
+typedef struct {
+    uint16_t flags;
+    uint16_t idx;
+    uint16_t ring[VQ_N];
+} vq_avail_t;
+
+typedef struct {
+    uint32_t id;
+    uint32_t len;
+} vq_used_elem_t;
+
+typedef struct {
+    uint16_t flags;
+    uint16_t idx;
+    vq_used_elem_t ring[VQ_N];
+} vq_used_t;
+
 typedef struct {
     uint64_t base;
     int present;
@@ -136,6 +167,15 @@ typedef struct {
     uint16_t qnum;
     /* Pointer absolute range, from the device config. */
     uint32_t abs_min_x, abs_max_x, abs_min_y, abs_max_y;
+
+    /* The three virtqueue areas and the buffers the descriptors point at.
+     * Over-aligning every area to 16 bytes satisfies the spec's stricter
+     * descriptor alignment and keeps the device/DMA accesses naturally
+     * aligned too. */
+    vq_desc_t   desc[VQ_N]   __attribute__((aligned(16)));
+    vq_avail_t  avail        __attribute__((aligned(16)));
+    vq_used_t   used         __attribute__((aligned(16)));
+    vio_event_t evbuf[VQ_N]  __attribute__((aligned(8)));
 
     uint16_t last_used;
     int notify;

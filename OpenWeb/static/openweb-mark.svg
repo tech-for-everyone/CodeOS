@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#35e0cf" role="img" aria-label="OpenWeb">
+  <title>OpenWeb</title>
+  <!-- Original OpenWeb mark: midnight tile, open orbit, page grid, signal W.
+       Solid fills keep one source usable by browsers and the in-tree RGBA
+       icon generator (which rasterises filled paths, not strokes/gradients). -->
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#0b1430"/>
+  <rect x="4" y="4" width="56" height="56" rx="13" fill="#162653"/>
+  <path fill="#35e0cf" d="M50.5 15.2 L54.4 19.2 C59.1 24.3 59.1 33.1 54.4 38.2 L50.4 34.2 C53.6 30.7 53.6 26.7 50.4 23.2 L46.5 19.2 Z"/>
+  <path fill="#9b7bff" d="M13.6 19.2 L17.5 15.2 L21.5 19.2 L18.5 23.2 Z"/>
+  <rect x="15" y="18" width="34" height="29" rx="4" fill="#1d315f"/>
+  <rect x="15" y="18" width="34" height="6" rx="4" fill="#29417c"/>
+  <circle cx="21" cy="21" r="1.7" fill="#35e0cf"/>
+  <circle cx="26" cy="21" r="1.7" fill="#9b7bff"/>
+  <circle cx="31" cy="21" r="1.7" fill="#cbd9ef"/>
+  <rect x="21" y="28" width="12" height="2.2" rx="1.1" fill="#8fa9d2"/>
+  <rect x="21" y="42" width="16" height="2.2" rx="1.1" fill="#8fa9d2"/>
+  <rect x="21" y="46" width="10" height="2.2" rx="1.1" fill="#8fa9d2"/>
+  <path fill="#35e0cf" d="M19.5 30.5 L23.2 29.0 L28.0 41.0 L24.3 42.6 Z"/>
+  <path fill="#7df2e5" d="M24.3 41.0 L28.0 42.6 L33.6 30.6 L30.0 29.0 Z"/>
+  <path fill="#9b7bff" d="M30.0 29.0 L33.6 30.6 L39.0 42.6 L35.4 41.0 Z"/>
+  <path fill="#c7b6ff" d="M35.4 41.0 L39.0 42.6 L45.0 30.6 L41.5 29.0 Z"/>
+</svg>

@@ -32,6 +32,7 @@
 #include "systemm.h"
 #include "device.h"
 #include "ow_http.h"
+#include "ad_block.h"
 #include "socket.h"
 #include "../arch/x86_64/fb.h"
 #include "../drivers/keyboard.h"
@@ -55,6 +56,18 @@ int airplane_mode = 0;
 #define access_ok(addr, size) \
     ((uint64_t)(addr) + (size) >= (uint64_t)(addr) && \
      (uint64_t)(addr) + (size) <= TASK_SIZE)
+
+/* A user mmap must stay in the user half, and the page-round-up arithmetic
+ * must not wrap.  Without this, mmap((void *)0xffffffff81000000, ...)
+ * installed PAGE_USER mappings over the shared kernel half. */
+static inline int mmap_range_ok(uint64_t base, uint64_t len) {
+    if (len == 0 || base >= TASK_SIZE) return 0;
+    if (len > TASK_SIZE - base) return 0;
+    uint64_t sum = base + len;
+    if (sum > (uint64_t)-1 - 0xFFFULL) return 0;
+    uint64_t end = (sum + 0xFFFULL) & ~0xFFFULL;
+    return end <= TASK_SIZE;
+}
 
 /* struct stat size (x86_64) — single source of truth for all stat syscalls. */
 #define LINUX_STAT_SZ 144
@@ -514,7 +527,11 @@ static int sys_open(const char *user_path, int flags) {
         if ((flags & O_CREAT) && fs_path_create(path) == 0) {
             n = 0;
         } else {
-            file_table_unref(d - fd_table);
+            /* proc_fd_close() drops the description's reference and clears
+             * the descriptor.  Unref only here left a used descriptor
+             * pointing at a freed description, leaking an fd per failed
+             * open until the table was exhausted. */
+            proc_fd_close(fd);
             return -1;
         }
     }
@@ -523,7 +540,7 @@ static int sys_open(const char *user_path, int flags) {
      * must leave an empty file behind. */
     if ((flags & O_TRUNC) && (flags & (O_WRONLY | O_RDWR))) {
         if (fs_path_write(path, "", 0) < 0) {
-            file_table_unref(d - fd_table);
+            proc_fd_close(fd);
             return -1;
         }
         n = 0;
@@ -578,6 +595,9 @@ static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
         if (p0 && fd >= 0 && fd < PROC_FD_MAX && p0->fds[fd].used) {
             if (p0->fds[fd].type == PROC_FD_PIPE_R) {
                 uint8_t kbuf[PROC_PIPE_BUF];
+                /* count is user-controlled; pipe_read() copies up to len
+                 * bytes with no knowledge of the buffer's capacity. */
+                if (count > sizeof(kbuf)) count = sizeof(kbuf);
                 int n = pipe_read(p0->fds[fd].pipe, kbuf, (int)count);
                 if (n > 0 && copy_to_user(user_buf, kbuf, n) < 0)
                     return -1;
@@ -662,6 +682,7 @@ static int64_t sys_read(int fd, uint64_t user_buf, uint64_t count) {
         proc_fd_t *pfd = &p->fds[fd];
         if (pfd->type != 1) return -1;
         uint8_t buf[PROC_PIPE_BUF];
+        if (count > sizeof(buf)) count = sizeof(buf);
         int n = pipe_read(pfd->pipe, buf, (int)count);
         if (n > 0 && copy_to_user(user_buf, buf, n) < 0)
             return -1;
@@ -992,7 +1013,7 @@ static int linux_sys_open_path(const char *path, int flags) {
         }
     }
 
-    file_table_unref(fd_desc(fd) - fd_table);
+    proc_fd_close(fd);
     return -LINUX_ENOENT;
 }
 
@@ -1026,7 +1047,10 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             ltx_sockpid[idx] = 0;
             return socket_close(sock);
         }
-        if (fd_verify(cfd)) { memset(&fd_table[cfd], 0, sizeof(fd_table[cfd])); }
+        /* proc_fd_close() already drops the open-file description's
+         * reference, which frees it when the last descriptor goes away.
+         * Zeroing fd_table[cfd] used to clear a *different* description:
+         * cfd is a per-process descriptor, not a global table index. */
         proc_fd_close(cfd);
         return 0;
     }
@@ -1048,7 +1072,11 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         int sock = ltx_sock_translate((int)a1);
         if (sock < 0) return -LINUX_EBADF;
         sockaddr_t saddr;
-        ltx_addr_to_kernel((const uint8_t *)a2, (int)a3, &saddr);
+        /* ltx_addr_to_kernel() dereferences its argument in kernel mode;
+         * stage the user's sockaddr in a kernel buffer first. */
+        uint8_t lu[16];
+        if (copy_from_user(lu, a2, sizeof(lu)) < 0) return -LINUX_EFAULT;
+        ltx_addr_to_kernel(lu, (int)a3, &saddr);
         int r = (n == LINUX_BIND)
                     ? socket_bind(sock, &saddr, (int)a3)
                     : socket_connect(sock, &saddr, (int)a3);
@@ -1061,7 +1089,13 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         uint8_t sndbuf[1024];
         if (copy_from_user(sndbuf, a2, a3) < 0) return -LINUX_EFAULT;
         sockaddr_t dst;
-        ltx_addr_to_kernel((const uint8_t *)a5, (int)a6 ? (int)a6 : 16, &dst);
+        uint8_t lu[16];
+        if (a5) {
+            if (copy_from_user(lu, a5, sizeof(lu)) < 0) return -LINUX_EFAULT;
+        } else {
+            memset(lu, 0, sizeof(lu));
+        }
+        ltx_addr_to_kernel(a5 ? lu : 0, (int)a6 ? (int)a6 : 16, &dst);
         int r = socket_sendto(sock, sndbuf, (int)a3, (int)a4, &dst,
                               a6 ? (int)a6 : (int)sizeof(sockaddr_t));
         return r < 0 ? -LINUX_EINVAL : r;
@@ -1072,14 +1106,19 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         if (a3 <= 0 || a3 > 1024) return -LINUX_EINVAL;
         uint8_t rcvbuf[1024];
         sockaddr_t src;
+        /* a6 is a user socklen_t*; handing it to the kernel helper let the
+         * helper write through an arbitrary user pointer.  Use a kernel int
+         * and copy the resulting length back on success. */
+        int addrlen = 16;
         int r = socket_recvfrom_nb(sock, rcvbuf, (int)a3, (int)a4,
-                                   a5 ? &src : 0, a6 ? (int *)a6 : (int *)&src);
+                                   a5 ? &src : 0, &addrlen);
         if (r < 0) return -LINUX_EWOULDBLOCK;
         if (copy_to_user(a2, rcvbuf, (uint64_t)r) < 0) return -LINUX_EFAULT;
         if (a5 && a6) {
             uint8_t lu[16];
             ltx_kernel_to_addr(&src, lu);
             if (copy_to_user(a5, lu, 16) < 0) return -LINUX_EFAULT;
+            if (copy_to_user(a6, &addrlen, sizeof(addrlen)) < 0) return -LINUX_EFAULT;
         }
         return r;
     }
@@ -1142,6 +1181,7 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         (void)flags;
         if (len == 0) return -LINUX_EINVAL;
         uint64_t base = (addr == 0) ? 0x7F00000000ULL : (addr & ~0xFFFULL);
+        if (!mmap_range_ok(base, len)) return -LINUX_EINVAL;
         uint64_t end  = (base + len + 0xFFF) & ~0xFFFULL;
 
         uint64_t vmm_flags = PAGE_PRESENT | PAGE_USER;
@@ -1447,11 +1487,12 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         if (user_path[0] == '/') {
             strcpy(path, user_path);
         } else if (dirfd != LINUX_AT_FDCWD && fd_verify(dirfd)) {
-            int base_len = strlen(fd_table[dirfd].path);
+            fd_desc_t *dir = fd_desc(dirfd);
+            int base_len = strlen(dir->path);
             int name_len = strlen(user_path);
             if (base_len + 1 + name_len >= FS_PATH_MAX)
                 return -LINUX_ENAMETOOLONG;
-            strcpy(path, fd_table[dirfd].path);
+            strcpy(path, dir->path);
             if (base_len == 0 || path[base_len - 1] != '/')
                 path[base_len++] = '/';
             strcpy(path + base_len, user_path);
@@ -1497,20 +1538,17 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
     }
     /* ── DUP / DUP2 ── */
     case LINUX_DUP: {
-        int oldfd = (int)a1;
-        if (!fd_verify(oldfd)) return -(uint64_t)LINUX_EINVAL;
-        int newfd = fd_alloc();
-        if (newfd < 0) return -(uint64_t)LINUX_EINVAL;
-        fd_table[newfd] = fd_table[oldfd];
-        return (uint64_t)newfd;
+        /* Go through the per-process fd layer so the new descriptor shares
+         * the same open-file description (and its refcount/offset).  Copying
+         * fd_table[newfd] = fd_table[oldfd] corrupted the global table and
+         * silently broke dup() for any fd whose number differed from its
+         * description slot. */
+        int newfd = proc_fd_dup((int)a1);
+        return newfd < 0 ? -(uint64_t)LINUX_EINVAL : (uint64_t)newfd;
     }
     case LINUX_DUP2: {
-        int oldfd = (int)a1;
-        int newfd = (int)a2;
-        if (!fd_verify(oldfd) || newfd < 0 || newfd >= MAX_FDS)
-            return -(uint64_t)LINUX_EINVAL;
-        fd_table[newfd] = fd_table[oldfd];
-        return (uint64_t)newfd;
+        int newfd = proc_fd_dup2((int)a1, (int)a2);
+        return newfd < 0 ? -(uint64_t)LINUX_EINVAL : (uint64_t)newfd;
     }
     /* ── FCNTL ── */
     case LINUX_FCNTL: {
@@ -1698,7 +1736,8 @@ int64_t linux_syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             path[FS_PATH_MAX - 1] = 0;
         } else {
             if (dirfd != LINUX_AT_FDCWD && fd_verify(dirfd)) {
-                strcpy(path, fd_table[dirfd].path);
+                fd_desc_t *dir = fd_desc(dirfd);
+                strcpy(path, dir->path);
             } else {
                 path[0] = '/'; path[1] = 0;
             }
@@ -2313,27 +2352,39 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         uint64_t len  = a2;
         int prot   = (int)a3;
         int flags  = (int)a4;
-        (void)flags;
+        if (len == 0 || len > (uint64_t)-1 - 0xFFFULL) return -1;
+        uint64_t page_span = (len + 0xFFFULL) & ~0xFFFULL;
+        /* Check privilege before consuming address space below. */
+        if (flags & MAP_PHYSICAL) {
+            int r = level_gate(LEVEL_KERNEL);
+            if (r) return r;
+        }
         uint64_t vaddr;
 
         if (addr == 0) {
             process_t *p = current_process;
             if (!p) return -1;
             vaddr = p->mmap_base;
-            p->mmap_base += ((len + 0xFFF) & ~0xFFF);
+            /* Validate before advancing mmap_base: a failed mmap must not
+             * consume address space. */
+            if (!mmap_range_ok(vaddr, len)) return -1;
+            if (page_span > TASK_SIZE - vaddr) return -1;
+            p->mmap_base += page_span;
         } else {
             vaddr = addr;
+            if (!mmap_range_ok(vaddr, len)) return -1;
         }
 
         uint64_t vmm_flags = PAGE_PRESENT | PAGE_USER;
         if (prot & 2) vmm_flags |= PAGE_WRITE;
         if (!(prot & 4)) vmm_flags |= PAGE_NX;
 
-        /* MAP_PHYSICAL: addr is a physical address, map it directly */
+        /* MAP_PHYSICAL maps caller-chosen physical memory into user space;
+         * it is a privileged operation, not a normal mmap flag. */
         if (flags & MAP_PHYSICAL) {
             uint64_t phys_base = addr;
             uint64_t cur = vaddr;
-            while (cur < vaddr + ((len + 0xFFF) & ~0xFFF)) {
+            while (cur < vaddr + page_span) {
                 if (vmm_map_page(cur, phys_base, vmm_flags) < 0)
                     return -1;
                 cur += 0x1000;
@@ -2343,7 +2394,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         }
 
         uint64_t cur = vaddr;
-        while (cur < vaddr + ((len + 0xFFF) & ~0xFFF)) {
+        while (cur < vaddr + page_span) {
             uint64_t page_phys = (uint64_t)pmm_alloc_page();
             if (!page_phys) return -1;
             memset((void *)phys_to_virt(page_phys), 0, 0x1000);
@@ -2351,7 +2402,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
                 return -1;
             cur += 0x1000;
         }
-        uint64_t total_pages = ((len + 0xFFF) & ~0xFFF) / 0x1000;
+        uint64_t total_pages = page_span / 0x1000;
         mmap_region_add(vaddr, total_pages);
         return vaddr;
     }
@@ -2381,6 +2432,12 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         if (!p) return -1;
         int64_t inc = (int64_t)a1;
         uint64_t old = p->brk;
+        /* A large unsigned a1 becomes a negative int64_t.  Adding it to
+         * brk wrapped the uint64_t into a bogus high address and the heap
+         * then mapped/unmapped based on that.  Reject anything that leaves
+         * the same bounded range do_brk() enforces. */
+        int64_t next = (int64_t)old + inc;
+        if (next < 0 || (uint64_t)next > PROC_BRK_MAX) return -1;
         if (inc > 0) {
             uint64_t new_end = (old + inc + 0xFFF) & ~0xFFF;
             uint64_t cur = (old + 0xFFF) & ~0xFFF;
@@ -2404,7 +2461,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
                 }
             }
         }
-        p->brk = old + inc;
+        p->brk = (uint64_t)next;
         return old;
     }
     case SYSCALL_BINDER: {
@@ -2562,6 +2619,9 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
 
     case SYSCALL_INPUT_POLL: {
         codeos_input_ev_t ev;
+        /* The whole struct is copied to userspace, including the reserved
+         * fields that are never assigned below. */
+        memset(&ev, 0, sizeof(ev));
         ev.type = 0;
         ev.key     = 0;
         ev.mouse_x = mouse_get_x();
@@ -2696,7 +2756,11 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         case WEB_SEARCH:
         case WEB_TAB_NEW: {
             char s[512];
-            int n = user_max > 0 ? (user_max < sizeof(s) - 1 ? (int)user_max : (int)sizeof(s) - 1) : 0;
+            /* user_max includes the caller's NUL; copy at most one less than
+             * the local buffer so the terminator always fits. */
+            int n = user_max > 1
+                ? ((user_max - 1) < sizeof(s) - 1 ? (int)(user_max - 1) : (int)sizeof(s) - 1)
+                : 0;
             if (n > 0 && copy_from_user(s, user_ptr, n) < 0) return -1;
             s[n] = 0;
             if (cmd == WEB_NAVIGATE) ow_navigate(s);
@@ -2721,6 +2785,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         case WEB_GET_INFO: {
             openweb_tab_t *tabs = ow_get_tabs();
             int active = ow_get_tab_active();
+            if (!user_ptr || user_max < sizeof(web_state_t)) return -1;
             if (!tabs || active < 0 || active >= ow_get_tab_count()) return -1;
             openweb_tab_t *t = &tabs[active];
             web_state_t st;
@@ -2740,6 +2805,7 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             int active = ow_get_tab_active();
             if (!tabs || active < 0 || active >= ow_get_tab_count()) return -1;
             openweb_tab_t *t = &tabs[active];
+            if (!user_ptr || user_max == 0 || user_max > 0x7fffffffULL) return -1;
             int max = (int)user_max;
             if (max > t->content_len) max = t->content_len;
             if (max > 0 && copy_to_user(user_ptr, t->content, max) < 0) return -1;
@@ -2754,6 +2820,20 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         case WEB_STOP_LOADING:
             ow_stop_loading();
             return 0;
+        case WEB_ADBLOCK_STATUS: {
+            /* Read-only snapshot of the same state net.c enforces for every
+             * kernel HTTP(S) fetch and the Rust OpenWeb backend prechecks. */
+            web_adblock_info_t info;
+            if (!user_ptr || user_max < sizeof(info)) return -1;
+            info.enabled = adblock_is_enabled() ? 1 : 0;
+            info.domains = adblock_domain_count();
+            if (copy_to_user(user_ptr, &info, sizeof(info)) < 0) return -1;
+            return 0;
+        }
+        case WEB_ADBLOCK_SET: {
+            int enable = (int)user_ptr;
+            return enable ? adblock_enable() : adblock_disable();
+        }
         default:
             return -1;
         }
@@ -2857,7 +2937,16 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
         switch (cmd) {
         case 0: return wifi_init() == 0 ? 1 : 0;           /* enable */
         case 1: return wifi_disconnect() == 0 ? 1 : 0;     /* disable */
-        case 2: if (arg) return wifi_scan((wifi_scan_result_t *)arg) == 0 ? 1 : 0; return -1; /* scan */
+        case 2: {
+            if (!arg) return -1;
+            /* wifi_scan() memsets sizeof(*out) bytes in kernel mode.  Stage
+             * the result and copy it out so a bad user pointer cannot make
+             * the kernel write into an arbitrary address. */
+            wifi_scan_result_t result;
+            if (wifi_scan(&result) < 0) return -1;
+            if (copy_to_user(a2, &result, sizeof(result)) < 0) return -1;
+            return 1;
+        }
         case 3: if (arg) return wifi_connect(arg, (const char *)a3) == 0 ? 1 : 0; return -1; /* connect */
         default: return -1;
         }
@@ -3013,8 +3102,11 @@ int64_t syscall_handler(uint64_t n, uint64_t a1, uint64_t a2, uint64_t a3,
             if (copy_from_user(name, (uint64_t)str, VM_NAME_MAX - 1) < 0) return -1;
             name[VM_NAME_MAX - 1] = 0;
             if (copy_from_user(kernel, (uint64_t)str + VM_NAME_MAX, VM_IMAGE_PATH_MAX - 1) < 0) return -1;
+            kernel[VM_IMAGE_PATH_MAX - 1] = 0;
             if (copy_from_user(initrd, (uint64_t)str + VM_NAME_MAX + VM_IMAGE_PATH_MAX, VM_IMAGE_PATH_MAX - 1) < 0) return -1;
+            initrd[VM_IMAGE_PATH_MAX - 1] = 0;
             if (copy_from_user(rootfs, (uint64_t)str + VM_NAME_MAX + 2 * VM_IMAGE_PATH_MAX, VM_IMAGE_PATH_MAX - 1) < 0) return -1;
+            rootfs[VM_IMAGE_PATH_MAX - 1] = 0;
             if (copy_from_user(&mem, (uint64_t)str + VM_NAME_MAX + 3 * VM_IMAGE_PATH_MAX, sizeof(uint64_t)) < 0) return -1;
             if (copy_from_user(&cpus, (uint64_t)str + VM_NAME_MAX + 3 * VM_IMAGE_PATH_MAX + sizeof(uint64_t), sizeof(int)) < 0) return -1;
             return vm_create_crosvm(name, kernel, initrd, rootfs, mem, cpus);

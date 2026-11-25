@@ -139,8 +139,8 @@ void ai_overlay_draw(int scr_w, int scr_h) {
     uint32_t border = ao_hover_bar ? AO_BORDER_GLOW : (0x00000000 | (((uint32_t)alpha << 24) & 0xFF000000) | (0x636366 & 0x00FFFFFF));
     fb_draw_rounded_rect(ao_x, bar_y, AO_BAR_W, total_h, 14, border);
 
-    /* "FreeCode" label on the left */
-    fb_drawstr_px(ao_x + AO_PAD + 2, bar_y + (AO_BAR_H - 14) / 2, "FreeCode", AO_ACCENT, 0);
+    /* "Ziggy" label on the left */
+    fb_drawstr_px(ao_x + AO_PAD + 2, bar_y + (AO_BAR_H - 14) / 2, "Ziggy", AO_ACCENT, 0);
 
     /* Vertical separator after label */
     int sep_x = ao_x + AO_PAD + 8 * 8 + 8;
@@ -160,7 +160,7 @@ void ai_overlay_draw(int scr_w, int scr_h) {
         display[di] = 0;
         fb_drawstr_px(inp_x + 8, inp_y + (AO_INPUT_H - 14) / 2, display, AO_TEXT, 0);
     } else {
-        fb_drawstr_px(inp_x + 8, inp_y + (AO_INPUT_H - 14) / 2, "Ask FreeCode anything...", AO_PLACEHOLDER, 0);
+        fb_drawstr_px(inp_x + 8, inp_y + (AO_INPUT_H - 14) / 2, "Ask Ziggy anything...", AO_PLACEHOLDER, 0);
         if (ao_cursor_vis) {
             fb_drawstr_px(inp_x + 8, inp_y + (AO_INPUT_H - 14) / 2, "|", AO_ACCENT, 0);
         }
@@ -185,8 +185,8 @@ void ai_overlay_draw(int scr_w, int scr_h) {
         fb_fill_rounded_rect(ao_x, ry, AO_BAR_W, resp_h, 12, 0x00000000 | (((uint32_t)alpha << 24) & 0xFF000000) | (0x2C2C2E & 0x00FFFFFF));
         fb_draw_rounded_rect(ao_x, ry, AO_BAR_W, resp_h, 12, 0x22636366);
 
-        /* "FreeCode" label in response */
-        fb_drawstr_px(ao_x + AO_RESP_PAD + 4, ry + AO_RESP_PAD - 2, "FreeCode", AO_ACCENT, 0);
+        /* "Ziggy" label in response */
+        fb_drawstr_px(ao_x + AO_RESP_PAD + 4, ry + AO_RESP_PAD - 2, "Ziggy", AO_ACCENT, 0);
 
         /* Wrapped response text */
         int text_y = ry + AO_RESP_PAD + AO_LINE_H;

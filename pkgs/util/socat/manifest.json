@@ -1,0 +1,13 @@
+{
+  "name": "socat",
+  "version": "1.7.4",
+  "description": "Socket cat utility",
+  "type": "prebuilt",
+  "category": "Utilities",
+  "dependencies": [],
+  "source": "https://www.dest-unreach.org/socat/download/",
+  "size": 524288,
+  "format": "ftech",
+  "port_status": "not-started",
+  "note": "Converted from util/socat.ftech. Upstream source is available; port to the CodeOS freestanding toolchain is tracked in ports/README.md."
+}
